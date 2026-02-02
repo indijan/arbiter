@@ -1,0 +1,213 @@
+import "server-only";
+
+import { createAdminSupabase } from "@/lib/supabase/server-admin";
+
+const TIMEOUT_MS = 9000;
+
+const COSTS_BPS = 12;
+const MIN_NET_EDGE_BPS = 5;
+const IDEMPOTENT_MINUTES = 5;
+
+type BookTicker = {
+  bidPrice: string;
+  askPrice: string;
+};
+
+type PathStep = {
+  symbol: string;
+  side: "buy" | "sell";
+};
+
+type Path = {
+  name: string;
+  steps: PathStep[];
+};
+
+const PATHS: Path[] = [
+  {
+    name: "USDT->BTC->ETH->USDT",
+    steps: [
+      { symbol: "BTCUSDT", side: "buy" },
+      { symbol: "ETHBTC", side: "buy" },
+      { symbol: "ETHUSDT", side: "sell" }
+    ]
+  },
+  {
+    name: "USDT->BTC->SOL->USDT",
+    steps: [
+      { symbol: "BTCUSDT", side: "buy" },
+      { symbol: "SOLBTC", side: "buy" },
+      { symbol: "SOLUSDT", side: "sell" }
+    ]
+  }
+];
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function toNumber(value: string | undefined | null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export type TriangularEvaluated = {
+  path: string;
+  gross_edge_bps: number;
+  net_edge_bps: number;
+  decision: "inserted" | "skipped";
+  reason?: string;
+};
+
+export type DetectTriangularResult = {
+  inserted: number;
+  skipped: number;
+  evaluated: TriangularEvaluated[];
+};
+
+export async function detectTriangular(): Promise<DetectTriangularResult> {
+  const adminSupabase = createAdminSupabase();
+  if (!adminSupabase) {
+    throw new Error("Missing service role key.");
+  }
+
+  const idempotentSince = new Date(
+    Date.now() - IDEMPOTENT_MINUTES * 60 * 1000
+  ).toISOString();
+
+  let inserted = 0;
+  let skipped = 0;
+  const evaluated: TriangularEvaluated[] = [];
+
+  for (const path of PATHS) {
+    try {
+      const tickers = await Promise.all(
+        path.steps.map((step) =>
+          fetchJson<BookTicker>(
+            `https://api.binance.com/api/v3/ticker/bookTicker?symbol=${step.symbol}`
+          )
+        )
+      );
+
+      let amount = 1;
+      const steps: Array<Record<string, unknown>> = [];
+
+      for (let i = 0; i < path.steps.length; i += 1) {
+        const step = path.steps[i];
+        const ticker = tickers[i];
+        const ask = toNumber(ticker.askPrice);
+        const bid = toNumber(ticker.bidPrice);
+
+        if (!ask || !bid || ask <= 0 || bid <= 0 || ask <= bid) {
+          throw new Error("invalid prices");
+        }
+
+        if (step.side === "buy") {
+          amount = amount / ask;
+        } else {
+          amount = amount * bid;
+        }
+
+        steps.push({
+          symbol: step.symbol,
+          side: step.side,
+          bid,
+          ask
+        });
+      }
+
+      const gross_edge_bps = (amount - 1) * 10000;
+      const net_edge_bps = gross_edge_bps - COSTS_BPS;
+
+      if (net_edge_bps < MIN_NET_EDGE_BPS) {
+        skipped += 1;
+        evaluated.push({
+          path: path.name,
+          gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
+          net_edge_bps: Number(net_edge_bps.toFixed(4)),
+          decision: "skipped",
+          reason: "below threshold"
+        });
+        continue;
+      }
+
+      const { data: existing, error: existingError } = await adminSupabase
+        .from("opportunities")
+        .select("id")
+        .eq("exchange", "binance")
+        .eq("symbol", path.name)
+        .eq("type", "tri_arb")
+        .gte("ts", idempotentSince)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) {
+        throw new Error(existingError.message);
+      }
+
+      if (existing) {
+        skipped += 1;
+        evaluated.push({
+          path: path.name,
+          gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
+          net_edge_bps: Number(net_edge_bps.toFixed(4)),
+          decision: "skipped",
+          reason: "recent opportunity exists"
+        });
+        continue;
+      }
+
+      const { error: insertError } = await adminSupabase.from("opportunities").insert({
+        ts: new Date().toISOString(),
+        exchange: "binance",
+        symbol: path.name,
+        type: "tri_arb",
+        net_edge_bps: Number(net_edge_bps.toFixed(4)),
+        expected_daily_bps: null,
+        confidence: 0.5,
+        status: "new",
+        details: {
+          path: path.name,
+          steps,
+          gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
+          costs_bps: COSTS_BPS
+        }
+      });
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      inserted += 1;
+      evaluated.push({
+        path: path.name,
+        gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
+        net_edge_bps: Number(net_edge_bps.toFixed(4)),
+        decision: "inserted"
+      });
+    } catch (err) {
+      skipped += 1;
+      evaluated.push({
+        path: path.name,
+        gross_edge_bps: 0,
+        net_edge_bps: 0,
+        decision: "skipped",
+        reason: err instanceof Error ? err.message : "error"
+      });
+    }
+  }
+
+  return { inserted, skipped, evaluated };
+}

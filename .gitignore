@@ -1,0 +1,7 @@
+node_modules
+
+.DS_Store
+
+apps/web/.next
+apps/web/.env.local
+.DS_Store

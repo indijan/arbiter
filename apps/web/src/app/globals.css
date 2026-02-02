@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-brand-900 text-white min-h-screen;
+}
+
+main {
+  @apply min-h-screen;
+}
+
+input,
+button {
+  @apply outline-none;
+}
+
+.card {
+  @apply bg-brand-700/70 border border-brand-300/20 rounded-2xl p-6 shadow-lg;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition;
+}
+
+.btn-primary {
+  @apply bg-brand-300 text-brand-900 hover:bg-white;
+}
+
+.btn-ghost {
+  @apply border border-brand-300/40 text-white hover:bg-brand-300/10;
+}
