@@ -54,7 +54,7 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
   const { data: executions, error: execError } = await adminSupabase
     .from("executions")
     .select("position_id, fee")
-    .in("position_id", positionIds.length > 0 ? positionIds : [\"00000000-0000-0000-0000-000000000000\"]);
+    .in("position_id", positionIds.length > 0 ? positionIds : ["00000000-0000-0000-0000-000000000000"]);
 
   if (execError) {
     throw new Error(execError.message);
