@@ -108,16 +108,24 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
           throw new Error("Invalid bid/ask data");
         }
 
+        const spotBid = spot_bid;
+        const spotAsk = spot_ask;
+        const perpBid = perp_bid;
+        const perpAsk = perp_ask;
+
+        const mark_price = (perpBid + perpAsk) / 2;
+        const index_price = (spotBid + spotAsk) / 2;
+
         payload.push({
           exchange: "binance",
           symbol,
-          spot_bid,
-          spot_ask,
-          perp_bid,
-          perp_ask,
+          spot_bid: spotBid,
+          spot_ask: spotAsk,
+          perp_bid: perpBid,
+          perp_ask: perpAsk,
           funding_rate: toNumber(premium.lastFundingRate),
-          mark_price: (perp_bid + perp_ask) / 2,
-          index_price: (spot_bid + spot_ask) / 2,
+          mark_price,
+          index_price,
           ts: premium.time ? new Date(premium.time).toISOString() : new Date().toISOString()
         });
       } catch (err) {
