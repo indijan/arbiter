@@ -17,14 +17,14 @@ export function createServerSupabase() {
       },
       set(name: string, value: string, options?: Parameters<typeof cookieStore.set>[0]) {
         try {
-          cookieStore.set({ name, value, ...options });
+          cookieStore.set(name, value, options);
         } catch {
           // No-op in Server Components where cookies are readonly.
         }
       },
       remove(name: string, options?: Parameters<typeof cookieStore.set>[0]) {
         try {
-          cookieStore.set({ name, value: "", ...options });
+          cookieStore.set(name, "", options);
         } catch {
           // No-op in Server Components where cookies are readonly.
         }
