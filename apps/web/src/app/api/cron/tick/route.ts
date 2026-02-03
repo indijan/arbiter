@@ -7,7 +7,7 @@ import { detectTriangular } from "@/server/jobs/detectTriangular";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { computeDailyPnl } from "@/server/jobs/computeDailyPnl";
 
-export async function POST(request: Request) {
+async function handleTick(request: Request) {
   const expected = process.env.CRON_SECRET;
   const headerSecret = request.headers.get("x-cron-secret");
   const url = new URL(request.url);
@@ -84,4 +84,12 @@ export async function POST(request: Request) {
       err instanceof Error ? err.message : "Failed to run cron tick.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+export async function POST(request: Request) {
+  return handleTick(request);
+}
+
+export async function GET(request: Request) {
+  return handleTick(request);
 }
