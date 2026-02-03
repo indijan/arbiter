@@ -131,7 +131,7 @@ export default async function DashboardPage() {
             />
             <IngestButton
               endpoint="/api/ingest/binance"
-              label="Ingest Binance (real)"
+              label="Ingest Bybit + OKX (real)"
               variant="ghost"
             />
             <IngestButton

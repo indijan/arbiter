@@ -2,14 +2,44 @@ import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 
-type BookTicker = {
-  bidPrice: string;
-  askPrice: string;
+type BybitTicker = {
+  symbol: string;
+  bid1Price: string;
+  ask1Price: string;
+  fundingRate?: string;
 };
 
-type PremiumIndex = {
-  lastFundingRate?: string;
-  time?: number;
+type BybitResponse = {
+  retCode: number;
+  retMsg: string;
+  result: {
+    list: BybitTicker[];
+  };
+};
+
+type OkxTicker = {
+  instId: string;
+  bidPx: string;
+  askPx: string;
+  ts: string;
+};
+
+type OkxResponse = {
+  code: string;
+  msg: string;
+  data: OkxTicker[];
+};
+
+type OkxFunding = {
+  instId: string;
+  fundingRate: string;
+  fundingTime: string;
+};
+
+type OkxFundingResponse = {
+  code: string;
+  msg: string;
+  data: OkxFunding[];
 };
 
 const SYMBOLS = [
@@ -42,8 +72,17 @@ function toNumber(value: string | undefined | null) {
   return Number.isFinite(n) ? n : null;
 }
 
-function isPositiveNumber(value: number | null) {
+function isPositiveNumber(value: number | null): value is number {
   return value !== null && value > 0;
+}
+
+function okxSpotInstId(symbol: string) {
+  const base = symbol.replace("USDT", "");
+  return `${base}-USDT`;
+}
+
+function okxSwapInstId(symbol: string) {
+  return `${okxSpotInstId(symbol)}-SWAP`;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -72,6 +111,103 @@ export type IngestBinanceResult = {
   errors: IngestError[];
 };
 
+async function fetchBybitSnapshot(symbol: string) {
+  const spot = await fetchJson<BybitResponse>(
+    `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`
+  );
+  const perp = await fetchJson<BybitResponse>(
+    `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`
+  );
+
+  if (spot.retCode !== 0 || perp.retCode !== 0) {
+    throw new Error(`Bybit error: ${spot.retMsg || perp.retMsg}`);
+  }
+
+  const spotTicker = spot.result.list[0];
+  const perpTicker = perp.result.list[0];
+
+  if (!spotTicker || !perpTicker) {
+    throw new Error("Bybit empty response");
+  }
+
+  const spot_bid = toNumber(spotTicker.bid1Price);
+  const spot_ask = toNumber(spotTicker.ask1Price);
+  const perp_bid = toNumber(perpTicker.bid1Price);
+  const perp_ask = toNumber(perpTicker.ask1Price);
+
+  if (!isPositiveNumber(spot_bid) || !isPositiveNumber(spot_ask) || !isPositiveNumber(perp_bid) || !isPositiveNumber(perp_ask)) {
+    throw new Error("Invalid bid/ask data");
+  }
+
+  const mark_price = (perp_bid + perp_ask) / 2;
+  const index_price = (spot_bid + spot_ask) / 2;
+
+  return {
+    exchange: "bybit",
+    symbol,
+    spot_bid,
+    spot_ask,
+    perp_bid,
+    perp_ask,
+    funding_rate: toNumber(perpTicker.fundingRate),
+    mark_price,
+    index_price,
+    ts: new Date().toISOString()
+  };
+}
+
+async function fetchOkxSnapshot(symbol: string) {
+  const spotInstId = okxSpotInstId(symbol);
+  const swapInstId = okxSwapInstId(symbol);
+
+  const spot = await fetchJson<OkxResponse>(
+    `https://www.okx.com/api/v5/market/ticker?instId=${spotInstId}`
+  );
+  const swap = await fetchJson<OkxResponse>(
+    `https://www.okx.com/api/v5/market/ticker?instId=${swapInstId}`
+  );
+  const funding = await fetchJson<OkxFundingResponse>(
+    `https://www.okx.com/api/v5/public/funding-rate?instId=${swapInstId}`
+  );
+
+  if (spot.code !== "0" || swap.code !== "0") {
+    throw new Error(`OKX error: ${spot.msg || swap.msg}`);
+  }
+
+  const spotTicker = spot.data[0];
+  const swapTicker = swap.data[0];
+
+  if (!spotTicker || !swapTicker) {
+    throw new Error("OKX empty response");
+  }
+
+  const spot_bid = toNumber(spotTicker.bidPx);
+  const spot_ask = toNumber(spotTicker.askPx);
+  const perp_bid = toNumber(swapTicker.bidPx);
+  const perp_ask = toNumber(swapTicker.askPx);
+
+  if (!isPositiveNumber(spot_bid) || !isPositiveNumber(spot_ask) || !isPositiveNumber(perp_bid) || !isPositiveNumber(perp_ask)) {
+    throw new Error("Invalid bid/ask data");
+  }
+
+  const fundingRate = funding.code === "0" ? toNumber(funding.data[0]?.fundingRate) : null;
+  const mark_price = (perp_bid + perp_ask) / 2;
+  const index_price = (spot_bid + spot_ask) / 2;
+
+  return {
+    exchange: "okx",
+    symbol,
+    spot_bid,
+    spot_ask,
+    perp_bid,
+    perp_ask,
+    funding_rate: fundingRate,
+    mark_price,
+    index_price,
+    ts: swapTicker.ts ? new Date(Number(swapTicker.ts)).toISOString() : new Date().toISOString()
+  };
+}
+
 export async function ingestBinance(): Promise<IngestBinanceResult> {
   const adminSupabase = createAdminSupabase();
   if (!adminSupabase) {
@@ -81,61 +217,25 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
   const errors: IngestError[] = [];
   const payload: Array<Record<string, unknown>> = [];
 
-  const results = await Promise.all(
+  await Promise.all(
     SYMBOLS.map(async (symbol) => {
       try {
-        const spot = await fetchJson<BookTicker>(
-          `https://api.binance.com/api/v3/ticker/bookTicker?symbol=${symbol}`
-        );
-        const perp = await fetchJson<BookTicker>(
-          `https://fapi.binance.com/fapi/v1/ticker/bookTicker?symbol=${symbol}`
-        );
-        const premium = await fetchJson<PremiumIndex>(
-          `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`
-        );
-
-        const spot_bid = toNumber(spot.bidPrice);
-        const spot_ask = toNumber(spot.askPrice);
-        const perp_bid = toNumber(perp.bidPrice);
-        const perp_ask = toNumber(perp.askPrice);
-
-        if (
-          !isPositiveNumber(spot_bid) ||
-          !isPositiveNumber(spot_ask) ||
-          !isPositiveNumber(perp_bid) ||
-          !isPositiveNumber(perp_ask)
-        ) {
-          throw new Error("Invalid bid/ask data");
-        }
-
-        const spotBid = spot_bid as number;
-        const spotAsk = spot_ask as number;
-        const perpBid = perp_bid as number;
-        const perpAsk = perp_ask as number;
-
-        const mark_price = (perpBid + perpAsk) / 2;
-        const index_price = (spotBid + spotAsk) / 2;
-
-        payload.push({
-          exchange: "binance",
-          symbol,
-          spot_bid: spotBid,
-          spot_ask: spotAsk,
-          perp_bid: perpBid,
-          perp_ask: perpAsk,
-          funding_rate: toNumber(premium.lastFundingRate),
-          mark_price,
-          index_price,
-          ts: premium.time ? new Date(premium.time).toISOString() : new Date().toISOString()
-        });
+        const snapshot = await fetchBybitSnapshot(symbol);
+        payload.push(snapshot);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        errors.push({ symbol, error: message });
+        errors.push({ symbol: `BYBIT:${symbol}`, error: message });
+      }
+
+      try {
+        const snapshot = await fetchOkxSnapshot(symbol);
+        payload.push(snapshot);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        errors.push({ symbol: `OKX:${symbol}`, error: message });
       }
     })
   );
-
-  void results;
 
   if (payload.length > 0) {
     const { error } = await adminSupabase.from("market_snapshots").insert(payload);
@@ -144,9 +244,11 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
     }
   }
 
+  const attempts = SYMBOLS.length * 2;
+
   return {
     inserted: payload.length,
-    skipped: SYMBOLS.length - payload.length,
+    skipped: attempts - payload.length,
     errors
   };
 }

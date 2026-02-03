@@ -14,11 +14,12 @@ const MIN_NET_EDGE_BPS = 5;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
-  binance: string;
+  bybit: string;
+  okx: string;
   kraken: string;
 }> = [
-  { canonical: "BTCUSD", binance: "BTCUSDT", kraken: "BTCUSD" },
-  { canonical: "ETHUSD", binance: "ETHUSDT", kraken: "ETHUSD" }
+  { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
+  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" }
 ];
 
 export type EvaluatedRow = {
@@ -54,17 +55,30 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
   const evaluated: EvaluatedRow[] = [];
 
   for (const mapping of CANONICAL_MAP) {
-    const { data: binanceSnap, error: binanceError } = await adminSupabase
+    const { data: bybitSnap, error: bybitError } = await adminSupabase
       .from("market_snapshots")
       .select("ts, spot_bid, spot_ask")
-      .eq("exchange", "binance")
-      .eq("symbol", mapping.binance)
+      .eq("exchange", "bybit")
+      .eq("symbol", mapping.bybit)
       .order("ts", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (binanceError) {
-      throw new Error(binanceError.message);
+    if (bybitError) {
+      throw new Error(bybitError.message);
+    }
+
+    const { data: okxSnap, error: okxError } = await adminSupabase
+      .from("market_snapshots")
+      .select("ts, spot_bid, spot_ask")
+      .eq("exchange", "okx")
+      .eq("symbol", mapping.okx)
+      .order("ts", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (okxError) {
+      throw new Error(okxError.message);
     }
 
     const { data: krakenSnap, error: krakenError } = await adminSupabase
@@ -80,7 +94,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       throw new Error(krakenError.message);
     }
 
-    if (!binanceSnap || !krakenSnap) {
+    if (!bybitSnap && !okxSnap && !krakenSnap) {
       skipped += 1;
       evaluated.push({
         canonical_symbol: mapping.canonical,
@@ -97,19 +111,31 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     }
 
     const quotes = [
-      {
-        exchange: "binance",
-        ask: binanceSnap.spot_ask,
-        bid: binanceSnap.spot_bid,
-        note: "USDT proxy"
-      },
-      {
-        exchange: "kraken",
-        ask: krakenSnap.spot_ask,
-        bid: krakenSnap.spot_bid,
-        note: "USD"
-      }
-    ];
+      bybitSnap
+        ? {
+            exchange: "bybit",
+            ask: bybitSnap.spot_ask,
+            bid: bybitSnap.spot_bid,
+            note: "USDT proxy"
+          }
+        : null,
+      okxSnap
+        ? {
+            exchange: "okx",
+            ask: okxSnap.spot_ask,
+            bid: okxSnap.spot_bid,
+            note: "USDT proxy"
+          }
+        : null,
+      krakenSnap
+        ? {
+            exchange: "kraken",
+            ask: krakenSnap.spot_ask,
+            bid: krakenSnap.spot_bid,
+            note: "USD"
+          }
+        : null
+    ].filter(Boolean) as Array<{ exchange: string; ask: number | null; bid: number | null; note: string }>;
 
     const validQuotes = quotes.filter(
       (q) => q.ask && q.bid && q.ask > 0 && q.bid > 0 && q.ask > q.bid
@@ -173,10 +199,11 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       continue;
     }
 
+    const exchangeKey = [buy.exchange, sell.exchange].sort().join("_");
     const { data: existing, error: existingError } = await adminSupabase
       .from("opportunities")
       .select("id")
-      .eq("exchange", "binance_kraken")
+      .eq("exchange", exchangeKey)
       .eq("symbol", mapping.canonical)
       .eq("type", "xarb_spot")
       .gte("ts", idempotentSince)
@@ -206,7 +233,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
 
     const { error: insertError } = await adminSupabase.from("opportunities").insert({
       ts: new Date().toISOString(),
-      exchange: "binance_kraken",
+      exchange: exchangeKey,
       symbol: mapping.canonical,
       type: "xarb_spot",
       net_edge_bps: Number(net_edge_bps.toFixed(4)),
@@ -221,7 +248,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
         costs_bps_breakdown: COSTS_BPS,
         canonical_symbol: mapping.canonical,
-        usdt_proxy: buy.exchange === "binance" || sell.exchange === "binance"
+        usdt_proxy: buy.exchange !== "kraken" || sell.exchange !== "kraken"
       }
     });
 

@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ts: new Date().toISOString(),
       ingest: {
-        binance: ingestBinanceResult,
+        bybit_okx: ingestBinanceResult,
         kraken: ingestKrakenResult
       },
       detect: {

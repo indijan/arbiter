@@ -8,9 +8,15 @@ const COSTS_BPS = 12;
 const MIN_NET_EDGE_BPS = 5;
 const IDEMPOTENT_MINUTES = 5;
 
-type BookTicker = {
-  bidPrice: string;
-  askPrice: string;
+type OkxTicker = {
+  bidPx: string;
+  askPx: string;
+};
+
+type OkxResponse = {
+  code: string;
+  msg: string;
+  data: OkxTicker[];
 };
 
 type PathStep = {
@@ -27,17 +33,17 @@ const PATHS: Path[] = [
   {
     name: "USDT->BTC->ETH->USDT",
     steps: [
-      { symbol: "BTCUSDT", side: "buy" },
-      { symbol: "ETHBTC", side: "buy" },
-      { symbol: "ETHUSDT", side: "sell" }
+      { symbol: "BTC-USDT", side: "buy" },
+      { symbol: "ETH-BTC", side: "buy" },
+      { symbol: "ETH-USDT", side: "sell" }
     ]
   },
   {
     name: "USDT->BTC->SOL->USDT",
     steps: [
-      { symbol: "BTCUSDT", side: "buy" },
-      { symbol: "SOLBTC", side: "buy" },
-      { symbol: "SOLUSDT", side: "sell" }
+      { symbol: "BTC-USDT", side: "buy" },
+      { symbol: "SOL-BTC", side: "buy" },
+      { symbol: "SOL-USDT", side: "sell" }
     ]
   }
 ];
@@ -94,8 +100,8 @@ export async function detectTriangular(): Promise<DetectTriangularResult> {
     try {
       const tickers = await Promise.all(
         path.steps.map((step) =>
-          fetchJson<BookTicker>(
-            `https://api.binance.com/api/v3/ticker/bookTicker?symbol=${step.symbol}`
+          fetchJson<OkxResponse>(
+            `https://www.okx.com/api/v5/market/ticker?instId=${step.symbol}`
           )
         )
       );
@@ -106,8 +112,11 @@ export async function detectTriangular(): Promise<DetectTriangularResult> {
       for (let i = 0; i < path.steps.length; i += 1) {
         const step = path.steps[i];
         const ticker = tickers[i];
-        const ask = toNumber(ticker.askPrice);
-        const bid = toNumber(ticker.bidPrice);
+        if (ticker.code !== "0" || !ticker.data[0]) {
+          throw new Error("invalid prices");
+        }
+        const ask = toNumber(ticker.data[0].askPx);
+        const bid = toNumber(ticker.data[0].bidPx);
 
         if (!ask || !bid || ask <= 0 || bid <= 0 || ask <= bid) {
           throw new Error("invalid prices");
@@ -145,7 +154,7 @@ export async function detectTriangular(): Promise<DetectTriangularResult> {
       const { data: existing, error: existingError } = await adminSupabase
         .from("opportunities")
         .select("id")
-        .eq("exchange", "binance")
+        .eq("exchange", "okx")
         .eq("symbol", path.name)
         .eq("type", "tri_arb")
         .gte("ts", idempotentSince)
@@ -171,7 +180,7 @@ export async function detectTriangular(): Promise<DetectTriangularResult> {
 
       const { error: insertError } = await adminSupabase.from("opportunities").insert({
         ts: new Date().toISOString(),
-        exchange: "binance",
+        exchange: "okx",
         symbol: path.name,
         type: "tri_arb",
         net_edge_bps: Number(net_edge_bps.toFixed(4)),

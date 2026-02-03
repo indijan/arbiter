@@ -4,7 +4,8 @@ import PaperSettingsPanel from "@/components/PaperSettingsPanel";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 const EXCHANGES = [
-  { key: "binance", label: "Binance" },
+  { key: "bybit", label: "Bybit" },
+  { key: "okx", label: "OKX" },
   { key: "kraken", label: "Kraken" }
 ];
 

@@ -25,8 +25,8 @@ export async function POST() {
   } catch (err) {
     const message =
       err instanceof Error
-        ? `Binance API error: ${err.message}`
-        : "Binance API error.";
+        ? `Bybit/OKX API error: ${err.message}`
+        : "Bybit/OKX API error.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
