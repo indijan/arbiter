@@ -17,11 +17,11 @@ export async function POST(request: Request) {
       get(name: string) {
         return request.headers.get("cookie")?.match(new RegExp(`${name}=([^;]+)`))?.[1];
       },
-      set(name: string, value: string, options: Parameters<typeof response.cookies.set>[0]) {
-        response.cookies.set({ name, value, ...options });
+      set(name: string, value: string, options?: Parameters<typeof response.cookies.set>[2]) {
+        response.cookies.set(name, value, options);
       },
-      remove(name: string, options: Parameters<typeof response.cookies.set>[0]) {
-        response.cookies.set({ name, value: "", ...options });
+      remove(name: string, options?: Parameters<typeof response.cookies.set>[2]) {
+        response.cookies.set(name, "", options);
       }
     }
   });
