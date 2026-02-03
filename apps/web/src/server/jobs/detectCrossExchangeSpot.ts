@@ -138,7 +138,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     ].filter(Boolean) as Array<{ exchange: string; ask: number | null; bid: number | null; note: string }>;
 
     const validQuotes = quotes.filter(
-      (q) => q.ask && q.bid && q.ask > 0 && q.bid > 0 && q.ask > q.bid
+      (q): q is { exchange: string; ask: number; bid: number; note: string } =>
+        q.ask !== null && q.bid !== null && q.ask > 0 && q.bid > 0 && q.ask > q.bid
     );
 
     if (validQuotes.length < 2) {
