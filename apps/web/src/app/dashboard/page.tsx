@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
-import IngestButton from "@/components/IngestButton";
 import ExecuteButton from "@/components/ExecuteButton";
 import DetectSummaryPanel from "@/components/DetectSummaryPanel";
 import DevTickButton from "@/components/DevTickButton";
@@ -124,21 +123,6 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <IngestButton
-              endpoint="/api/ingest/mock"
-              label="Insert mock snapshots"
-              variant="primary"
-            />
-            <IngestButton
-              endpoint="/api/ingest/binance"
-              label="Ingest Bybit + OKX (real)"
-              variant="ghost"
-            />
-            <IngestButton
-              endpoint="/api/ingest/kraken"
-              label="Ingest Kraken (real)"
-              variant="ghost"
-            />
             <DevTickButton />
             <LogoutButton />
           </div>

@@ -19,7 +19,7 @@ export default function DevTickButton({ holdingHours = 24 }: DevTickButtonProps)
     const ingestBinanceResponse = await fetch("/api/ingest/binance", { method: "POST" });
     if (!ingestBinanceResponse.ok) {
       const payload = await ingestBinanceResponse.json().catch(() => ({}));
-      setError(payload.error ?? "Nem sikerült binance ingestet futtatni.");
+      setError(payload.error ?? "Nem sikerült a Bybit/OKX ingest.");
       setLoading(false);
       return;
     }
@@ -27,7 +27,7 @@ export default function DevTickButton({ holdingHours = 24 }: DevTickButtonProps)
     const ingestKrakenResponse = await fetch("/api/ingest/kraken", { method: "POST" });
     if (!ingestKrakenResponse.ok) {
       const payload = await ingestKrakenResponse.json().catch(() => ({}));
-      setError(payload.error ?? "Nem sikerült kraken ingestet futtatni.");
+      setError(payload.error ?? "Nem sikerült a Kraken ingest.");
       setLoading(false);
       return;
     }
@@ -52,12 +52,9 @@ export default function DevTickButton({ holdingHours = 24 }: DevTickButtonProps)
   return (
     <div className="flex flex-col items-start gap-2">
       <button className="btn btn-ghost" onClick={handleClick} disabled={loading}>
-        {loading ? "Running..." : "Dev Tick (ingest + detect)"}
+        {loading ? "Futtatás..." : "Manuális futtatás"}
       </button>
       {error ? <p className="text-sm text-red-200">{error}</p> : null}
-      <p className="text-xs text-brand-100/60">
-        Cron ticket lokálisan curl-lel tesztelj: /api/cron/tick
-      </p>
     </div>
   );
 }
