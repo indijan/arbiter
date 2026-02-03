@@ -12,17 +12,17 @@ export function createServerSupabase() {
 
   return createServerClient(env.url, env.anonKey, {
     cookies: {
-      get(name) {
+      get(name: string) {
         return cookieStore.get(name)?.value;
       },
-      set(name, value, options) {
+      set(name: string, value: string, options?: Parameters<typeof cookieStore.set>[0]) {
         try {
           cookieStore.set({ name, value, ...options });
         } catch {
           // No-op in Server Components where cookies are readonly.
         }
       },
-      remove(name, options) {
+      remove(name: string, options?: Parameters<typeof cookieStore.set>[0]) {
         try {
           cookieStore.set({ name, value: "", ...options });
         } catch {
