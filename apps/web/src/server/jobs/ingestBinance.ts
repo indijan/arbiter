@@ -45,24 +45,12 @@ type OkxFundingResponse = {
 const SYMBOLS = [
   "BTCUSDT",
   "ETHUSDT",
-  "BNBUSDT",
   "SOLUSDT",
   "XRPUSDT",
+  "BNBUSDT",
   "ADAUSDT",
   "DOGEUSDT",
-  "AVAXUSDT",
-  "LINKUSDT",
-  "DOTUSDT",
-  "MATICUSDT",
-  "LTCUSDT",
-  "BCHUSDT",
-  "TRXUSDT",
-  "TONUSDT",
-  "ATOMUSDT",
-  "NEARUSDT",
-  "OPUSDT",
-  "ARBUSDT",
-  "SUIUSDT"
+  "AVAXUSDT"
 ] as const;
 
 const TIMEOUT_MS = 9000;
@@ -90,7 +78,13 @@ async function fetchJson<T>(url: string): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "accept": "application/json",
+        "user-agent": "Mozilla/5.0 (compatible; ArbiterBot/1.0; +https://example.com)"
+      }
+    });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -217,8 +211,7 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
   const errors: IngestError[] = [];
   const payload: Array<Record<string, unknown>> = [];
 
-  await Promise.all(
-    SYMBOLS.map(async (symbol) => {
+  for (const symbol of SYMBOLS) {
       try {
         const snapshot = await fetchBybitSnapshot(symbol);
         payload.push(snapshot);
@@ -227,6 +220,8 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
         errors.push({ symbol: `BYBIT:${symbol}`, error: message });
       }
 
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
       try {
         const snapshot = await fetchOkxSnapshot(symbol);
         payload.push(snapshot);
@@ -234,8 +229,8 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
         const message = err instanceof Error ? err.message : "Unknown error";
         errors.push({ symbol: `OKX:${symbol}`, error: message });
       }
-    })
-  );
+      await new Promise((resolve) => setTimeout(resolve, 180));
+  }
 
   if (payload.length > 0) {
     const { error } = await adminSupabase.from("market_snapshots").insert(payload);
