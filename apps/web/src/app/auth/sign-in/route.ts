@@ -14,13 +14,13 @@ export async function POST(request: Request) {
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
-      get(name) {
+      get(name: string) {
         return request.headers.get("cookie")?.match(new RegExp(`${name}=([^;]+)`))?.[1];
       },
-      set(name, value, options) {
+      set(name: string, value: string, options: Parameters<typeof response.cookies.set>[0]) {
         response.cookies.set({ name, value, ...options });
       },
-      remove(name, options) {
+      remove(name: string, options: Parameters<typeof response.cookies.set>[0]) {
         response.cookies.set({ name, value: "", ...options });
       }
     }
