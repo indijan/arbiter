@@ -13,8 +13,10 @@ async function handleTick(request: Request) {
   const url = new URL(request.url);
   const querySecret = url.searchParams.get("secret");
   const provided = headerSecret ?? querySecret;
+  const userAgent = request.headers.get("user-agent") ?? "";
+  const isVercelCron = userAgent.toLowerCase().includes("vercel-cron");
 
-  if (!expected || !provided || provided !== expected) {
+  if (!isVercelCron && (!expected || !provided || provided !== expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
