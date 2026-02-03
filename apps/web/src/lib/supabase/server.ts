@@ -15,16 +15,24 @@ export function createServerSupabase() {
       get(name: string) {
         return cookieStore.get(name)?.value;
       },
-      set(name: string, value: string, options?: Parameters<typeof cookieStore.set>[0]) {
+      set(name: string, value: string, options?: Parameters<typeof cookieStore.set>[2]) {
         try {
-          cookieStore.set(name, value, options);
+          if (options && typeof options === "object") {
+            cookieStore.set(name, value, options);
+          } else {
+            cookieStore.set(name, value);
+          }
         } catch {
           // No-op in Server Components where cookies are readonly.
         }
       },
-      remove(name: string, options?: Parameters<typeof cookieStore.set>[0]) {
+      remove(name: string, options?: Parameters<typeof cookieStore.set>[2]) {
         try {
-          cookieStore.set(name, "", options);
+          if (options && typeof options === "object") {
+            cookieStore.set(name, "", options);
+          } else {
+            cookieStore.set(name, "");
+          }
         } catch {
           // No-op in Server Components where cookies are readonly.
         }
