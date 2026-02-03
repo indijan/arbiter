@@ -108,10 +108,10 @@ export async function ingestBinance(): Promise<IngestBinanceResult> {
           throw new Error("Invalid bid/ask data");
         }
 
-        const spotBid = spot_bid;
-        const spotAsk = spot_ask;
-        const perpBid = perp_bid;
-        const perpAsk = perp_ask;
+        const spotBid = spot_bid as number;
+        const spotAsk = spot_ask as number;
+        const perpBid = perp_bid as number;
+        const perpAsk = perp_ask as number;
 
         const mark_price = (perpBid + perpAsk) / 2;
         const index_price = (spotBid + spotAsk) / 2;
