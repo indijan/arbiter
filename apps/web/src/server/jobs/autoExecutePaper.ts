@@ -12,7 +12,8 @@ const FEE_BPS = 4;
 
 const MAX_OPEN_POSITIONS = 10;
 const MAX_NEW_PER_HOUR = 3;
-const MAX_CANDIDATES = 3;
+const MAX_CANDIDATES = 10;
+const MAX_EXECUTE_PER_TICK = 3;
 const LOOKBACK_HOURS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
@@ -355,7 +356,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let available = Math.max(0, balance - reserved);
   let reservedCurrent = reserved;
 
-  for (const opp of scored) {
+  for (const opp of scored.slice(0, MAX_EXECUTE_PER_TICK)) {
     attempted += 1;
 
     const { data: existingPosition, error: existingError } = await adminSupabase
