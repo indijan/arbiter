@@ -27,7 +27,6 @@ const CANONICAL_MAP: Array<{
   { canonical: "DOGEUSD", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
   { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT" },
   { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT" },
-  { canonical: "MATICUSD", bybit: "MATICUSDT", okx: "MATICUSDT" },
   { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT" },
   { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT" },
   { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT" },

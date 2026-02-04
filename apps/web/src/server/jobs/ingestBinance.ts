@@ -52,7 +52,6 @@ const SYMBOLS = [
   "DOGEUSDT",
   "AVAXUSDT",
   "LINKUSDT",
-  "MATICUSDT",
   "LTCUSDT",
   "DOTUSDT",
   "BCHUSDT",

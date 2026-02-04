@@ -34,7 +34,6 @@ const CANONICAL_MAP: Record<
   DOGEUSD: { bybit: "DOGEUSDT", okx: "DOGEUSDT" },
   AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT" },
   LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT" },
-  MATICUSD: { bybit: "MATICUSDT", okx: "MATICUSDT" },
   LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT" },
   DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT" },
   BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT" },
