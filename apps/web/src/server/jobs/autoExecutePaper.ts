@@ -324,7 +324,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const { data: opportunities, error: oppError } = await adminSupabase
     .from("opportunities")
     .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details, status")
-    .eq("status", "new")
     .gte("ts", sinceOpps)
     .order("ts", { ascending: false })
     .limit(80);
@@ -333,7 +332,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     throw new Error(oppError.message);
   }
 
+  const openOppIds = new Set(
+    (openPositions ?? [])
+      .map((p) => (p as { opportunity_id?: number | null }).opportunity_id)
+      .filter((id): id is number => typeof id === "number")
+  );
+
   const scored = (opportunities ?? [])
+    .filter((opp) => !openOppIds.has((opp as { id: number }).id))
     .map((opp) => ({
       ...(opp as OpportunityRow),
       score: scoreOpportunity(opp as OpportunityRow)

@@ -7,6 +7,7 @@ import { detectTriangular } from "@/server/jobs/detectTriangular";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { computeDailyPnl } from "@/server/jobs/computeDailyPnl";
 import { autoExecutePaper } from "@/server/jobs/autoExecutePaper";
+import { autoClosePaper } from "@/server/jobs/autoClosePaper";
 
 async function handleTick(request: Request) {
   const expected = process.env.CRON_SECRET;
@@ -33,6 +34,7 @@ async function handleTick(request: Request) {
     const crossResult = await detectCrossExchangeSpot();
     const triResult = await detectTriangular();
     const autoResult = await autoExecutePaper();
+    const closeResult = await autoClosePaper();
 
     const pnlRows = await computeDailyPnl();
 
@@ -60,6 +62,11 @@ async function handleTick(request: Request) {
             attempted: autoResult.attempted,
             created: autoResult.created,
             skipped: autoResult.skipped
+          },
+          auto_close: {
+            attempted: closeResult.attempted,
+            closed: closeResult.closed,
+            skipped: closeResult.skipped
           }
         }
       });
@@ -90,6 +97,12 @@ async function handleTick(request: Request) {
           created: autoResult.created,
           skipped: autoResult.skipped,
           reasons: autoResult.reasons
+        },
+        auto_close: {
+          attempted: closeResult.attempted,
+          closed: closeResult.closed,
+          skipped: closeResult.skipped,
+          reasons: closeResult.reasons
         }
       },
       pnl: pnlRows
