@@ -665,11 +665,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const details = opp.details ?? {};
       const stepsRaw = (details as Record<string, unknown>).steps as Array<Record<string, unknown>> | undefined;
       const steps = (stepsRaw ?? [])
-        .map((step) => ({
-          symbol: String(step.symbol ?? ""),
-          side: step.side === "sell" ? "sell" : "buy"
-        }))
-        .filter((step) => step.symbol && (step.side === "buy" || step.side === "sell"));
+        .map((step) => {
+          const side = step.side === "sell" ? "sell" : "buy";
+          return {
+            symbol: String(step.symbol ?? ""),
+            side
+          };
+        })
+        .filter(
+          (step): step is { symbol: string; side: "buy" | "sell" } =>
+            step.symbol.length > 0 && (step.side === "buy" || step.side === "sell")
+        );
 
       if (steps.length !== 3) {
         skipped += 1;
