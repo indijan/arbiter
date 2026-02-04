@@ -9,8 +9,8 @@ const IDEMPOTENT_MINUTES = 5;
 const DEFAULT_HOLDING_HOURS = 24;
 const MAX_HOLDING_HOURS = 168;
 
-const ENTRY_COSTS_BPS = 8;
-const EXIT_COSTS_BPS = 8;
+const ENTRY_COSTS_BPS = 6;
+const EXIT_COSTS_BPS = 6;
 const TOTAL_COSTS_BPS = ENTRY_COSTS_BPS + EXIT_COSTS_BPS;
 
 export type EvaluatedRow = {
@@ -177,7 +177,7 @@ export async function detectCarry(
       reason = "non-positive funding";
     } else if (
       break_even_hours !== null &&
-      break_even_hours <= 48 &&
+      break_even_hours <= 72 &&
       net_edge_bps >= CARRY_CONFIG.min_net_edge_bps
     ) {
       const result = spotPerpCarry(snapshot, { holding_hours });
@@ -233,7 +233,7 @@ export async function detectCarry(
           decision = "inserted";
         }
       }
-    } else if (break_even_hours !== null && break_even_hours <= 72) {
+    } else if (break_even_hours !== null && break_even_hours <= 96) {
       watchlist += 1;
       decision = "watchlist";
     } else {

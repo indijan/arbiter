@@ -50,7 +50,13 @@ const SYMBOLS = [
   "BNBUSDT",
   "ADAUSDT",
   "DOGEUSDT",
-  "AVAXUSDT"
+  "AVAXUSDT",
+  "LINKUSDT",
+  "MATICUSDT",
+  "LTCUSDT",
+  "DOTUSDT",
+  "BCHUSDT",
+  "TRXUSDT"
 ] as const;
 
 const TIMEOUT_MS = 9000;

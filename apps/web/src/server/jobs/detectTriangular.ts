@@ -4,8 +4,8 @@ import { createAdminSupabase } from "@/lib/supabase/server-admin";
 
 const TIMEOUT_MS = 9000;
 
-const COSTS_BPS = 12;
-const MIN_NET_EDGE_BPS = 5;
+const COSTS_BPS = 8;
+const MIN_NET_EDGE_BPS = 3;
 const IDEMPOTENT_MINUTES = 5;
 
 type OkxTicker = {
@@ -44,6 +44,22 @@ const PATHS: Path[] = [
       { symbol: "BTC-USDT", side: "buy" },
       { symbol: "SOL-BTC", side: "buy" },
       { symbol: "SOL-USDT", side: "sell" }
+    ]
+  },
+  {
+    name: "USDT->BTC->XRP->USDT",
+    steps: [
+      { symbol: "BTC-USDT", side: "buy" },
+      { symbol: "XRP-BTC", side: "buy" },
+      { symbol: "XRP-USDT", side: "sell" }
+    ]
+  },
+  {
+    name: "USDT->BTC->ADA->USDT",
+    steps: [
+      { symbol: "BTC-USDT", side: "buy" },
+      { symbol: "ADA-BTC", side: "buy" },
+      { symbol: "ADA-USDT", side: "sell" }
     ]
   }
 ];

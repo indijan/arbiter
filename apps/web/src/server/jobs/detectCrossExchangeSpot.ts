@@ -5,21 +5,33 @@ import { createAdminSupabase } from "@/lib/supabase/server-admin";
 const IDEMPOTENT_MINUTES = 5;
 
 const COSTS_BPS = {
-  fee_bps_total: 8,
-  slippage_bps_total: 6,
-  transfer_buffer_bps: 10
+  fee_bps_total: 6,
+  slippage_bps_total: 4,
+  transfer_buffer_bps: 8
 };
 
-const MIN_NET_EDGE_BPS = 5;
+const MIN_NET_EDGE_BPS = 3;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
   bybit: string;
   okx: string;
-  kraken: string;
+  kraken?: string;
 }> = [
   { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
-  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" }
+  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
+  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT" },
+  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT" },
+  { canonical: "BNBUSD", bybit: "BNBUSDT", okx: "BNBUSDT" },
+  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT" },
+  { canonical: "DOGEUSD", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
+  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT" },
+  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT" },
+  { canonical: "MATICUSD", bybit: "MATICUSDT", okx: "MATICUSDT" },
+  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT" },
+  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT" },
+  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT" },
+  { canonical: "TRXUSD", bybit: "TRXUSDT", okx: "TRXUSDT" }
 ];
 
 export type EvaluatedRow = {
@@ -81,17 +93,21 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       throw new Error(okxError.message);
     }
 
-    const { data: krakenSnap, error: krakenError } = await adminSupabase
-      .from("market_snapshots")
-      .select("ts, spot_bid, spot_ask")
-      .eq("exchange", "kraken")
-      .eq("symbol", mapping.kraken)
-      .order("ts", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let krakenSnap: { ts: string; spot_bid: number | null; spot_ask: number | null } | null = null;
+    if (mapping.kraken) {
+      const { data, error } = await adminSupabase
+        .from("market_snapshots")
+        .select("ts, spot_bid, spot_ask")
+        .eq("exchange", "kraken")
+        .eq("symbol", mapping.kraken)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (krakenError) {
-      throw new Error(krakenError.message);
+      if (error) {
+        throw new Error(error.message);
+      }
+      krakenSnap = data;
     }
 
     if (!bybitSnap && !okxSnap && !krakenSnap) {

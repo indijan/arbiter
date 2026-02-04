@@ -19,10 +19,10 @@ export type OpportunityResult = {
 };
 
 export const CARRY_CONFIG = {
-  fee_bps_total: 8,
-  slippage_bps_total: 6,
+  fee_bps_total: 6,
+  slippage_bps_total: 4,
   latency_buffer_bps: 2,
-  min_net_edge_bps: 5
+  min_net_edge_bps: 2
 };
 
 export type SpotPerpCarryParams = {
