@@ -26,7 +26,7 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
 
   const { data: positions, error: positionsError } = await adminSupabase
     .from("positions")
-    .select("id, user_id, opportunity_id, symbol, status, spot_qty, perp_qty, entry_spot_price, entry_perp_price")
+    .select("id, user_id, opportunity_id, symbol, status, spot_qty, perp_qty, entry_spot_price, entry_perp_price, meta")
     .eq("status", "open");
 
   if (positionsError) {
@@ -75,6 +75,29 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     });
   }
 
+  const xarbPairs = new Map<string, { exchange: string; symbol: string }>();
+  for (const position of positions ?? []) {
+    const meta = (position.meta ?? {}) as Record<string, unknown>;
+    if (meta.type === "xarb_spot") {
+      const buyExchange = String(meta.buy_exchange ?? "");
+      const sellExchange = String(meta.sell_exchange ?? "");
+      const buySymbol = String(meta.buy_symbol ?? "");
+      const sellSymbol = String(meta.sell_symbol ?? "");
+      if (buyExchange && buySymbol) {
+        xarbPairs.set(`${buyExchange}:${buySymbol}`, {
+          exchange: buyExchange,
+          symbol: buySymbol
+        });
+      }
+      if (sellExchange && sellSymbol) {
+        xarbPairs.set(`${sellExchange}:${sellSymbol}`, {
+          exchange: sellExchange,
+          symbol: sellSymbol
+        });
+      }
+    }
+  }
+
   const snapshotsMap = new Map<string, { spot_mid: number | null; perp_mid: number | null }>();
 
   for (const pair of uniquePairs.values()) {
@@ -98,6 +121,26 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     snapshotsMap.set(`${pair.exchange}:${pair.symbol}`, { spot_mid, perp_mid });
   }
 
+  for (const pair of xarbPairs.values()) {
+    if (snapshotsMap.has(`${pair.exchange}:${pair.symbol}`)) {
+      continue;
+    }
+    const { data: snap } = await adminSupabase
+      .from("market_snapshots")
+      .select("spot_bid, spot_ask")
+      .eq("exchange", pair.exchange)
+      .eq("symbol", pair.symbol)
+      .order("ts", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const spot_bid = toNumber(snap?.spot_bid ?? null);
+    const spot_ask = toNumber(snap?.spot_ask ?? null);
+    const spot_mid = spot_bid !== null && spot_ask !== null ? (spot_bid + spot_ask) / 2 : null;
+
+    snapshotsMap.set(`${pair.exchange}:${pair.symbol}`, { spot_mid, perp_mid: null });
+  }
+
   const pnlAgg = new Map<string, number>();
 
   for (const position of positions ?? []) {
@@ -109,29 +152,54 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     const strategy_key = STRATEGY_MAP[opp.type] ?? opp.type;
     const exchange_key = opp.exchange ?? "unknown";
 
-    const snapshotKey = `${opp.exchange}:${opp.symbol}`;
-    const prices = snapshotsMap.get(snapshotKey);
-    if (!prices) {
+    let total_pnl = 0;
+
+    if (opp.type === "spot_perp_carry") {
+      const snapshotKey = `${opp.exchange}:${opp.symbol}`;
+      const prices = snapshotsMap.get(snapshotKey);
+      if (!prices) {
+        continue;
+      }
+
+      const spot_mid = prices.spot_mid;
+      const perp_mid = prices.perp_mid;
+      const spot_qty = Number(position.spot_qty ?? 0);
+      const perp_qty = Number(position.perp_qty ?? 0);
+      const entry_spot_price = Number(position.entry_spot_price ?? 0);
+      const entry_perp_price = Number(position.entry_perp_price ?? 0);
+
+      if (!spot_mid || !perp_mid) {
+        continue;
+      }
+
+      const spot_pnl = spot_qty * (spot_mid - entry_spot_price);
+      const perp_pnl = perp_qty * (perp_mid - entry_perp_price);
+      const fee_total = feeMap.get(position.id) ?? 0;
+      total_pnl = spot_pnl + perp_pnl - fee_total;
+    } else if (opp.type === "xarb_spot") {
+      const meta = (position.meta ?? {}) as Record<string, unknown>;
+      const buyExchange = String(meta.buy_exchange ?? "");
+      const sellExchange = String(meta.sell_exchange ?? "");
+      const buySymbol = String(meta.buy_symbol ?? "");
+      const sellSymbol = String(meta.sell_symbol ?? "");
+      const buyEntry = Number(meta.buy_entry_price ?? 0);
+      const sellEntry = Number(meta.sell_entry_price ?? 0);
+      const buyQty = Number(meta.buy_qty ?? 0);
+      const sellQty = Number(meta.sell_qty ?? 0);
+
+      const buyPrices = snapshotsMap.get(`${buyExchange}:${buySymbol}`);
+      const sellPrices = snapshotsMap.get(`${sellExchange}:${sellSymbol}`);
+      if (!buyPrices?.spot_mid || !sellPrices?.spot_mid) {
+        continue;
+      }
+
+      const buyPnl = buyQty * (buyPrices.spot_mid - buyEntry);
+      const sellPnl = sellQty * (sellEntry - sellPrices.spot_mid);
+      const fee_total = feeMap.get(position.id) ?? 0;
+      total_pnl = buyPnl + sellPnl - fee_total;
+    } else {
       continue;
     }
-
-    const spot_mid = prices.spot_mid;
-    const perp_mid = prices.perp_mid;
-
-    const spot_qty = Number(position.spot_qty ?? 0);
-    const perp_qty = Number(position.perp_qty ?? 0);
-
-    const entry_spot_price = Number(position.entry_spot_price ?? 0);
-    const entry_perp_price = Number(position.entry_perp_price ?? 0);
-
-    if (!spot_mid || !perp_mid) {
-      continue;
-    }
-
-    const spot_pnl = spot_qty * (spot_mid - entry_spot_price);
-    const perp_pnl = perp_qty * (perp_mid - entry_perp_price);
-    const fee_total = feeMap.get(position.id) ?? 0;
-    const total_pnl = spot_pnl + perp_pnl - fee_total;
 
     const key = `${strategy_key}:${exchange_key}`;
     pnlAgg.set(key, (pnlAgg.get(key) ?? 0) + total_pnl);

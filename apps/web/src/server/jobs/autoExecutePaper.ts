@@ -21,6 +21,63 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   tri_arb: 2
 };
 
+const CANONICAL_MAP: Record<
+  string,
+  { bybit: string; okx: string; kraken?: string }
+> = {
+  BTCUSD: { bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
+  ETHUSD: { bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
+  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT" },
+  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT" },
+  BNBUSD: { bybit: "BNBUSDT", okx: "BNBUSDT" },
+  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT" },
+  DOGEUSD: { bybit: "DOGEUSDT", okx: "DOGEUSDT" },
+  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT" },
+  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT" },
+  MATICUSD: { bybit: "MATICUSDT", okx: "MATICUSDT" },
+  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT" },
+  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT" },
+  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT" },
+  TRXUSD: { bybit: "TRXUSDT", okx: "TRXUSDT" }
+};
+
+const KRAKEN_PAIR_MAP: Record<string, string> = {
+  BTCUSD: "XXBTZUSD",
+  ETHUSD: "XETHZUSD"
+};
+
+type BybitTicker = {
+  bid1Price: string;
+  ask1Price: string;
+};
+
+type BybitResponse = {
+  retCode: number;
+  retMsg: string;
+  result: { list: BybitTicker[] };
+};
+
+type OkxTicker = {
+  bidPx: string;
+  askPx: string;
+};
+
+type OkxResponse = {
+  code: string;
+  msg: string;
+  data: OkxTicker[];
+};
+
+type KrakenTicker = {
+  a: [string, string, string];
+  b: [string, string, string];
+};
+
+type KrakenResponse = {
+  error: string[];
+  result: Record<string, KrakenTicker>;
+};
+
 type OpportunityRow = {
   id: number;
   ts: string;
@@ -90,6 +147,122 @@ function scoreOpportunity(opp: OpportunityRow) {
   const confidenceBonus = confidence;
 
   return risk + breakEvenPenalty - edgeBonus - confidenceBonus;
+}
+
+function okxSpotInstId(symbol: string) {
+  const base = symbol.replace("USDT", "");
+  return `${base}-USDT`;
+}
+
+function toNumber(value: string | undefined | null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      "accept": "application/json",
+      "user-agent": "Mozilla/5.0 (compatible; ArbiterBot/1.0)"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+async function fetchSpotTicker(exchange: string, symbol: string) {
+  if (exchange === "bybit") {
+    const spot = await fetchJson<BybitResponse>(
+      `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`
+    );
+    if (spot.retCode !== 0) {
+      throw new Error(`Bybit error: ${spot.retMsg}`);
+    }
+    const ticker = spot.result.list[0];
+    const bid = toNumber(ticker?.bid1Price ?? null);
+    const ask = toNumber(ticker?.ask1Price ?? null);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Bybit invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "okx") {
+    const instId = okxSpotInstId(symbol);
+    const spot = await fetchJson<OkxResponse>(
+      `https://www.okx.com/api/v5/market/ticker?instId=${instId}`
+    );
+    if (spot.code !== "0") {
+      throw new Error(`OKX error: ${spot.msg}`);
+    }
+    const ticker = spot.data[0];
+    const bid = toNumber(ticker?.bidPx ?? null);
+    const ask = toNumber(ticker?.askPx ?? null);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("OKX invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "kraken") {
+    const pair = KRAKEN_PAIR_MAP[symbol];
+    if (!pair) {
+      throw new Error("Kraken pair not supported");
+    }
+    const data = await fetchJson<KrakenResponse>(
+      `https://api.kraken.com/0/public/Ticker?pair=${pair}`
+    );
+    if (data.error && data.error.length > 0) {
+      throw new Error(data.error.join(", "));
+    }
+    const ticker = data.result?.[pair];
+    const ask = toNumber(ticker?.a?.[0]);
+    const bid = toNumber(ticker?.b?.[0]);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Kraken invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  throw new Error("unsupported exchange");
+}
+
+function parseOkxSymbol(symbol: string) {
+  const [base, quote] = symbol.split("-");
+  return { base, quote };
+}
+
+function applyFee(amount: number, feeBps: number) {
+  return amount * (1 - feeBps / 10000);
+}
+
+function applySlippage(price: number, side: "buy" | "sell", slippageBps: number) {
+  if (side === "buy") {
+    return price * (1 + slippageBps / 10000);
+  }
+  return price * (1 - slippageBps / 10000);
+}
+
+async function fetchOkxTrianglePrices(steps: Array<{ symbol: string; side: "buy" | "sell" }>) {
+  const results: Array<{ symbol: string; side: "buy" | "sell"; bid: number; ask: number }> = [];
+  for (const step of steps) {
+    const spot = await fetchJson<OkxResponse>(
+      `https://www.okx.com/api/v5/market/ticker?instId=${step.symbol}`
+    );
+    if (spot.code !== "0") {
+      throw new Error(`OKX error: ${spot.msg}`);
+    }
+    const ticker = spot.data[0];
+    const bid = toNumber(ticker?.bidPx ?? null);
+    const ask = toNumber(ticker?.askPx ?? null);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("OKX invalid bid/ask");
+    }
+    results.push({ symbol: step.symbol, side: step.side, bid, ask });
+  }
+  return results;
 }
 
 export async function autoExecutePaper(): Promise<AutoExecuteResult> {
@@ -180,12 +353,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   for (const opp of scored) {
     attempted += 1;
 
-    if (opp.type !== "spot_perp_carry") {
-      skipped += 1;
-      reasons.push({ opportunity_id: opp.id, reason: "execution_not_supported" });
-      continue;
-    }
-
     const { data: existingPosition, error: existingError } = await adminSupabase
       .from("positions")
       .select("id")
@@ -209,7 +376,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       minNotional,
       maxNotional
     );
-
     const notional_usd = derived.notional;
 
     if (notional_usd > available) {
@@ -218,128 +384,425 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       continue;
     }
 
-    const { data: snapshot, error: snapshotError } = await adminSupabase
-      .from("market_snapshots")
-      .select("id, ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask")
-      .eq("exchange", opp.exchange)
-      .eq("symbol", opp.symbol)
-      .order("ts", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    if (opp.type === "spot_perp_carry") {
+      const { data: snapshot, error: snapshotError } = await adminSupabase
+        .from("market_snapshots")
+        .select("id, ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask")
+        .eq("exchange", opp.exchange)
+        .eq("symbol", opp.symbol)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (snapshotError) {
-      throw new Error(snapshotError.message);
-    }
+      if (snapshotError) {
+        throw new Error(snapshotError.message);
+      }
 
-    if (!snapshot || snapshot.spot_ask === null || snapshot.perp_bid === null) {
-      skipped += 1;
-      reasons.push({ opportunity_id: opp.id, reason: "missing_snapshot_prices" });
+      if (!snapshot || snapshot.spot_ask === null || snapshot.perp_bid === null) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "missing_snapshot_prices" });
+        continue;
+      }
+
+      const spotFill = paperFill({
+        side: "buy",
+        price: snapshot.spot_ask,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const perpFill = paperFill({
+        side: "sell",
+        price: snapshot.perp_bid,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const { data: position, error: positionError } = await adminSupabase
+        .from("positions")
+        .insert({
+          user_id: userId,
+          opportunity_id: opp.id,
+          symbol: opp.symbol,
+          mode: "paper",
+          status: "open",
+          entry_spot_price: spotFill.fill_price,
+          entry_perp_price: perpFill.fill_price,
+          spot_qty: spotFill.qty,
+          perp_qty: -perpFill.qty,
+          meta: {
+            opportunity_id: opp.id,
+            snapshot_id: snapshot.id,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            notional_usd,
+            notional_reason: derived.reason,
+            auto_execute: true
+          }
+        })
+        .select("id")
+        .single();
+
+      if (positionError || !position) {
+        throw new Error(positionError?.message ?? "Failed to create position.");
+      }
+
+      const executionsPayload = [
+        {
+          position_id: position.id,
+          leg: "spot_buy",
+          requested_qty: spotFill.qty,
+          filled_qty: spotFill.qty,
+          avg_price: spotFill.fill_price,
+          fee: spotFill.fee_usd,
+          raw: {
+            side: "buy",
+            price: snapshot.spot_ask,
+            fill_price: spotFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        },
+        {
+          position_id: position.id,
+          leg: "perp_sell",
+          requested_qty: perpFill.qty,
+          filled_qty: perpFill.qty,
+          avg_price: perpFill.fill_price,
+          fee: perpFill.fee_usd,
+          raw: {
+            side: "sell",
+            price: snapshot.perp_bid,
+            fill_price: perpFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        }
+      ];
+
+      const { error: executionError } = await adminSupabase
+        .from("executions")
+        .insert(executionsPayload);
+
+      if (executionError) {
+        throw new Error(executionError.message);
+      }
+
+      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
+      const { error: reserveError } = await adminSupabase
+        .from("paper_accounts")
+        .update({
+          reserved_usd: reservedCurrent,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", account.id);
+
+      if (reserveError) {
+        throw new Error(reserveError.message);
+      }
+
+      available = Number((available - notional_usd).toFixed(2));
+      created += 1;
       continue;
     }
 
-    const spotFill = paperFill({
-      side: "buy",
-      price: snapshot.spot_ask,
-      notional_usd,
-      slippage_bps: SLIPPAGE_BPS,
-      fee_bps: FEE_BPS
-    });
+    if (opp.type === "xarb_spot") {
+      const mapping = CANONICAL_MAP[opp.symbol];
+      if (!mapping) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "symbol_not_supported" });
+        continue;
+      }
 
-    const perpFill = paperFill({
-      side: "sell",
-      price: snapshot.perp_bid,
-      notional_usd,
-      slippage_bps: SLIPPAGE_BPS,
-      fee_bps: FEE_BPS
-    });
+      const details = opp.details ?? {};
+      const buyExchange = String((details as Record<string, unknown>).buy_exchange ?? "");
+      const sellExchange = String((details as Record<string, unknown>).sell_exchange ?? "");
 
-    const { data: position, error: positionError } = await adminSupabase
-      .from("positions")
-      .insert({
-        user_id: userId,
-        opportunity_id: opp.id,
-        symbol: opp.symbol,
-        mode: "paper",
-        status: "open",
-        entry_spot_price: spotFill.fill_price,
-        entry_perp_price: perpFill.fill_price,
-        spot_qty: spotFill.qty,
-        perp_qty: -perpFill.qty,
-        meta: {
+      const buySymbol =
+        buyExchange === "kraken" ? mapping.kraken : buyExchange === "okx" ? mapping.okx : mapping.bybit;
+      const sellSymbol =
+        sellExchange === "kraken" ? mapping.kraken : sellExchange === "okx" ? mapping.okx : mapping.bybit;
+
+      if (!buyExchange || !sellExchange || !buySymbol || !sellSymbol) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "missing_exchange_mapping" });
+        continue;
+      }
+
+      let buyQuote: { bid: number; ask: number };
+      let sellQuote: { bid: number; ask: number };
+
+      try {
+        [buyQuote, sellQuote] = await Promise.all([
+          fetchSpotTicker(buyExchange, buySymbol),
+          fetchSpotTicker(sellExchange, sellSymbol)
+        ]);
+      } catch (err) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_price_error" });
+        continue;
+      }
+
+      const buyFill = paperFill({
+        side: "buy",
+        price: buyQuote.ask,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const sellFill = paperFill({
+        side: "sell",
+        price: sellQuote.bid,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const { data: position, error: positionError } = await adminSupabase
+        .from("positions")
+        .insert({
+          user_id: userId,
           opportunity_id: opp.id,
-          snapshot_id: snapshot.id,
-          fee_bps: FEE_BPS,
-          slippage_bps: SLIPPAGE_BPS,
-          notional_usd,
-          notional_reason: derived.reason,
-          auto_execute: true
-        }
-      })
-      .select("id")
-      .single();
+          symbol: opp.symbol,
+          mode: "paper",
+          status: "open",
+          entry_spot_price: buyFill.fill_price,
+          entry_perp_price: sellFill.fill_price,
+          spot_qty: buyFill.qty,
+          perp_qty: -sellFill.qty,
+          meta: {
+            opportunity_id: opp.id,
+            type: "xarb_spot",
+            buy_exchange: buyExchange,
+            sell_exchange: sellExchange,
+            buy_symbol: buySymbol,
+            sell_symbol: sellSymbol,
+            buy_entry_price: buyFill.fill_price,
+            sell_entry_price: sellFill.fill_price,
+            buy_qty: buyFill.qty,
+            sell_qty: sellFill.qty,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            notional_usd,
+            notional_reason: derived.reason,
+            auto_execute: true
+          }
+        })
+        .select("id")
+        .single();
 
-    if (positionError || !position) {
-      throw new Error(positionError?.message ?? "Failed to create position.");
+      if (positionError || !position) {
+        throw new Error(positionError?.message ?? "Failed to create position.");
+      }
+
+      const executionsPayload = [
+        {
+          position_id: position.id,
+          leg: "spot_buy",
+          requested_qty: buyFill.qty,
+          filled_qty: buyFill.qty,
+          avg_price: buyFill.fill_price,
+          fee: buyFill.fee_usd,
+          raw: {
+            side: "buy",
+            price: buyQuote.ask,
+            fill_price: buyFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        },
+        {
+          position_id: position.id,
+          leg: "spot_sell",
+          requested_qty: sellFill.qty,
+          filled_qty: sellFill.qty,
+          avg_price: sellFill.fill_price,
+          fee: sellFill.fee_usd,
+          raw: {
+            side: "sell",
+            price: sellQuote.bid,
+            fill_price: sellFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        }
+      ];
+
+      const { error: executionError } = await adminSupabase
+        .from("executions")
+        .insert(executionsPayload);
+
+      if (executionError) {
+        throw new Error(executionError.message);
+      }
+
+      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
+      const { error: reserveError } = await adminSupabase
+        .from("paper_accounts")
+        .update({
+          reserved_usd: reservedCurrent,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", account.id);
+
+      if (reserveError) {
+        throw new Error(reserveError.message);
+      }
+
+      available = Number((available - notional_usd).toFixed(2));
+      created += 1;
+      continue;
     }
 
-    const executionsPayload = [
-      {
-        position_id: position.id,
-        leg: "spot_buy",
-        requested_qty: spotFill.qty,
-        filled_qty: spotFill.qty,
-        avg_price: spotFill.fill_price,
-        fee: spotFill.fee_usd,
-        raw: {
-          side: "buy",
-          price: snapshot.spot_ask,
-          fill_price: spotFill.fill_price,
-          slippage_bps: SLIPPAGE_BPS,
-          fee_bps: FEE_BPS,
-          notional_usd
+    if (opp.type === "tri_arb") {
+      const details = opp.details ?? {};
+      const stepsRaw = (details as Record<string, unknown>).steps as Array<Record<string, unknown>> | undefined;
+      const steps = (stepsRaw ?? [])
+        .map((step) => ({
+          symbol: String(step.symbol ?? ""),
+          side: step.side === "sell" ? "sell" : "buy"
+        }))
+        .filter((step) => step.symbol && (step.side === "buy" || step.side === "sell"));
+
+      if (steps.length !== 3) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "invalid_steps" });
+        continue;
+      }
+
+      let prices: Array<{ symbol: string; side: "buy" | "sell"; bid: number; ask: number }>;
+      try {
+        prices = await fetchOkxTrianglePrices(steps);
+      } catch (err) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_price_error" });
+        continue;
+      }
+
+      let amount = notional_usd;
+      const executionLegs: Array<Record<string, unknown>> = [];
+
+      for (const step of prices) {
+        const { base, quote } = parseOkxSymbol(step.symbol);
+        if (!base || !quote) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "invalid_symbol" });
+          amount = 0;
+          break;
         }
-      },
-      {
-        position_id: position.id,
-        leg: "perp_sell",
-        requested_qty: perpFill.qty,
-        filled_qty: perpFill.qty,
-        avg_price: perpFill.fill_price,
-        fee: perpFill.fee_usd,
-        raw: {
-          side: "sell",
-          price: snapshot.perp_bid,
-          fill_price: perpFill.fill_price,
-          slippage_bps: SLIPPAGE_BPS,
-          fee_bps: FEE_BPS,
-          notional_usd
+
+        if (step.side === "buy") {
+          const price = applySlippage(step.ask, "buy", SLIPPAGE_BPS);
+          const qty = amount / price;
+          const filled = applyFee(qty, FEE_BPS);
+          executionLegs.push({
+            symbol: step.symbol,
+            side: "buy",
+            price: step.ask,
+            fill_price: price,
+            qty: filled,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            base,
+            quote
+          });
+          amount = filled;
+        } else {
+          const price = applySlippage(step.bid, "sell", SLIPPAGE_BPS);
+          const quoteAmount = amount * price;
+          const filled = applyFee(quoteAmount, FEE_BPS);
+          executionLegs.push({
+            symbol: step.symbol,
+            side: "sell",
+            price: step.bid,
+            fill_price: price,
+            qty: amount,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            base,
+            quote
+          });
+          amount = filled;
         }
       }
-    ];
 
-    const { error: executionError } = await adminSupabase
-      .from("executions")
-      .insert(executionsPayload);
+      if (amount <= 0 || !Number.isFinite(amount)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "amount_chain_failed" });
+        continue;
+      }
 
-    if (executionError) {
-      throw new Error(executionError.message);
+      if (amount <= notional_usd) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "edge_evaporated" });
+        continue;
+      }
+
+      const realized = Number((amount - notional_usd).toFixed(4));
+
+      const { data: position, error: positionError } = await adminSupabase
+        .from("positions")
+        .insert({
+          user_id: userId,
+          opportunity_id: opp.id,
+          symbol: opp.symbol,
+          mode: "paper",
+          status: "closed",
+          entry_spot_price: null,
+          entry_perp_price: null,
+          spot_qty: 0,
+          perp_qty: 0,
+          exit_ts: new Date().toISOString(),
+          realized_pnl_usd: realized,
+          meta: {
+            opportunity_id: opp.id,
+            type: "tri_arb",
+            notional_usd,
+            notional_reason: derived.reason,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            legs: executionLegs,
+            auto_execute: true
+          }
+        })
+        .select("id")
+        .single();
+
+      if (positionError || !position) {
+        throw new Error(positionError?.message ?? "Failed to create position.");
+      }
+
+      const execPayload = executionLegs.map((leg, idx) => ({
+        position_id: position.id,
+        leg: `tri_leg_${idx + 1}`,
+        requested_qty: Number(leg.qty ?? 0),
+        filled_qty: Number(leg.qty ?? 0),
+        avg_price: Number(leg.fill_price ?? 0),
+        fee: 0,
+        raw: leg
+      }));
+
+      const { error: executionError } = await adminSupabase
+        .from("executions")
+        .insert(execPayload);
+
+      if (executionError) {
+        throw new Error(executionError.message);
+      }
+
+      created += 1;
+      continue;
     }
 
-    reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
-    const { error: reserveError } = await adminSupabase
-      .from("paper_accounts")
-      .update({
-        reserved_usd: reservedCurrent,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", account.id);
-
-    if (reserveError) {
-      throw new Error(reserveError.message);
-    }
-
-    available = Number((available - notional_usd).toFixed(2));
-    created += 1;
+    skipped += 1;
+    reasons.push({ opportunity_id: opp.id, reason: "execution_not_supported" });
   }
 
   return { attempted, created, skipped, reasons };
