@@ -16,7 +16,7 @@ type TrainingRow = {
 const MIN_SAMPLES = 20;
 const RIDGE_LAMBDA = 1e-3;
 
-export function variantForOpportunity(opportunityId: number) {
+export function variantForOpportunity(opportunityId: number): "A" | "B" {
   const hash = (opportunityId * 2654435761) >>> 0;
   return hash % 2 === 0 ? "A" : "B";
 }
