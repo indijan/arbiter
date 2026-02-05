@@ -61,7 +61,9 @@ async function handleTick(request: Request) {
           auto_execute: {
             attempted: autoResult.attempted,
             created: autoResult.created,
-            skipped: autoResult.skipped
+            skipped: autoResult.skipped,
+            llm_used: autoResult.llm_used,
+            llm_remaining: autoResult.llm_remaining
           },
           auto_close: {
             attempted: closeResult.attempted,
@@ -96,7 +98,9 @@ async function handleTick(request: Request) {
           attempted: autoResult.attempted,
           created: autoResult.created,
           skipped: autoResult.skipped,
-          reasons: autoResult.reasons
+          reasons: autoResult.reasons,
+          llm_used: autoResult.llm_used,
+          llm_remaining: autoResult.llm_remaining
         },
         auto_close: {
           attempted: closeResult.attempted,

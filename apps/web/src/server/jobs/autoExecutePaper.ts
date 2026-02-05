@@ -2,6 +2,13 @@ import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { paperFill } from "@/lib/execution/paperFill";
+import {
+  buildFeatureBundle,
+  predictScore,
+  trainWeights,
+  variantForOpportunity
+} from "@/server/ai/opportunityScoring";
+import { scoreWithOpenAI } from "@/server/ai/openaiRanker";
 
 const DEFAULT_NOTIONAL = 100;
 const DEFAULT_MIN_NOTIONAL = 100;
@@ -15,6 +22,9 @@ const MAX_OPEN_PER_SYMBOL = 2;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
 const MAX_EXECUTE_PER_TICK = 1;
+const MAX_LLM_CALLS_PER_TICK = 3;
+const MAX_LLM_RERANK = 3;
+const MAX_LLM_CALLS_PER_DAY = 500;
 const LOOKBACK_HOURS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
@@ -90,11 +100,21 @@ type OpportunityRow = {
   details: Record<string, unknown> | null;
 };
 
+type ScoredOpportunity = OpportunityRow & {
+  score: number;
+  features: ReturnType<typeof buildFeatureBundle>;
+  variant: "A" | "B";
+  aiScore: number | null;
+  effectiveScore: number;
+};
+
 type AutoExecuteResult = {
   attempted: number;
   created: number;
   skipped: number;
   reasons: Array<{ opportunity_id: number; reason: string }>;
+  llm_used: number;
+  llm_remaining: number;
 };
 
 function clampNotional(value: number, min: number, max: number) {
@@ -374,7 +394,54 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     openBySymbol.set(symbol, (openBySymbol.get(symbol) ?? 0) + 1);
   }
 
-  let scored = (opportunities ?? [])
+  const trainingSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: decisionRows } = await adminSupabase
+    .from("opportunity_decisions")
+    .select("features, position_id")
+    .gte("ts", trainingSince)
+    .not("position_id", "is", null)
+    .limit(2000);
+
+  const positionIds = (decisionRows ?? [])
+    .map((row) => row.position_id as string)
+    .filter(Boolean);
+
+  const { data: positionsForTraining } = await adminSupabase
+    .from("positions")
+    .select("id, realized_pnl_usd")
+    .in("id", positionIds.length > 0 ? positionIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  const pnlMap = new Map(
+    (positionsForTraining ?? []).map((row) => [row.id as string, Number(row.realized_pnl_usd ?? 0)])
+  );
+
+  const trainingRows = (decisionRows ?? [])
+    .map((row) => {
+      const features = (row.features ?? {}) as { vector?: { names: string[]; values: number[] } };
+      const vector = features.vector;
+      const label = pnlMap.get(row.position_id as string);
+      if (!vector || !Array.isArray(vector.values) || label === undefined) {
+        return null;
+      }
+      return { vector, label };
+    })
+    .filter(Boolean) as Array<{ vector: { names: string[]; values: number[] }; label: number }>;
+
+  const weights = trainWeights(trainingRows);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: usageRow } = await adminSupabase
+    .from("ai_usage_daily")
+    .select("day, requests")
+    .eq("day", today)
+    .maybeSingle();
+
+  let remainingLlmCalls = Math.max(
+    0,
+    MAX_LLM_CALLS_PER_DAY - Number(usageRow?.requests ?? 0)
+  );
+
+  let scored: ScoredOpportunity[] = (opportunities ?? [])
     .filter((opp) => {
       const symbol = (opp as { symbol?: string }).symbol ?? "";
       if (!symbol) {
@@ -384,20 +451,88 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     })
     .map((opp) => ({
       ...(opp as OpportunityRow),
-      score: scoreOpportunity(opp as OpportunityRow)
+      score: scoreOpportunity(opp as OpportunityRow),
+      features: buildFeatureBundle({
+        type: (opp as OpportunityRow).type,
+        net_edge_bps: (opp as OpportunityRow).net_edge_bps,
+        confidence: (opp as OpportunityRow).confidence,
+        details: (opp as OpportunityRow).details
+      })
     }))
-    .sort((a, b) => a.score - b.score)
+    .map((opp) => {
+      const variant = variantForOpportunity(opp.id);
+      const aiScore = predictScore(weights, opp.features.vector);
+      const effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+      return { ...opp, variant, aiScore, effectiveScore };
+    })
+    .sort((a, b) => a.effectiveScore - b.effectiveScore)
     .slice(0, MAX_CANDIDATES);
 
   if (scored.length === 0) {
     scored = (opportunities ?? [])
       .map((opp) => ({
         ...(opp as OpportunityRow),
-        score: scoreOpportunity(opp as OpportunityRow)
+        score: scoreOpportunity(opp as OpportunityRow),
+        features: buildFeatureBundle({
+          type: (opp as OpportunityRow).type,
+          net_edge_bps: (opp as OpportunityRow).net_edge_bps,
+          confidence: (opp as OpportunityRow).confidence,
+          details: (opp as OpportunityRow).details
+        })
       }))
-      .sort((a, b) => a.score - b.score)
+      .map((opp) => {
+        const variant = variantForOpportunity(opp.id);
+        const aiScore = predictScore(weights, opp.features.vector);
+        const effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+        return { ...opp, variant, aiScore, effectiveScore };
+      })
+      .sort((a, b) => a.effectiveScore - b.effectiveScore)
       .slice(0, MAX_CANDIDATES);
   }
+
+  let llmCallsUsed = 0;
+  const scoredWithLlm: ScoredOpportunity[] = [];
+  const rerankCandidates = scored.slice(0, MAX_LLM_RERANK);
+  for (const opp of scored) {
+    if (
+      opp.variant === "B" &&
+      rerankCandidates.includes(opp) &&
+      remainingLlmCalls > 0 &&
+      llmCallsUsed < MAX_LLM_CALLS_PER_TICK
+    ) {
+      const llm = await scoreWithOpenAI({
+        type: opp.type,
+        net_edge_bps: opp.net_edge_bps,
+        confidence: opp.confidence,
+        details: opp.details
+      });
+
+      llmCallsUsed += 1;
+      remainingLlmCalls -= 1;
+
+      if (llm.score !== null) {
+        const adjusted = { ...opp, aiScore: llm.score, effectiveScore: llm.score };
+        scoredWithLlm.push(adjusted);
+        continue;
+      }
+    }
+    scoredWithLlm.push(opp);
+  }
+
+  if (llmCallsUsed > 0) {
+    await adminSupabase
+      .from("ai_usage_daily")
+      .upsert(
+        {
+          day: today,
+          requests: Number(usageRow?.requests ?? 0) + llmCallsUsed,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "day" }
+      );
+  }
+
+  scored = scoredWithLlm.sort((a, b) => a.effectiveScore - b.effectiveScore);
 
   let attempted = 0;
   let created = 0;
@@ -409,6 +544,25 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   for (const opp of scored.slice(0, MAX_EXECUTE_PER_TICK)) {
     attempted += 1;
+
+    const { data: decisionRow } = await adminSupabase
+      .from("opportunity_decisions")
+      .insert({
+        user_id: userId,
+        opportunity_id: opp.id,
+        variant: opp.variant,
+        score: Number.isFinite(opp.effectiveScore) ? opp.effectiveScore : null,
+        chosen: false,
+        features: {
+          vector: opp.features.vector,
+          meta: opp.features.meta,
+          score_rule: opp.score,
+          score_ai: opp.aiScore,
+          score_effective: opp.effectiveScore
+        }
+      })
+      .select("id")
+      .single();
 
     const { data: existingPosition, error: existingError } = await adminSupabase
       .from("positions")
@@ -425,6 +579,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     if (existingPosition) {
       skipped += 1;
       reasons.push({ opportunity_id: opp.id, reason: "already_open" });
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: false })
+          .eq("id", decisionRow.id);
+      }
       continue;
     }
 
@@ -564,6 +724,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       available = Number((available - notional_usd).toFixed(2));
       created += 1;
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: true, position_id: position.id })
+          .eq("id", decisionRow.id);
+      }
       continue;
     }
 
@@ -715,6 +881,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       available = Number((available - notional_usd).toFixed(2));
       created += 1;
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: true, position_id: position.id })
+          .eq("id", decisionRow.id);
+      }
       continue;
     }
 
@@ -861,6 +1033,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       created += 1;
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: true, position_id: position.id })
+          .eq("id", decisionRow.id);
+      }
       continue;
     }
 
@@ -868,5 +1046,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     reasons.push({ opportunity_id: opp.id, reason: "execution_not_supported" });
   }
 
-  return { attempted, created, skipped, reasons };
+  return {
+    attempted,
+    created,
+    skipped,
+    reasons,
+    llm_used: llmCallsUsed,
+    llm_remaining: remainingLlmCalls
+  };
 }
