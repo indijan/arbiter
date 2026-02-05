@@ -11,10 +11,10 @@ const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
 const MAX_OPEN_POSITIONS = 10;
-const MAX_OPEN_PER_SYMBOL = 5;
+const MAX_OPEN_PER_SYMBOL = 2;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
-const MAX_EXECUTE_PER_TICK = 3;
+const MAX_EXECUTE_PER_TICK = 1;
 const LOOKBACK_HOURS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {

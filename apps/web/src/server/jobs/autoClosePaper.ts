@@ -7,8 +7,8 @@ import { CARRY_CONFIG } from "@/lib/strategy/spotPerpCarry";
 const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
-const TP_PCT = 0.004;
-const SL_PCT = 0.003;
+const TP_PCT = 0.003;
+const SL_PCT = 0.002;
 
 const HOLDING_HOURS = 24;
 
