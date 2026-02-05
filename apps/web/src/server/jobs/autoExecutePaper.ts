@@ -384,7 +384,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   if ((recentPositions ?? []).length >= MAX_NEW_PER_HOUR) {
-    return { attempted: 0, created: 0, skipped: 0, reasons: [] };
+    return {
+      attempted: 0,
+      created: 0,
+      skipped: 0,
+      reasons: [],
+      llm_used: 0,
+      llm_remaining: 0
+    };
   }
 
   const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
