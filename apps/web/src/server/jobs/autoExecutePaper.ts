@@ -11,6 +11,7 @@ const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
 const MAX_OPEN_POSITIONS = 10;
+const MAX_OPEN_PER_SYMBOL = 3;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
 const MAX_EXECUTE_PER_TICK = 3;
@@ -333,14 +334,23 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     throw new Error(oppError.message);
   }
 
-  const openOppIds = new Set(
-    (openPositions ?? [])
-      .map((p) => (p as { opportunity_id?: number | null }).opportunity_id)
-      .filter((id): id is number => typeof id === "number")
-  );
+  const openBySymbol = new Map<string, number>();
+  for (const pos of openPositions ?? []) {
+    const symbol = (pos as { symbol?: string | null }).symbol ?? "";
+    if (!symbol) {
+      continue;
+    }
+    openBySymbol.set(symbol, (openBySymbol.get(symbol) ?? 0) + 1);
+  }
 
   const scored = (opportunities ?? [])
-    .filter((opp) => !openOppIds.has((opp as { id: number }).id))
+    .filter((opp) => {
+      const symbol = (opp as { symbol?: string }).symbol ?? "";
+      if (!symbol) {
+        return false;
+      }
+      return (openBySymbol.get(symbol) ?? 0) < MAX_OPEN_PER_SYMBOL;
+    })
     .map((opp) => ({
       ...(opp as OpportunityRow),
       score: scoreOpportunity(opp as OpportunityRow)
