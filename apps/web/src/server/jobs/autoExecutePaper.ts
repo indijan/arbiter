@@ -316,7 +316,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }
 
     if (!profile?.id) {
-      return { attempted: 0, created: 0, skipped: 0, reasons: [] };
+      return {
+        attempted: 0,
+        created: 0,
+        skipped: 0,
+        reasons: [],
+        llm_used: 0,
+        llm_remaining: remainingLlmCalls
+      };
     }
 
     const { data: createdAccount, error: createError } = await adminSupabase
