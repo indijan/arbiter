@@ -228,7 +228,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
     throw new Error("Missing service role key.");
   }
 
-  const { data: account, error: accountError } = await adminSupabase
+  let { data: account, error: accountError } = await adminSupabase
     .from("paper_accounts")
     .select("id, user_id, balance_usd, reserved_usd")
     .order("created_at", { ascending: false })
@@ -240,7 +240,36 @@ export async function autoClosePaper(): Promise<CloseResult> {
   }
 
   if (!account) {
-    return { attempted: 0, closed: 0, skipped: 0, reasons: [] };
+    const { data: profile, error: profileError } = await adminSupabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new Error(profileError.message);
+    }
+
+    if (!profile?.id) {
+      return { attempted: 0, closed: 0, skipped: 0, reasons: [] };
+    }
+
+    const { data: createdAccount, error: createError } = await adminSupabase
+      .from("paper_accounts")
+      .insert({
+        user_id: profile.id,
+        balance_usd: 10000,
+        reserved_usd: 0
+      })
+      .select("id, user_id, balance_usd, reserved_usd")
+      .single();
+
+    if (createError || !createdAccount) {
+      throw new Error(createError?.message ?? "Failed to create paper account.");
+    }
+
+    account = createdAccount;
   }
 
   const userId = account.user_id;

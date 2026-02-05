@@ -272,7 +272,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     throw new Error("Missing service role key.");
   }
 
-  const { data: account, error: accountError } = await adminSupabase
+  let { data: account, error: accountError } = await adminSupabase
     .from("paper_accounts")
     .select("id, user_id, balance_usd, reserved_usd, min_notional_usd, max_notional_usd")
     .order("created_at", { ascending: false })
@@ -284,7 +284,38 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   if (!account) {
-    return { attempted: 0, created: 0, skipped: 0, reasons: [] };
+    const { data: profile, error: profileError } = await adminSupabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new Error(profileError.message);
+    }
+
+    if (!profile?.id) {
+      return { attempted: 0, created: 0, skipped: 0, reasons: [] };
+    }
+
+    const { data: createdAccount, error: createError } = await adminSupabase
+      .from("paper_accounts")
+      .insert({
+        user_id: profile.id,
+        balance_usd: DEFAULT_PAPER_BALANCE,
+        reserved_usd: 0,
+        min_notional_usd: DEFAULT_MIN_NOTIONAL,
+        max_notional_usd: DEFAULT_MAX_NOTIONAL
+      })
+      .select("id, user_id, balance_usd, reserved_usd, min_notional_usd, max_notional_usd")
+      .single();
+
+    if (createError || !createdAccount) {
+      throw new Error(createError?.message ?? "Failed to create paper account.");
+    }
+
+    account = createdAccount;
   }
 
   const userId = account.user_id;
