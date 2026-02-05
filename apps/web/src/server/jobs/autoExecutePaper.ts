@@ -322,7 +322,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         skipped: 0,
         reasons: [],
         llm_used: 0,
-        llm_remaining: remainingLlmCalls
+        llm_remaining: 0
       };
     }
 
