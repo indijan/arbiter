@@ -11,7 +11,7 @@ const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
 const MAX_OPEN_POSITIONS = 10;
-const MAX_OPEN_PER_SYMBOL = 3;
+const MAX_OPEN_PER_SYMBOL = 5;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
 const MAX_EXECUTE_PER_TICK = 3;
@@ -374,7 +374,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     openBySymbol.set(symbol, (openBySymbol.get(symbol) ?? 0) + 1);
   }
 
-  const scored = (opportunities ?? [])
+  let scored = (opportunities ?? [])
     .filter((opp) => {
       const symbol = (opp as { symbol?: string }).symbol ?? "";
       if (!symbol) {
@@ -388,6 +388,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }))
     .sort((a, b) => a.score - b.score)
     .slice(0, MAX_CANDIDATES);
+
+  if (scored.length === 0) {
+    scored = (opportunities ?? [])
+      .map((opp) => ({
+        ...(opp as OpportunityRow),
+        score: scoreOpportunity(opp as OpportunityRow)
+      }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, MAX_CANDIDATES);
+  }
 
   let attempted = 0;
   let created = 0;
