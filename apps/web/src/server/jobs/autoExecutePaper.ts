@@ -25,6 +25,7 @@ const MAX_EXECUTE_PER_TICK = 1;
 const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
+const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const LOOKBACK_HOURS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
@@ -462,6 +463,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     MAX_LLM_CALLS_PER_DAY - Number(usageRow?.requests ?? 0)
   );
 
+  const contrarianActive =
+    CONTRARIAN_UNTIL.length > 0 &&
+    Number.isFinite(Date.parse(CONTRARIAN_UNTIL)) &&
+    Date.now() < Date.parse(CONTRARIAN_UNTIL);
+
   let scored: ScoredOpportunity[] = (opportunities ?? [])
     .filter((opp) => {
       const symbol = (opp as { symbol?: string }).symbol ?? "";
@@ -483,7 +489,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .map((opp) => {
       const variant = variantForOpportunity(opp.id);
       const aiScore = predictScore(weights, opp.features.vector);
-      const effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+      let effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+      if (variant === "B" && contrarianActive) {
+        effectiveScore = -effectiveScore;
+      }
       return { ...opp, variant, aiScore, effectiveScore };
     })
     .sort((a, b) => a.effectiveScore - b.effectiveScore)
@@ -504,7 +513,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       .map((opp) => {
         const variant = variantForOpportunity(opp.id);
         const aiScore = predictScore(weights, opp.features.vector);
-        const effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+        let effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+        if (variant === "B" && contrarianActive) {
+          effectiveScore = -effectiveScore;
+        }
         return { ...opp, variant, aiScore, effectiveScore };
       })
       .sort((a, b) => a.effectiveScore - b.effectiveScore)
