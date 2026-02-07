@@ -27,6 +27,9 @@ const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const LOOKBACK_HOURS = 24;
+const MIN_NET_EDGE_BPS = 6;
+const MIN_CONFIDENCE = 0.55;
+const MAX_BREAK_EVEN_HOURS = 36;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -168,7 +171,8 @@ function scoreOpportunity(opp: OpportunityRow) {
   const edgeBonus = netEdge / 10;
   const confidenceBonus = confidence;
 
-  return risk + breakEvenPenalty - edgeBonus - confidenceBonus;
+  // Higher score is better.
+  return edgeBonus + confidenceBonus - risk - breakEvenPenalty;
 }
 
 function okxSpotInstId(symbol: string) {
@@ -354,7 +358,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const { data: openPositions, error: openError } = await adminSupabase
     .from("positions")
-    .select("id")
+    .select("id, symbol")
     .eq("user_id", userId)
     .eq("status", "open");
 
@@ -430,7 +434,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const { data: positionsForTraining } = await adminSupabase
     .from("positions")
-    .select("id, realized_pnl_usd")
+    .select("id, realized_pnl_usd, status")
+    .eq("status", "closed")
+    .not("realized_pnl_usd", "is", null)
     .in("id", positionIds.length > 0 ? positionIds : ["00000000-0000-0000-0000-000000000000"]);
 
   const pnlMap = new Map(
@@ -474,7 +480,26 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (!symbol) {
         return false;
       }
-      return (openBySymbol.get(symbol) ?? 0) < MAX_OPEN_PER_SYMBOL;
+      if ((openBySymbol.get(symbol) ?? 0) >= MAX_OPEN_PER_SYMBOL) {
+        return false;
+      }
+
+      const typed = opp as OpportunityRow;
+      const netEdge = Number(typed.net_edge_bps ?? 0);
+      const confidence = Number(typed.confidence ?? 0);
+      const details = typed.details ?? {};
+      const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
+
+      if (netEdge < MIN_NET_EDGE_BPS) {
+        return false;
+      }
+      if (confidence < MIN_CONFIDENCE) {
+        return false;
+      }
+      if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
+        return false;
+      }
+      return true;
     })
     .map((opp) => ({
       ...(opp as OpportunityRow),
@@ -495,7 +520,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
       return { ...opp, variant, aiScore, effectiveScore };
     })
-    .sort((a, b) => a.effectiveScore - b.effectiveScore)
+    .sort((a, b) => b.effectiveScore - a.effectiveScore)
     .slice(0, MAX_CANDIDATES);
 
   if (scored.length === 0) {
@@ -519,7 +544,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         }
         return { ...opp, variant, aiScore, effectiveScore };
       })
-      .sort((a, b) => a.effectiveScore - b.effectiveScore)
+      .sort((a, b) => b.effectiveScore - a.effectiveScore)
       .slice(0, MAX_CANDIDATES);
   }
 
@@ -565,7 +590,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       );
   }
 
-  scored = scoredWithLlm.sort((a, b) => a.effectiveScore - b.effectiveScore);
+  scored = scoredWithLlm.sort((a, b) => b.effectiveScore - a.effectiveScore);
 
   let attempted = 0;
   let created = 0;
