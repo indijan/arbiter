@@ -302,7 +302,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
   const { data: positions, error: positionsError } = await adminSupabase
     .from("positions")
-    .select("id, opportunity_id, symbol, status, spot_qty, perp_qty, entry_spot_price, entry_perp_price, meta")
+    .select("id, opportunity_id, symbol, status, entry_ts, spot_qty, perp_qty, entry_spot_price, entry_perp_price, meta")
     .eq("user_id", userId)
     .eq("status", "open");
 
