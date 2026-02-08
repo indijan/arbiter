@@ -27,9 +27,9 @@ const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const LOOKBACK_HOURS = 24;
-const MIN_NET_EDGE_BPS = 6;
-const MIN_CONFIDENCE = 0.55;
-const MAX_BREAK_EVEN_HOURS = 36;
+const MIN_NET_EDGE_BPS = 12;
+const MIN_CONFIDENCE = 0.65;
+const MAX_BREAK_EVEN_HOURS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,

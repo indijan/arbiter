@@ -7,8 +7,13 @@ import { CARRY_CONFIG } from "@/lib/strategy/spotPerpCarry";
 const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
-const TP_PCT = 0.003;
-const SL_PCT = 0.002;
+const TP_PCT_CARRY = 0.008;
+const SL_PCT_CARRY = 0.006;
+const TP_PCT_XARB = 0.007;
+const SL_PCT_XARB = 0.005;
+
+const MIN_HOLD_SECONDS_CARRY = 60 * 60;
+const MIN_HOLD_SECONDS_XARB = 20 * 60;
 
 const HOLDING_HOURS = 24;
 
@@ -215,11 +220,31 @@ async function fetchCarryQuotes(exchange: string, symbol: string) {
 }
 
 function shouldCloseByPnl(pnlUsd: number, notionalUsd: number) {
+  return shouldCloseByPnlWithThresholds(pnlUsd, notionalUsd, TP_PCT_CARRY, SL_PCT_CARRY);
+}
+
+function shouldCloseByPnlWithThresholds(
+  pnlUsd: number,
+  notionalUsd: number,
+  tpPct: number,
+  slPct: number
+) {
   if (!Number.isFinite(notionalUsd) || notionalUsd <= 0) {
     return false;
   }
   const pct = pnlUsd / notionalUsd;
-  return pct >= TP_PCT || pct <= -SL_PCT;
+  return pct >= tpPct || pct <= -slPct;
+}
+
+function secondsSince(ts: string | null | undefined) {
+  if (!ts) {
+    return null;
+  }
+  const ms = Date.now() - Date.parse(ts);
+  if (!Number.isFinite(ms)) {
+    return null;
+  }
+  return ms / 1000;
 }
 
 export async function autoClosePaper(): Promise<CloseResult> {
@@ -336,8 +361,12 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const entry_spot_price = Number(position.entry_spot_price ?? 0);
       const entry_perp_price = Number(position.entry_perp_price ?? 0);
 
-      const spot_pnl = spot_qty * (spot_mid - entry_spot_price);
-      const perp_pnl = perp_qty * (perp_mid - entry_perp_price);
+      const carryAgeSec = secondsSince(position.entry_ts ?? null);
+
+      const spotCloseMark = quotes.spot_bid;
+      const perpCloseMark = quotes.perp_ask;
+      const spot_pnl = spot_qty * (spotCloseMark - entry_spot_price);
+      const perp_pnl = perp_qty * (perpCloseMark - entry_perp_price);
       const unrealized = spot_pnl + perp_pnl;
 
       const funding_daily_bps = Number(quotes.funding_rate ?? 0) * 3 * 10000;
@@ -349,10 +378,10 @@ export async function autoClosePaper(): Promise<CloseResult> {
         CARRY_CONFIG.latency_buffer_bps;
       const net_edge_bps = basis_bps + expected_holding_bps - costs_bps;
 
+      const agedEnough = carryAgeSec !== null && carryAgeSec >= MIN_HOLD_SECONDS_CARRY;
       const shouldClose =
-        shouldCloseByPnl(unrealized, notionalUsd) ||
-        funding_daily_bps <= 0 ||
-        net_edge_bps < 0;
+        shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_CARRY, SL_PCT_CARRY) ||
+        (agedEnough && (funding_daily_bps <= 0 || net_edge_bps < 0));
 
       if (!shouldClose) {
         skipped += 1;
@@ -363,7 +392,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const spotClose = paperFill({
         side: "sell",
         price: quotes.spot_bid,
-        notional_usd: notionalUsd,
+        notional_usd: Math.abs(spot_qty) * quotes.spot_bid,
         slippage_bps: SLIPPAGE_BPS,
         fee_bps: FEE_BPS
       });
@@ -371,12 +400,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const perpClose = paperFill({
         side: "buy",
         price: quotes.perp_ask,
-        notional_usd: notionalUsd,
+        notional_usd: Math.abs(perp_qty) * quotes.perp_ask,
         slippage_bps: SLIPPAGE_BPS,
         fee_bps: FEE_BPS
       });
 
-      const realized = Number((unrealized - spotClose.fee_usd - perpClose.fee_usd).toFixed(4));
+      const spotRealized = spot_qty * (spotClose.fill_price - entry_spot_price);
+      const perpRealized = perp_qty * (perpClose.fill_price - entry_perp_price);
+      const realized = Number((spotRealized + perpRealized - spotClose.fee_usd - perpClose.fee_usd).toFixed(4));
 
       const { error: closeError } = await adminSupabase
         .from("positions")
@@ -398,8 +429,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
         {
           position_id: position.id,
           leg: "spot_sell",
-          requested_qty: spotClose.qty,
-          filled_qty: spotClose.qty,
+          requested_qty: Math.abs(spot_qty),
+          filled_qty: Math.abs(spot_qty),
           avg_price: spotClose.fill_price,
           fee: spotClose.fee_usd,
           raw: {
@@ -414,8 +445,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
         {
           position_id: position.id,
           leg: "perp_buy",
-          requested_qty: perpClose.qty,
-          filled_qty: perpClose.qty,
+          requested_qty: Math.abs(perp_qty),
+          filled_qty: Math.abs(perp_qty),
           avg_price: perpClose.fill_price,
           fee: perpClose.fee_usd,
           raw: {
@@ -476,6 +507,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
         continue;
       }
 
+      const xarbAgeSec = secondsSince(position.entry_ts ?? null);
+
       const buyPnl = buyQty * (buyQuote.bid - buyEntry);
       const sellPnl = sellQty * (sellEntry - sellQuote.ask);
       const unrealized = buyPnl + sellPnl;
@@ -487,9 +520,10 @@ export async function autoClosePaper(): Promise<CloseResult> {
         COSTS_BPS_XARB.transfer_buffer_bps;
       const net_edge_bps = gross_edge_bps - costs_bps;
 
+      const agedEnough = xarbAgeSec !== null && xarbAgeSec >= MIN_HOLD_SECONDS_XARB;
       const shouldClose =
-        shouldCloseByPnl(unrealized, notionalUsd) ||
-        net_edge_bps < 0;
+        shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_XARB, SL_PCT_XARB) ||
+        (agedEnough && net_edge_bps < 0);
 
       if (!shouldClose) {
         skipped += 1;
@@ -500,7 +534,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const buyClose = paperFill({
         side: "sell",
         price: buyQuote.bid,
-        notional_usd: notionalUsd,
+        notional_usd: Math.abs(buyQty) * buyQuote.bid,
         slippage_bps: SLIPPAGE_BPS,
         fee_bps: FEE_BPS
       });
@@ -508,12 +542,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const sellClose = paperFill({
         side: "buy",
         price: sellQuote.ask,
-        notional_usd: notionalUsd,
+        notional_usd: Math.abs(sellQty) * sellQuote.ask,
         slippage_bps: SLIPPAGE_BPS,
         fee_bps: FEE_BPS
       });
 
-      const realized = Number((unrealized - buyClose.fee_usd - sellClose.fee_usd).toFixed(4));
+      const buyRealized = buyQty * (buyClose.fill_price - buyEntry);
+      const sellRealized = sellQty * (sellEntry - sellClose.fill_price);
+      const realized = Number((buyRealized + sellRealized - buyClose.fee_usd - sellClose.fee_usd).toFixed(4));
 
       const { error: closeError } = await adminSupabase
         .from("positions")
@@ -535,8 +571,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
         {
           position_id: position.id,
           leg: "spot_sell",
-          requested_qty: buyClose.qty,
-          filled_qty: buyClose.qty,
+          requested_qty: Math.abs(buyQty),
+          filled_qty: Math.abs(buyQty),
           avg_price: buyClose.fill_price,
           fee: buyClose.fee_usd,
           raw: {
@@ -551,8 +587,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
         {
           position_id: position.id,
           leg: "spot_buy",
-          requested_qty: sellClose.qty,
-          filled_qty: sellClose.qty,
+          requested_qty: Math.abs(sellQty),
+          filled_qty: Math.abs(sellQty),
           avg_price: sellClose.fill_price,
           fee: sellClose.fee_usd,
           raw: {
