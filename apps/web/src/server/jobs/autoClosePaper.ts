@@ -12,8 +12,8 @@ const SL_PCT_CARRY = 0.006;
 const TP_PCT_XARB = 0.007;
 const SL_PCT_XARB = 0.005;
 
-const MIN_HOLD_SECONDS_CARRY = 60 * 60;
-const MIN_HOLD_SECONDS_XARB = 20 * 60;
+const MIN_HOLD_SECONDS_CARRY = 4 * 60 * 60;
+const MIN_HOLD_SECONDS_XARB = 45 * 60;
 
 const HOLDING_HOURS = 24;
 
@@ -380,8 +380,12 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
       const agedEnough = carryAgeSec !== null && carryAgeSec >= MIN_HOLD_SECONDS_CARRY;
       const shouldClose =
-        shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_CARRY, SL_PCT_CARRY) ||
-        (agedEnough && (funding_daily_bps <= 0 || net_edge_bps < 0));
+        agedEnough &&
+        (
+          shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_CARRY, SL_PCT_CARRY) ||
+          funding_daily_bps <= 0 ||
+          net_edge_bps < 0
+        );
 
       if (!shouldClose) {
         skipped += 1;
@@ -522,8 +526,11 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
       const agedEnough = xarbAgeSec !== null && xarbAgeSec >= MIN_HOLD_SECONDS_XARB;
       const shouldClose =
-        shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_XARB, SL_PCT_XARB) ||
-        (agedEnough && net_edge_bps < 0);
+        agedEnough &&
+        (
+          shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_XARB, SL_PCT_XARB) ||
+          net_edge_bps < 0
+        );
 
       if (!shouldClose) {
         skipped += 1;

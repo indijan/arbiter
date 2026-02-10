@@ -27,9 +27,11 @@ const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const LOOKBACK_HOURS = 24;
-const MIN_NET_EDGE_BPS = 12;
-const MIN_CONFIDENCE = 0.65;
-const MAX_BREAK_EVEN_HOURS = 24;
+const MIN_NET_EDGE_BPS = 16;
+const MIN_CONFIDENCE = 0.72;
+const MAX_BREAK_EVEN_HOURS = 18;
+const MIN_CARRY_FUNDING_DAILY_BPS = 4;
+const MIN_XARB_NET_EDGE_BPS = 24;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -499,6 +501,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
         return false;
       }
+      if (typed.type === "spot_perp_carry") {
+        const fundingDailyBps = Number(
+          (details as Record<string, unknown>).funding_daily_bps ?? NaN
+        );
+        if (Number.isFinite(fundingDailyBps) && fundingDailyBps < MIN_CARRY_FUNDING_DAILY_BPS) {
+          return false;
+        }
+      }
+      if (typed.type === "xarb_spot" && netEdge < MIN_XARB_NET_EDGE_BPS) {
+        return false;
+      }
       return true;
     })
     .map((opp) => ({
@@ -522,31 +535,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     })
     .sort((a, b) => b.effectiveScore - a.effectiveScore)
     .slice(0, MAX_CANDIDATES);
-
-  if (scored.length === 0) {
-    scored = (opportunities ?? [])
-      .map((opp) => ({
-        ...(opp as OpportunityRow),
-        score: scoreOpportunity(opp as OpportunityRow),
-        features: buildFeatureBundle({
-          type: (opp as OpportunityRow).type,
-          net_edge_bps: (opp as OpportunityRow).net_edge_bps,
-          confidence: (opp as OpportunityRow).confidence,
-          details: (opp as OpportunityRow).details
-        })
-      }))
-      .map((opp) => {
-        const variant = variantForOpportunity(opp.id);
-        const aiScore = predictScore(weights, opp.features.vector);
-        let effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
-        if (variant === "B" && contrarianActive) {
-          effectiveScore = -effectiveScore;
-        }
-        return { ...opp, variant, aiScore, effectiveScore };
-      })
-      .sort((a, b) => b.effectiveScore - a.effectiveScore)
-      .slice(0, MAX_CANDIDATES);
-  }
 
   let llmCallsUsed = 0;
   const scoredWithLlm: ScoredOpportunity[] = [];

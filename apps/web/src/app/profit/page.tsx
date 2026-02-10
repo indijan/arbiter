@@ -55,7 +55,7 @@ export default async function ProfitPage() {
     .eq("user_id", user.id)
     .eq("status", "closed")
     .order("exit_ts", { ascending: false })
-    .limit(10);
+    .limit(500);
 
   const realizedRows = (closedPositions ?? []).map((row) => {
     const spotQty = Number(row.spot_qty ?? 0);
@@ -75,8 +75,26 @@ export default async function ProfitPage() {
       computed_pnl: realized !== 0 ? realized : computed
     };
   });
+  const recentRealizedRows = realizedRows.slice(0, 10);
 
   const realizedTotal = realizedRows.reduce((sum, row) => sum + Number(row.computed_pnl ?? 0), 0);
+
+  const dailyRealizedMap = new Map<string, number>();
+  for (const row of realizedRows) {
+    if (!row.exit_ts) {
+      continue;
+    }
+    const day = row.exit_ts.slice(0, 10);
+    const pnl = Number(row.computed_pnl ?? 0);
+    dailyRealizedMap.set(day, (dailyRealizedMap.get(day) ?? 0) + pnl);
+  }
+
+  const realizedChartData = Array.from(dailyRealizedMap.entries())
+    .map(([day, pnl]) => ({
+      day,
+      realized_total: Number(pnl.toFixed(2))
+    }))
+    .sort((a, b) => String(a.day).localeCompare(String(b.day)));
 
   const seriesKeys = new Set<string>();
   const byDay = new Map<string, Record<string, number | string>>();
@@ -96,11 +114,11 @@ export default async function ProfitPage() {
     }
   }
 
-  const chartData = Array.from(byDay.values()).sort((a, b) =>
+  let chartData = Array.from(byDay.values()).sort((a, b) =>
     String(a.day).localeCompare(String(b.day))
   );
 
-  const series: ProfitSeries[] = Array.from(seriesKeys).map((key, index) => {
+  let series: ProfitSeries[] = Array.from(seriesKeys).map((key, index) => {
     const [strategyKey, exchangeKey] = key.split(":");
     const label = `${STRATEGY_LABELS[strategyKey] ?? strategyKey} · ${exchangeKey}`;
     return {
@@ -109,6 +127,18 @@ export default async function ProfitPage() {
       color: COLORS[index % COLORS.length]
     };
   });
+
+  // Fallback when daily_strategy_pnl table is missing or empty: use daily realized totals.
+  if (chartData.length === 0 && realizedChartData.length > 0) {
+    chartData = realizedChartData;
+    series = [
+      {
+        key: "realized_total",
+        label: "Realizalt napi PnL",
+        color: "#22c55e"
+      }
+    ];
+  }
 
   const latestDay = rows.length > 0 ? rows[rows.length - 1].day : null;
   const latestRows = latestDay
@@ -195,6 +225,25 @@ export default async function ProfitPage() {
 
         <section className="card">
           <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Napi realizalt PnL</h2>
+            <span className="text-xs text-brand-100/60">USD</span>
+          </div>
+          <div className="mt-6">
+            <ProfitCharts
+              data={realizedChartData}
+              series={[
+                {
+                  key: "realized_total",
+                  label: "Realizalt napi PnL",
+                  color: "#38bdf8"
+                }
+              ]}
+            />
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Realizalt PnL</h2>
             <span className="text-xs text-brand-100/60">Zart poziciok</span>
           </div>
@@ -212,8 +261,8 @@ export default async function ProfitPage() {
                 </tr>
               </thead>
               <tbody className="text-brand-100/90">
-                {realizedRows.length > 0 ? (
-                  realizedRows.map((row) => (
+                {recentRealizedRows.length > 0 ? (
+                  recentRealizedRows.map((row) => (
                     <tr key={row.id} className="border-t border-brand-300/10">
                       <td className="py-2">{row.symbol}</td>
                       <td className="py-2">

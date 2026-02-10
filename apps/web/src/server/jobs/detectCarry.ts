@@ -150,8 +150,9 @@ export async function detectCarry(
     const spot_mid = safeMid(spot_bid, spot_ask);
     const perp_mid = safeMid(perp_bid, perp_ask);
 
+    // Use executable quotes (buy spot ask, sell perp bid) to avoid optimistic basis.
     const entry_basis_bps =
-      spot_mid && perp_mid ? ((perp_mid - spot_mid) / spot_mid) * 10000 : 0;
+      spot_ask && perp_bid ? ((perp_bid - spot_ask) / spot_ask) * 10000 : 0;
 
     const funding_daily_bps = snapshot.funding_rate
       ? snapshot.funding_rate * 3 * 10000

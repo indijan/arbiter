@@ -24,10 +24,14 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     throw new Error("Missing service role key.");
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   const { data: positions, error: positionsError } = await adminSupabase
     .from("positions")
-    .select("id, user_id, opportunity_id, symbol, status, spot_qty, perp_qty, entry_spot_price, entry_perp_price, meta")
-    .eq("status", "open");
+    .select(
+      "id, user_id, opportunity_id, symbol, status, exit_ts, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, entry_perp_price, meta"
+    )
+    .in("status", ["open", "closed"]);
 
   if (positionsError) {
     throw new Error(positionsError.message);
@@ -153,8 +157,14 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     const exchange_key = opp.exchange ?? "unknown";
 
     let total_pnl = 0;
+    const isClosedToday =
+      position.status === "closed" &&
+      typeof position.exit_ts === "string" &&
+      position.exit_ts.slice(0, 10) === today;
 
-    if (opp.type === "spot_perp_carry") {
+    if (isClosedToday) {
+      total_pnl = Number(position.realized_pnl_usd ?? 0);
+    } else if (position.status === "open" && opp.type === "spot_perp_carry") {
       const snapshotKey = `${opp.exchange}:${opp.symbol}`;
       const prices = snapshotsMap.get(snapshotKey);
       if (!prices) {
@@ -176,7 +186,7 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
       const perp_pnl = perp_qty * (perp_mid - entry_perp_price);
       const fee_total = feeMap.get(position.id) ?? 0;
       total_pnl = spot_pnl + perp_pnl - fee_total;
-    } else if (opp.type === "xarb_spot") {
+    } else if (position.status === "open" && opp.type === "xarb_spot") {
       const meta = (position.meta ?? {}) as Record<string, unknown>;
       const buyExchange = String(meta.buy_exchange ?? "");
       const sellExchange = String(meta.sell_exchange ?? "");
@@ -205,7 +215,6 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
     pnlAgg.set(key, (pnlAgg.get(key) ?? 0) + total_pnl);
   }
 
-  const day = new Date().toISOString().slice(0, 10);
   const rows: PnlRow[] = [];
 
   for (const [key, pnl] of pnlAgg.entries()) {
@@ -216,17 +225,22 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
       pnl_usd: Number(pnl.toFixed(2))
     });
 
-    await adminSupabase
+    const { error: upsertError } = await adminSupabase
       .from("daily_strategy_pnl")
       .upsert(
         {
-          day,
+          day: today,
           strategy_key,
           exchange_key,
           pnl_usd: Number(pnl.toFixed(2))
         },
         { onConflict: "day,strategy_key,exchange_key" }
       );
+
+    // If migration is not applied yet, keep cron alive and still return computed rows.
+    if (upsertError && upsertError.code !== "42P01") {
+      throw new Error(upsertError.message);
+    }
   }
 
   return rows;
