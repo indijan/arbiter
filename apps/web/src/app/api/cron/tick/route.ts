@@ -36,6 +36,16 @@ async function handleTick(request: Request) {
     const autoResult = await autoExecutePaper();
     const closeResult = await autoClosePaper();
 
+    const autoReasonCounts = autoResult.reasons.reduce((acc, item) => {
+      acc[item.reason] = (acc[item.reason] ?? 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const autoTopReasons = Object.entries(autoReasonCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([reason, count]) => ({ reason, count }));
+
     const pnlRows = await computeDailyPnl();
 
     const adminSupabase = createAdminSupabase();
@@ -62,6 +72,7 @@ async function handleTick(request: Request) {
             attempted: autoResult.attempted,
             created: autoResult.created,
             skipped: autoResult.skipped,
+            reasons_top: autoTopReasons,
             llm_used: autoResult.llm_used,
             llm_remaining: autoResult.llm_remaining
           },

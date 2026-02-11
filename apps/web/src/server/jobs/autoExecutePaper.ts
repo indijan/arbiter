@@ -27,11 +27,18 @@ const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const LOOKBACK_HOURS = 24;
-const MIN_NET_EDGE_BPS = 16;
-const MIN_CONFIDENCE = 0.72;
-const MAX_BREAK_EVEN_HOURS = 18;
+const MIN_NET_EDGE_BPS = 12;
+const MIN_CONFIDENCE = 0.66;
+const MAX_BREAK_EVEN_HOURS = 24;
 const MIN_CARRY_FUNDING_DAILY_BPS = 4;
-const MIN_XARB_NET_EDGE_BPS = 24;
+const MIN_XARB_NET_EDGE_BPS = 20;
+const INACTIVITY_LOOKBACK_HOURS = 6;
+const PNL_LOOKBACK_HOURS = 24;
+const LIVE_CARRY_TOTAL_COSTS_BPS = 12;
+const LIVE_CARRY_BUFFER_BPS = 3;
+const LIVE_XARB_TOTAL_COSTS_BPS = 18;
+const LIVE_XARB_BUFFER_BPS = 2;
+const TRI_MIN_PROFIT_BPS = 6;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -175,6 +182,10 @@ function scoreOpportunity(opp: OpportunityRow) {
 
   // Higher score is better.
   return edgeBonus + confidenceBonus - risk - breakEvenPenalty;
+}
+
+function inRange(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function okxSpotInstId(symbol: string) {
@@ -401,6 +412,60 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     };
   }
 
+  const inactivitySince = new Date(
+    Date.now() - INACTIVITY_LOOKBACK_HOURS * 60 * 60 * 1000
+  ).toISOString();
+  const { data: inactivityPositions, error: inactivityError } = await adminSupabase
+    .from("positions")
+    .select("id")
+    .eq("user_id", userId)
+    .gte("entry_ts", inactivitySince);
+
+  if (inactivityError) {
+    throw new Error(inactivityError.message);
+  }
+
+  const pnlSince = new Date(Date.now() - PNL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+  const { data: recentClosed, error: recentClosedError } = await adminSupabase
+    .from("positions")
+    .select("realized_pnl_usd")
+    .eq("user_id", userId)
+    .eq("status", "closed")
+    .gte("exit_ts", pnlSince)
+    .not("realized_pnl_usd", "is", null)
+    .limit(200);
+
+  if (recentClosedError) {
+    throw new Error(recentClosedError.message);
+  }
+
+  const recentPnlUsd = (recentClosed ?? []).reduce((sum, row) => {
+    return sum + Number((row as { realized_pnl_usd?: number | null }).realized_pnl_usd ?? 0);
+  }, 0);
+
+  const hasInactivity = (inactivityPositions ?? []).length === 0;
+  const losingRecently = recentPnlUsd < 0;
+
+  let minNetEdgeBps = MIN_NET_EDGE_BPS;
+  let minConfidence = MIN_CONFIDENCE;
+  let minXarbNetEdgeBps = MIN_XARB_NET_EDGE_BPS;
+
+  if (hasInactivity) {
+    minNetEdgeBps -= 2;
+    minConfidence -= 0.04;
+    minXarbNetEdgeBps -= 2;
+  }
+
+  if (losingRecently) {
+    minNetEdgeBps += 2;
+    minConfidence += 0.04;
+    minXarbNetEdgeBps += 2;
+  }
+
+  minNetEdgeBps = inRange(minNetEdgeBps, 10, 18);
+  minConfidence = inRange(minConfidence, 0.6, 0.8);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 16, 28);
+
   const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
     .from("opportunities")
@@ -492,10 +557,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const details = typed.details ?? {};
       const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
 
-      if (netEdge < MIN_NET_EDGE_BPS) {
+      if (netEdge < minNetEdgeBps) {
         return false;
       }
-      if (confidence < MIN_CONFIDENCE) {
+      if (confidence < minConfidence) {
         return false;
       }
       if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
@@ -509,7 +574,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           return false;
         }
       }
-      if (typed.type === "xarb_spot" && netEdge < MIN_XARB_NET_EDGE_BPS) {
+      if (typed.type === "xarb_spot" && netEdge < minXarbNetEdgeBps) {
         return false;
       }
       return true;
@@ -664,6 +729,21 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (!snapshot || snapshot.spot_ask === null || snapshot.perp_bid === null) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "missing_snapshot_prices" });
+        continue;
+      }
+
+      const details = opp.details ?? {};
+      const fundingDailyBps = Number(
+        (details as Record<string, unknown>).funding_daily_bps ?? 0
+      );
+      const expectedHoldingBps = fundingDailyBps * (LOOKBACK_HOURS / 24);
+      const liveBasisBps = ((snapshot.perp_bid - snapshot.spot_ask) / snapshot.spot_ask) * 10000;
+      const liveNetEdgeBps =
+        liveBasisBps + expectedHoldingBps - LIVE_CARRY_TOTAL_COSTS_BPS - LIVE_CARRY_BUFFER_BPS;
+
+      if (liveNetEdgeBps < minNetEdgeBps) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
         continue;
       }
 
@@ -831,6 +911,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         slippage_bps: SLIPPAGE_BPS,
         fee_bps: FEE_BPS
       });
+
+      const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
+      const liveNetEdgeBps =
+        liveGrossEdgeBps - LIVE_XARB_TOTAL_COSTS_BPS - LIVE_XARB_BUFFER_BPS;
+
+      if (liveNetEdgeBps < minXarbNetEdgeBps) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
+        continue;
+      }
 
       const { data: position, error: positionError } = await adminSupabase
         .from("positions")
@@ -1027,6 +1117,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       const realized = Number((amount - notional_usd).toFixed(4));
+
+      const realizedBps = (realized / notional_usd) * 10000;
+      if (!Number.isFinite(realizedBps) || realizedBps < TRI_MIN_PROFIT_BPS) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "edge_too_small" });
+        continue;
+      }
 
       const { data: position, error: positionError } = await adminSupabase
         .from("positions")
