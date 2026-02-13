@@ -6,11 +6,11 @@ const IDEMPOTENT_MINUTES = 5;
 
 const COSTS_BPS = {
   fee_bps_total: 6,
-  slippage_bps_total: 4,
-  transfer_buffer_bps: 8
+  slippage_bps_total: 3,
+  transfer_buffer_bps: 2
 };
 
-const MIN_NET_EDGE_BPS = 16;
+const MIN_NET_EDGE_BPS = 8;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
