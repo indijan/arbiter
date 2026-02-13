@@ -4,8 +4,8 @@ import { createAdminSupabase } from "@/lib/supabase/server-admin";
 
 const TIMEOUT_MS = 9000;
 
-const COSTS_BPS = 6;
-const MIN_NET_EDGE_BPS = 2;
+const COSTS_BPS = 4;
+const MIN_NET_EDGE_BPS = -1;
 const IDEMPOTENT_MINUTES = 5;
 
 type OkxTicker = {

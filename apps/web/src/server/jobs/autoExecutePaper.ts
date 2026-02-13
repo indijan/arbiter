@@ -31,7 +31,7 @@ const MIN_NET_EDGE_BPS = 12;
 const MIN_CONFIDENCE = 0.66;
 const MAX_BREAK_EVEN_HOURS = 24;
 const MIN_CARRY_FUNDING_DAILY_BPS = 4;
-const MIN_XARB_NET_EDGE_BPS = 20;
+const MIN_XARB_NET_EDGE_BPS = 16;
 const INACTIVITY_LOOKBACK_HOURS = 6;
 const PNL_LOOKBACK_HOURS = 24;
 const LIVE_CARRY_TOTAL_COSTS_BPS = 12;
@@ -478,18 +478,18 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   if (hasInactivity) {
     minNetEdgeBps -= 2;
     minConfidence -= 0.04;
-    minXarbNetEdgeBps -= 2;
+    minXarbNetEdgeBps -= 6;
   }
 
   if (losingRecently) {
     minNetEdgeBps += 2;
     minConfidence += 0.04;
-    minXarbNetEdgeBps += 2;
+    minXarbNetEdgeBps += 4;
   }
 
   minNetEdgeBps = inRange(minNetEdgeBps, 10, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
-  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 14, 28);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 10, 28);
 
   const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
