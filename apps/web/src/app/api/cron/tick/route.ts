@@ -73,6 +73,7 @@ async function handleTick(request: Request) {
             created: autoResult.created,
             skipped: autoResult.skipped,
             reasons_top: autoTopReasons,
+            diagnostics: autoResult.diagnostics,
             llm_used: autoResult.llm_used,
             llm_remaining: autoResult.llm_remaining
           },
@@ -110,6 +111,7 @@ async function handleTick(request: Request) {
           created: autoResult.created,
           skipped: autoResult.skipped,
           reasons: autoResult.reasons,
+          diagnostics: autoResult.diagnostics,
           llm_used: autoResult.llm_used,
           llm_remaining: autoResult.llm_remaining
         },

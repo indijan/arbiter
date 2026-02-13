@@ -5,7 +5,7 @@ import { createAdminSupabase } from "@/lib/supabase/server-admin";
 const TIMEOUT_MS = 9000;
 
 const COSTS_BPS = 8;
-const MIN_NET_EDGE_BPS = 8;
+const MIN_NET_EDGE_BPS = 6;
 const IDEMPOTENT_MINUTES = 5;
 
 type OkxTicker = {
@@ -97,6 +97,16 @@ export type DetectTriangularResult = {
   skipped: number;
   evaluated: TriangularEvaluated[];
 };
+
+function confidenceForTri(netEdgeBps: number) {
+  if (netEdgeBps >= 20) {
+    return 0.64;
+  }
+  if (netEdgeBps >= 12) {
+    return 0.6;
+  }
+  return 0.56;
+}
 
 export async function detectTriangular(): Promise<DetectTriangularResult> {
   const adminSupabase = createAdminSupabase();
@@ -201,7 +211,7 @@ export async function detectTriangular(): Promise<DetectTriangularResult> {
         type: "tri_arb",
         net_edge_bps: Number(net_edge_bps.toFixed(4)),
         expected_daily_bps: null,
-        confidence: 0.5,
+        confidence: confidenceForTri(net_edge_bps),
         status: "new",
         details: {
           path: path.name,

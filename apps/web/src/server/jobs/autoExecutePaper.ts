@@ -128,6 +128,15 @@ type AutoExecuteResult = {
   reasons: Array<{ opportunity_id: number; reason: string }>;
   llm_used: number;
   llm_remaining: number;
+  diagnostics: {
+    opportunities_lookback: number;
+    passed_filters: number;
+    min_net_edge_bps: number;
+    min_confidence: number;
+    min_xarb_net_edge_bps: number;
+    inactivity_mode: boolean;
+    losing_mode: boolean;
+  };
 };
 
 function clampNotional(value: number, min: number, max: number) {
@@ -310,6 +319,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     throw new Error("Missing service role key.");
   }
 
+  const defaultDiagnostics = {
+    opportunities_lookback: 0,
+    passed_filters: 0,
+    min_net_edge_bps: MIN_NET_EDGE_BPS,
+    min_confidence: MIN_CONFIDENCE,
+    min_xarb_net_edge_bps: MIN_XARB_NET_EDGE_BPS,
+    inactivity_mode: false,
+    losing_mode: false
+  };
+
   let { data: account, error: accountError } = await adminSupabase
     .from("paper_accounts")
     .select("id, user_id, balance_usd, reserved_usd, min_notional_usd, max_notional_usd")
@@ -340,7 +359,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         skipped: 0,
         reasons: [],
         llm_used: 0,
-        llm_remaining: 0
+        llm_remaining: 0,
+        diagnostics: defaultDiagnostics
       };
     }
 
@@ -386,7 +406,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       skipped: 0,
       reasons: [],
       llm_used: 0,
-      llm_remaining: 0
+      llm_remaining: 0,
+      diagnostics: defaultDiagnostics
     };
   }
 
@@ -408,7 +429,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       skipped: 0,
       reasons: [],
       llm_used: 0,
-      llm_remaining: 0
+      llm_remaining: 0,
+      diagnostics: defaultDiagnostics
     };
   }
 
@@ -463,8 +485,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   minNetEdgeBps = inRange(minNetEdgeBps, 10, 18);
-  minConfidence = inRange(minConfidence, 0.6, 0.8);
-  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 16, 28);
+  minConfidence = inRange(minConfidence, 0.56, 0.8);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 14, 28);
 
   const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
@@ -560,7 +582,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (netEdge < minNetEdgeBps) {
         return false;
       }
-      if (confidence < minConfidence) {
+      const typeConfidenceMin =
+        typed.type === "xarb_spot"
+          ? Math.max(0.56, minConfidence - 0.04)
+          : typed.type === "tri_arb"
+            ? Math.max(0.54, minConfidence - 0.08)
+            : minConfidence;
+      if (confidence < typeConfidenceMin) {
         return false;
       }
       if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
@@ -600,6 +628,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     })
     .sort((a, b) => b.effectiveScore - a.effectiveScore)
     .slice(0, MAX_CANDIDATES);
+
+  const diagnostics = {
+    opportunities_lookback: (opportunities ?? []).length,
+    passed_filters: scored.length,
+    min_net_edge_bps: Number(minNetEdgeBps.toFixed(2)),
+    min_confidence: Number(minConfidence.toFixed(3)),
+    min_xarb_net_edge_bps: Number(minXarbNetEdgeBps.toFixed(2)),
+    inactivity_mode: hasInactivity,
+    losing_mode: losingRecently
+  };
 
   let llmCallsUsed = 0;
   const scoredWithLlm: ScoredOpportunity[] = [];
@@ -1195,6 +1233,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     skipped,
     reasons,
     llm_used: llmCallsUsed,
-    llm_remaining: remainingLlmCalls
+    llm_remaining: remainingLlmCalls,
+    diagnostics
   };
 }

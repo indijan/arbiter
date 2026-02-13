@@ -10,7 +10,7 @@ const COSTS_BPS = {
   transfer_buffer_bps: 8
 };
 
-const MIN_NET_EDGE_BPS = 24;
+const MIN_NET_EDGE_BPS = 18;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
@@ -50,6 +50,19 @@ export type DetectCrossExchangeResult = {
   skipped: number;
   evaluated: EvaluatedRow[];
 };
+
+function confidenceForXarb(netEdgeBps: number) {
+  if (netEdgeBps >= 40) {
+    return 0.72;
+  }
+  if (netEdgeBps >= 30) {
+    return 0.68;
+  }
+  if (netEdgeBps >= 22) {
+    return 0.64;
+  }
+  return 0.6;
+}
 
 export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResult> {
   const adminSupabase = createAdminSupabase();
@@ -254,7 +267,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       type: "xarb_spot",
       net_edge_bps: Number(net_edge_bps.toFixed(4)),
       expected_daily_bps: null,
-      confidence: 0.6,
+      confidence: confidenceForXarb(net_edge_bps),
       status: "new",
       details: {
         buy_exchange: buy.exchange,
