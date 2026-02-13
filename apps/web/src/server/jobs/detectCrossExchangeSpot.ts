@@ -10,7 +10,7 @@ const COSTS_BPS = {
   transfer_buffer_bps: 8
 };
 
-const MIN_NET_EDGE_BPS = 18;
+const MIN_NET_EDGE_BPS = 16;
 
 const CANONICAL_MAP: Array<{
   canonical: string;

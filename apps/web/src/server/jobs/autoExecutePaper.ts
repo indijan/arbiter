@@ -39,6 +39,7 @@ const LIVE_CARRY_BUFFER_BPS = 3;
 const LIVE_XARB_TOTAL_COSTS_BPS = 18;
 const LIVE_XARB_BUFFER_BPS = 2;
 const TRI_MIN_PROFIT_BPS = 6;
+const LIVE_XARB_ENTRY_FLOOR_BPS = 12;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -134,6 +135,7 @@ type AutoExecuteResult = {
     min_net_edge_bps: number;
     min_confidence: number;
     min_xarb_net_edge_bps: number;
+    live_xarb_entry_floor_bps: number;
     inactivity_mode: boolean;
     losing_mode: boolean;
   };
@@ -325,6 +327,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_net_edge_bps: MIN_NET_EDGE_BPS,
     min_confidence: MIN_CONFIDENCE,
     min_xarb_net_edge_bps: MIN_XARB_NET_EDGE_BPS,
+    live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: false,
     losing_mode: false
   };
@@ -635,6 +638,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_net_edge_bps: Number(minNetEdgeBps.toFixed(2)),
     min_confidence: Number(minConfidence.toFixed(3)),
     min_xarb_net_edge_bps: Number(minXarbNetEdgeBps.toFixed(2)),
+    live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: hasInactivity,
     losing_mode: losingRecently
   };
@@ -953,8 +957,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const liveNetEdgeBps =
         liveGrossEdgeBps - LIVE_XARB_TOTAL_COSTS_BPS - LIVE_XARB_BUFFER_BPS;
+      const liveXarbThresholdBps =
+        hasInactivity && !losingRecently
+          ? Math.max(LIVE_XARB_ENTRY_FLOOR_BPS, minXarbNetEdgeBps - 6)
+          : Math.max(14, minXarbNetEdgeBps - 2);
 
-      if (liveNetEdgeBps < minXarbNetEdgeBps) {
+      if (liveNetEdgeBps < liveXarbThresholdBps) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
         continue;
