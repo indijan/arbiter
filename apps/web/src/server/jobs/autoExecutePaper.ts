@@ -27,7 +27,7 @@ const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
-const LOOKBACK_HOURS = 24;
+const LOOKBACK_HOURS = 2;
 const MIN_NET_EDGE_BPS = 12;
 const MIN_CONFIDENCE = 0.66;
 const MAX_BREAK_EVEN_HOURS = 24;
@@ -42,9 +42,9 @@ const LIVE_XARB_BUFFER_BPS = 1;
 const TRI_MIN_PROFIT_BPS = 6;
 const LIVE_XARB_ENTRY_FLOOR_BPS = 3;
 const PILOT_INACTIVITY_HOURS = 24;
-const PILOT_MIN_LIVE_GROSS_EDGE_BPS = 1;
-const PILOT_MIN_LIVE_NET_EDGE_BPS = -1;
-const PILOT_NOTIONAL_MULTIPLIER = 0.5;
+const PILOT_MIN_LIVE_GROSS_EDGE_BPS = -0.5;
+const PILOT_MIN_LIVE_NET_EDGE_BPS = -6;
+const PILOT_NOTIONAL_MULTIPLIER = 0.25;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -621,6 +621,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     Date.now() < Date.parse(CONTRARIAN_UNTIL);
 
   let scored: ScoredOpportunity[] = (opportunities ?? [])
+    // Keep only the newest opportunity per (type, symbol, exchange) key to avoid retrying stale snapshots.
+    .filter((opp, idx, arr) => {
+      const typed = opp as OpportunityRow;
+      const key = `${typed.type}|${typed.symbol}|${typed.exchange}`;
+      const firstIdx = arr.findIndex((x) => {
+        const row = x as OpportunityRow;
+        return `${row.type}|${row.symbol}|${row.exchange}` === key;
+      });
+      return firstIdx === idx;
+    })
     .filter((opp) => {
       const symbol = (opp as { symbol?: string }).symbol ?? "";
       if (!symbol) {
