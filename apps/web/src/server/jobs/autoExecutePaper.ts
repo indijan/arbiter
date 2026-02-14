@@ -138,6 +138,7 @@ type AutoExecuteResult = {
     live_xarb_entry_floor_bps: number;
     inactivity_mode: boolean;
     losing_mode: boolean;
+    prefilter_reasons: Record<string, number>;
   };
 };
 
@@ -329,7 +330,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_xarb_net_edge_bps: MIN_XARB_NET_EDGE_BPS,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: false,
-    losing_mode: false
+    losing_mode: false,
+    prefilter_reasons: {}
   };
 
   let { data: account, error: accountError } = await adminSupabase
@@ -476,9 +478,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let minXarbNetEdgeBps = MIN_XARB_NET_EDGE_BPS;
 
   if (hasInactivity) {
-    minNetEdgeBps -= 2;
+    minNetEdgeBps -= 4;
     minConfidence -= 0.04;
-    minXarbNetEdgeBps -= 6;
+    minXarbNetEdgeBps -= 8;
   }
 
   if (losingRecently) {
@@ -487,9 +489,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minXarbNetEdgeBps += 4;
   }
 
-  minNetEdgeBps = inRange(minNetEdgeBps, 10, 18);
+  minNetEdgeBps = inRange(minNetEdgeBps, 6, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
-  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 10, 28);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 6, 28);
+
+  const prefilterReasons: Record<string, number> = {};
+  const markPrefilter = (reason: string) => {
+    prefilterReasons[reason] = (prefilterReasons[reason] ?? 0) + 1;
+  };
 
   const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
@@ -570,9 +577,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .filter((opp) => {
       const symbol = (opp as { symbol?: string }).symbol ?? "";
       if (!symbol) {
+        markPrefilter("missing_symbol");
         return false;
       }
       if ((openBySymbol.get(symbol) ?? 0) >= MAX_OPEN_PER_SYMBOL) {
+        markPrefilter("max_open_per_symbol");
         return false;
       }
 
@@ -583,6 +592,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
 
       if (netEdge < minNetEdgeBps) {
+        markPrefilter("below_min_net_edge");
         return false;
       }
       const typeConfidenceMin =
@@ -592,9 +602,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             ? Math.max(0.54, minConfidence - 0.08)
             : minConfidence;
       if (confidence < typeConfidenceMin) {
+        markPrefilter("below_min_confidence");
         return false;
       }
       if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
+        markPrefilter("break_even_too_long");
         return false;
       }
       if (typed.type === "spot_perp_carry") {
@@ -602,10 +614,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           (details as Record<string, unknown>).funding_daily_bps ?? NaN
         );
         if (Number.isFinite(fundingDailyBps) && fundingDailyBps < MIN_CARRY_FUNDING_DAILY_BPS) {
+          markPrefilter("carry_funding_too_low");
           return false;
         }
       }
       if (typed.type === "xarb_spot" && netEdge < minXarbNetEdgeBps) {
+        markPrefilter("xarb_below_min_edge");
         return false;
       }
       return true;
@@ -640,7 +654,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_xarb_net_edge_bps: Number(minXarbNetEdgeBps.toFixed(2)),
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: hasInactivity,
-    losing_mode: losingRecently
+    losing_mode: losingRecently,
+    prefilter_reasons: prefilterReasons
   };
 
   let llmCallsUsed = 0;
