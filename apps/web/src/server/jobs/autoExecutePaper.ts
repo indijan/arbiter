@@ -482,9 +482,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let minXarbNetEdgeBps = MIN_XARB_NET_EDGE_BPS;
 
   if (hasInactivity) {
-    minNetEdgeBps -= 8;
+    minNetEdgeBps -= 12;
     minConfidence -= 0.04;
-    minXarbNetEdgeBps -= 10;
+    minXarbNetEdgeBps -= 15;
   }
 
   if (losingRecently) {
@@ -493,9 +493,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minXarbNetEdgeBps += 4;
   }
 
-  minNetEdgeBps = inRange(minNetEdgeBps, 0, 18);
+  minNetEdgeBps = inRange(minNetEdgeBps, -2, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
-  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 0, 28);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, -2, 28);
 
   const prefilterReasons: Record<string, number> = {};
   const markPrefilter = (reason: string) => {
