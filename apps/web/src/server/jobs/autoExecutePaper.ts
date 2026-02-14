@@ -41,6 +41,10 @@ const LIVE_XARB_TOTAL_COSTS_BPS = 10;
 const LIVE_XARB_BUFFER_BPS = 1;
 const TRI_MIN_PROFIT_BPS = 6;
 const LIVE_XARB_ENTRY_FLOOR_BPS = 3;
+const PILOT_INACTIVITY_HOURS = 24;
+const PILOT_MIN_LIVE_GROSS_EDGE_BPS = 1;
+const PILOT_MIN_LIVE_NET_EDGE_BPS = -1;
+const PILOT_NOTIONAL_MULTIPLIER = 0.5;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -140,6 +144,7 @@ type AutoExecuteResult = {
     max_seen_xarb_net_edge_bps: number;
     live_xarb_entry_floor_bps: number;
     live_xarb_dynamic_threshold_bps: number;
+    pilot_mode_active: boolean;
     inactivity_mode: boolean;
     losing_mode: boolean;
     prefilter_reasons: Record<string, number>;
@@ -336,6 +341,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: 0,
+    pilot_mode_active: false,
     inactivity_mode: false,
     losing_mode: false,
     prefilter_reasons: {}
@@ -449,6 +455,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const inactivitySince = new Date(
     Date.now() - INACTIVITY_LOOKBACK_HOURS * 60 * 60 * 1000
   ).toISOString();
+  const pilotInactivitySince = new Date(
+    Date.now() - PILOT_INACTIVITY_HOURS * 60 * 60 * 1000
+  ).toISOString();
   const { data: inactivityPositions, error: inactivityError } = await adminSupabase
     .from("positions")
     .select("id")
@@ -457,6 +466,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   if (inactivityError) {
     throw new Error(inactivityError.message);
+  }
+
+  const { data: pilotInactivityPositions, error: pilotInactivityError } = await adminSupabase
+    .from("positions")
+    .select("id")
+    .eq("user_id", userId)
+    .gte("entry_ts", pilotInactivitySince)
+    .limit(1);
+
+  if (pilotInactivityError) {
+    throw new Error(pilotInactivityError.message);
   }
 
   const pnlSince = new Date(Date.now() - PNL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
@@ -478,6 +498,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }, 0);
 
   const hasInactivity = (inactivityPositions ?? []).length === 0;
+  const prolongedInactivity = (pilotInactivityPositions ?? []).length === 0;
   const losingRecently = recentPnlUsd < 0;
 
   let minNetEdgeBps = MIN_NET_EDGE_BPS;
@@ -534,6 +555,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           )
         )
       : Math.max(2, minXarbNetEdgeBps);
+  const pilotModeActive = prolongedInactivity && !losingRecently;
 
   const openBySymbol = new Map<string, number>();
   for (const pos of openPositions ?? []) {
@@ -681,6 +703,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
+    pilot_mode_active: pilotModeActive,
     inactivity_mode: hasInactivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -792,9 +815,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       minNotional,
       maxNotional
     );
-    const notional_usd = derived.notional;
+    let notional_usd = derived.notional;
 
-    if (notional_usd > available) {
+    if (notional_usd > available && opp.type !== "xarb_spot") {
       skipped += 1;
       reasons.push({ opportunity_id: opp.id, reason: "insufficient_balance" });
       continue;
@@ -1003,10 +1026,35 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const liveNetEdgeBps =
         liveGrossEdgeBps - LIVE_XARB_TOTAL_COSTS_BPS - LIVE_XARB_BUFFER_BPS;
+      const canPilotOpen =
+        pilotModeActive &&
+        liveGrossEdgeBps >= PILOT_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= PILOT_MIN_LIVE_NET_EDGE_BPS;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
+        if (!canPilotOpen) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
+          continue;
+        }
+      }
+
+      if (canPilotOpen) {
+        const pilotNotional = clampNotional(
+          Math.max(minNotional, notional_usd * PILOT_NOTIONAL_MULTIPLIER),
+          minNotional,
+          maxNotional
+        );
+        if (pilotNotional <= available) {
+          notional_usd = pilotNotional;
+        } else if (notional_usd > available) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "insufficient_balance" });
+          continue;
+        }
+      } else if (notional_usd > available) {
         skipped += 1;
-        reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
+        reasons.push({ opportunity_id: opp.id, reason: "insufficient_balance" });
         continue;
       }
 
