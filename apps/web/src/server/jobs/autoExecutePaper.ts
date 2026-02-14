@@ -135,6 +135,8 @@ type AutoExecuteResult = {
     min_net_edge_bps: number;
     min_confidence: number;
     min_xarb_net_edge_bps: number;
+    max_seen_net_edge_bps: number;
+    max_seen_xarb_net_edge_bps: number;
     live_xarb_entry_floor_bps: number;
     inactivity_mode: boolean;
     losing_mode: boolean;
@@ -328,6 +330,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_net_edge_bps: MIN_NET_EDGE_BPS,
     min_confidence: MIN_CONFIDENCE,
     min_xarb_net_edge_bps: MIN_XARB_NET_EDGE_BPS,
+    max_seen_net_edge_bps: 0,
+    max_seen_xarb_net_edge_bps: 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: false,
     losing_mode: false,
@@ -478,9 +482,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let minXarbNetEdgeBps = MIN_XARB_NET_EDGE_BPS;
 
   if (hasInactivity) {
-    minNetEdgeBps -= 4;
+    minNetEdgeBps -= 8;
     minConfidence -= 0.04;
-    minXarbNetEdgeBps -= 8;
+    minXarbNetEdgeBps -= 10;
   }
 
   if (losingRecently) {
@@ -489,9 +493,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minXarbNetEdgeBps += 4;
   }
 
-  minNetEdgeBps = inRange(minNetEdgeBps, 6, 18);
+  minNetEdgeBps = inRange(minNetEdgeBps, 0, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
-  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 6, 28);
+  minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, 0, 28);
 
   const prefilterReasons: Record<string, number> = {};
   const markPrefilter = (reason: string) => {
@@ -509,6 +513,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   if (oppError) {
     throw new Error(oppError.message);
   }
+
+  const maxSeenNetEdgeBps = (opportunities ?? []).reduce((max, opp) => {
+    return Math.max(max, Number((opp as OpportunityRow).net_edge_bps ?? 0));
+  }, Number.NEGATIVE_INFINITY);
+  const maxSeenXarbNetEdgeBps = (opportunities ?? [])
+    .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
+    .reduce((max, opp) => Math.max(max, Number((opp as OpportunityRow).net_edge_bps ?? 0)), Number.NEGATIVE_INFINITY);
 
   const openBySymbol = new Map<string, number>();
   for (const pos of openPositions ?? []) {
@@ -652,6 +663,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_net_edge_bps: Number(minNetEdgeBps.toFixed(2)),
     min_confidence: Number(minConfidence.toFixed(3)),
     min_xarb_net_edge_bps: Number(minXarbNetEdgeBps.toFixed(2)),
+    max_seen_net_edge_bps: Number.isFinite(maxSeenNetEdgeBps) ? Number(maxSeenNetEdgeBps.toFixed(4)) : 0,
+    max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     inactivity_mode: hasInactivity,
     losing_mode: losingRecently,
