@@ -45,6 +45,9 @@ const PILOT_INACTIVITY_HOURS = 24;
 const PILOT_MIN_LIVE_GROSS_EDGE_BPS = -0.5;
 const PILOT_MIN_LIVE_NET_EDGE_BPS = -6;
 const PILOT_NOTIONAL_MULTIPLIER = 0.25;
+const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 1.5;
+const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -8;
+const CALIBRATION_NOTIONAL_MULTIPLIER = 0.2;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -1040,18 +1043,27 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         pilotModeActive &&
         liveGrossEdgeBps >= PILOT_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= PILOT_MIN_LIVE_NET_EDGE_BPS;
+      const canCalibrationOpen =
+        hasInactivity &&
+        !losingRecently &&
+        liveGrossEdgeBps >= CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
+      const allowFallbackOpen = canPilotOpen || canCalibrationOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
-        if (!canPilotOpen) {
+        if (!allowFallbackOpen) {
           skipped += 1;
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
           continue;
         }
       }
 
-      if (canPilotOpen) {
+      if (allowFallbackOpen) {
+        const fallbackMultiplier = canPilotOpen
+          ? PILOT_NOTIONAL_MULTIPLIER
+          : CALIBRATION_NOTIONAL_MULTIPLIER;
         const pilotNotional = clampNotional(
-          Math.max(minNotional, notional_usd * PILOT_NOTIONAL_MULTIPLIER),
+          Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
           maxNotional
         );
@@ -1095,7 +1107,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             slippage_bps: SLIPPAGE_BPS,
             notional_usd,
             notional_reason: derived.reason,
-            auto_execute: true
+            auto_execute: true,
+            pilot_open: canPilotOpen,
+            calibration_open: !canPilotOpen && canCalibrationOpen,
+            live_edge: {
+              gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
+              net_bps: Number(liveNetEdgeBps.toFixed(4)),
+              threshold_bps: Number(liveXarbThresholdBps.toFixed(4))
+            }
           }
         })
         .select("id")
