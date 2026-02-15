@@ -34,6 +34,7 @@ const MAX_BREAK_EVEN_HOURS = 24;
 const MIN_CARRY_FUNDING_DAILY_BPS = 4;
 const MIN_XARB_NET_EDGE_BPS = 16;
 const INACTIVITY_LOOKBACK_HOURS = 6;
+const LOW_ACTIVITY_LOOKBACK_HOURS = 12;
 const PNL_LOOKBACK_HOURS = 24;
 const LIVE_CARRY_TOTAL_COSTS_BPS = 12;
 const LIVE_CARRY_BUFFER_BPS = 3;
@@ -151,6 +152,7 @@ type AutoExecuteResult = {
     live_xarb_dynamic_threshold_bps: number;
     pilot_mode_active: boolean;
     inactivity_mode: boolean;
+    low_activity_mode: boolean;
     losing_mode: boolean;
     prefilter_reasons: Record<string, number>;
   };
@@ -348,6 +350,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     live_xarb_dynamic_threshold_bps: 0,
     pilot_mode_active: false,
     inactivity_mode: false,
+    low_activity_mode: false,
     losing_mode: false,
     prefilter_reasons: {}
   };
@@ -460,6 +463,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const inactivitySince = new Date(
     Date.now() - INACTIVITY_LOOKBACK_HOURS * 60 * 60 * 1000
   ).toISOString();
+  const lowActivitySince = new Date(
+    Date.now() - LOW_ACTIVITY_LOOKBACK_HOURS * 60 * 60 * 1000
+  ).toISOString();
   const pilotInactivitySince = new Date(
     Date.now() - PILOT_INACTIVITY_HOURS * 60 * 60 * 1000
   ).toISOString();
@@ -471,6 +477,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   if (inactivityError) {
     throw new Error(inactivityError.message);
+  }
+
+  const { data: lowActivityPositions, error: lowActivityError } = await adminSupabase
+    .from("positions")
+    .select("id")
+    .eq("user_id", userId)
+    .gte("entry_ts", lowActivitySince);
+
+  if (lowActivityError) {
+    throw new Error(lowActivityError.message);
   }
 
   const { data: pilotInactivityPositions, error: pilotInactivityError } = await adminSupabase
@@ -503,6 +519,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }, 0);
 
   const hasInactivity = (inactivityPositions ?? []).length === 0;
+  const lowActivity = (lowActivityPositions ?? []).length <= 1;
   const prolongedInactivity = (pilotInactivityPositions ?? []).length === 0;
   const losingRecently = recentPnlUsd <= LOSING_MODE_TRIGGER_USD;
   const severeLosing = recentPnlUsd <= SEVERE_LOSS_BLOCK_USD;
@@ -511,7 +528,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let minConfidence = MIN_CONFIDENCE;
   let minXarbNetEdgeBps = MIN_XARB_NET_EDGE_BPS;
 
-  if (hasInactivity) {
+  if (hasInactivity || lowActivity) {
     minNetEdgeBps -= 12;
     minConfidence -= 0.04;
     minXarbNetEdgeBps -= 15;
@@ -551,6 +568,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
     .reduce((max, opp) => Math.max(max, Number((opp as OpportunityRow).net_edge_bps ?? 0)), Number.NEGATIVE_INFINITY);
   const regimeXarbEdgeBps = Number.isFinite(maxSeenXarbNetEdgeBps) ? maxSeenXarbNetEdgeBps : 0;
+  if (regimeXarbEdgeBps > 0) {
+    // Adapt base thresholds to current market regime instead of fixed hard gates.
+    minNetEdgeBps = Math.min(minNetEdgeBps, Math.max(-1, regimeXarbEdgeBps * 0.4));
+    minXarbNetEdgeBps = Math.min(minXarbNetEdgeBps, Math.max(0, regimeXarbEdgeBps * 0.55));
+  }
   const liveXarbThresholdBps =
     hasInactivity
       ? Math.max(
@@ -721,6 +743,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
     pilot_mode_active: pilotModeActive,
     inactivity_mode: hasInactivity,
+    low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
   };
