@@ -18,6 +18,18 @@ function toNumber(value: number | null) {
   return typeof value === "number" ? value : null;
 }
 
+function isMissingDailyPnlTableError(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error.message ?? "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    message.includes("could not find the table 'public.daily_strategy_pnl'") ||
+    message.includes("daily_strategy_pnl")
+  );
+}
+
 export async function computeDailyPnl(): Promise<PnlRow[]> {
   const adminSupabase = createAdminSupabase();
   if (!adminSupabase) {
@@ -237,8 +249,8 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
         { onConflict: "day,strategy_key,exchange_key" }
       );
 
-    // If migration is not applied yet, keep cron alive and still return computed rows.
-    if (upsertError && upsertError.code !== "42P01") {
+    // If migration is not applied yet (or schema cache is stale), keep cron alive.
+    if (upsertError && !isMissingDailyPnlTableError(upsertError)) {
       throw new Error(upsertError.message);
     }
   }

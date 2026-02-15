@@ -48,6 +48,8 @@ const PILOT_NOTIONAL_MULTIPLIER = 0.25;
 const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 1.5;
 const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -8;
 const CALIBRATION_NOTIONAL_MULTIPLIER = 0.2;
+const LOSING_MODE_TRIGGER_USD = -1;
+const SEVERE_LOSS_BLOCK_USD = -10;
 
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
@@ -502,7 +504,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const hasInactivity = (inactivityPositions ?? []).length === 0;
   const prolongedInactivity = (pilotInactivityPositions ?? []).length === 0;
-  const losingRecently = recentPnlUsd < 0;
+  const losingRecently = recentPnlUsd <= LOSING_MODE_TRIGGER_USD;
+  const severeLosing = recentPnlUsd <= SEVERE_LOSS_BLOCK_USD;
 
   let minNetEdgeBps = MIN_NET_EDGE_BPS;
   let minConfidence = MIN_CONFIDENCE;
@@ -515,9 +518,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   if (losingRecently) {
-    minNetEdgeBps += 2;
-    minConfidence += 0.04;
-    minXarbNetEdgeBps += 4;
+    minNetEdgeBps += 1;
+    minConfidence += 0.02;
+    minXarbNetEdgeBps += 1;
   }
 
   minNetEdgeBps = inRange(minNetEdgeBps, -2, 18);
@@ -549,16 +552,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .reduce((max, opp) => Math.max(max, Number((opp as OpportunityRow).net_edge_bps ?? 0)), Number.NEGATIVE_INFINITY);
   const regimeXarbEdgeBps = Number.isFinite(maxSeenXarbNetEdgeBps) ? maxSeenXarbNetEdgeBps : 0;
   const liveXarbThresholdBps =
-    hasInactivity && !losingRecently
+    hasInactivity
       ? Math.max(
           0,
           Math.min(
             LIVE_XARB_ENTRY_FLOOR_BPS,
-            Math.max(minXarbNetEdgeBps, regimeXarbEdgeBps * 0.65)
+            Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.6)
           )
         )
-      : Math.max(2, minXarbNetEdgeBps);
-  const pilotModeActive = prolongedInactivity && !losingRecently;
+      : Math.max(1, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.7)));
+  const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();
   for (const pos of openPositions ?? []) {
