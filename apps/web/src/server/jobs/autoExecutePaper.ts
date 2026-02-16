@@ -27,7 +27,8 @@ const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
-const LOOKBACK_HOURS = 6;
+const BASE_LOOKBACK_HOURS = 6;
+const WIDE_LOOKBACK_HOURS = 24;
 const MIN_NET_EDGE_BPS = 12;
 const MIN_CONFIDENCE = 0.6;
 const MAX_BREAK_EVEN_HOURS = 24;
@@ -150,6 +151,8 @@ type AutoExecuteResult = {
     max_seen_xarb_net_edge_bps: number;
     live_xarb_entry_floor_bps: number;
     live_xarb_dynamic_threshold_bps: number;
+    lookback_hours_used: number;
+    regime_xarb_edge_p70_bps: number;
     pilot_mode_active: boolean;
     inactivity_mode: boolean;
     low_activity_mode: boolean;
@@ -348,6 +351,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: 0,
+    lookback_hours_used: BASE_LOOKBACK_HOURS,
+    regime_xarb_edge_p70_bps: 0,
     pilot_mode_active: false,
     inactivity_mode: false,
     low_activity_mode: false,
@@ -551,13 +556,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     prefilterReasons[reason] = (prefilterReasons[reason] ?? 0) + 1;
   };
 
-  const sinceOpps = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+  const lookbackHours = lowActivity || losingRecently ? WIDE_LOOKBACK_HOURS : BASE_LOOKBACK_HOURS;
+  const sinceOpps = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
     .from("opportunities")
     .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details, status")
     .gte("ts", sinceOpps)
     .order("ts", { ascending: false })
-    .limit(80);
+    .limit(240);
 
   if (oppError) {
     throw new Error(oppError.message);
@@ -569,22 +575,33 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const maxSeenXarbNetEdgeBps = (opportunities ?? [])
     .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
     .reduce((max, opp) => Math.max(max, Number((opp as OpportunityRow).net_edge_bps ?? 0)), Number.NEGATIVE_INFINITY);
+  const xarbEdgesSorted = (opportunities ?? [])
+    .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
+    .map((opp) => Number((opp as OpportunityRow).net_edge_bps ?? 0))
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  const regimeXarbEdgeP70 =
+    xarbEdgesSorted.length > 0
+      ? xarbEdgesSorted[Math.min(xarbEdgesSorted.length - 1, Math.floor(xarbEdgesSorted.length * 0.7))]
+      : 0;
   const regimeXarbEdgeBps = Number.isFinite(maxSeenXarbNetEdgeBps) ? maxSeenXarbNetEdgeBps : 0;
   if (regimeXarbEdgeBps > 0) {
     // Adapt base thresholds to current market regime instead of fixed hard gates.
     minNetEdgeBps = Math.min(minNetEdgeBps, Math.max(-1, regimeXarbEdgeBps * 0.4));
     minXarbNetEdgeBps = Math.min(minXarbNetEdgeBps, Math.max(0, regimeXarbEdgeBps * 0.55));
   }
+  const regimeAnchor = Math.max(regimeXarbEdgeP70, regimeXarbEdgeBps * 0.35);
+  const losingPenalty = losingRecently ? 0.5 : 0;
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
       ? Math.max(
           -0.25,
           Math.min(
             LIVE_XARB_ENTRY_FLOOR_BPS,
-            Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.6)
+            Math.max(minXarbNetEdgeBps - 1, regimeAnchor) + losingPenalty
           )
         )
-      : Math.max(0.5, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.7)));
+      : Math.max(0.5, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 1.1) + losingPenalty));
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();
@@ -743,6 +760,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
+    lookback_hours_used: lookbackHours,
+    regime_xarb_edge_p70_bps: Number(regimeXarbEdgeP70.toFixed(4)),
     pilot_mode_active: pilotModeActive,
     inactivity_mode: hasInactivity,
     low_activity_mode: lowActivity,
@@ -888,7 +907,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const fundingDailyBps = Number(
         (details as Record<string, unknown>).funding_daily_bps ?? 0
       );
-      const expectedHoldingBps = fundingDailyBps * (LOOKBACK_HOURS / 24);
+      const expectedHoldingBps = fundingDailyBps * (lookbackHours / 24);
       const liveBasisBps = ((snapshot.perp_bid - snapshot.spot_ask) / snapshot.spot_ask) * 10000;
       const liveNetEdgeBps =
         liveBasisBps + expectedHoldingBps - LIVE_CARRY_TOTAL_COSTS_BPS - LIVE_CARRY_BUFFER_BPS;
