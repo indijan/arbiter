@@ -27,9 +27,9 @@ const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
-const LOOKBACK_HOURS = 2;
+const LOOKBACK_HOURS = 6;
 const MIN_NET_EDGE_BPS = 12;
-const MIN_CONFIDENCE = 0.66;
+const MIN_CONFIDENCE = 0.6;
 const MAX_BREAK_EVEN_HOURS = 24;
 const MIN_CARRY_FUNDING_DAILY_BPS = 4;
 const MIN_XARB_NET_EDGE_BPS = 16;
@@ -46,8 +46,8 @@ const PILOT_INACTIVITY_HOURS = 24;
 const PILOT_MIN_LIVE_GROSS_EDGE_BPS = -0.5;
 const PILOT_MIN_LIVE_NET_EDGE_BPS = -6;
 const PILOT_NOTIONAL_MULTIPLIER = 0.25;
-const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 1.5;
-const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -8;
+const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 0.1;
+const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -12;
 const CALIBRATION_NOTIONAL_MULTIPLIER = 0.2;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
@@ -576,15 +576,15 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minXarbNetEdgeBps = Math.min(minXarbNetEdgeBps, Math.max(0, regimeXarbEdgeBps * 0.55));
   }
   const liveXarbThresholdBps =
-    hasInactivity
+    hasInactivity || lowActivity
       ? Math.max(
-          0,
+          -0.25,
           Math.min(
             LIVE_XARB_ENTRY_FLOOR_BPS,
             Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.6)
           )
         )
-      : Math.max(1, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.7)));
+      : Math.max(0.5, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeXarbEdgeBps * 0.7)));
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();
@@ -1072,7 +1072,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         liveGrossEdgeBps >= PILOT_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= PILOT_MIN_LIVE_NET_EDGE_BPS;
       const canCalibrationOpen =
-        hasInactivity &&
+        (hasInactivity || lowActivity) &&
         !losingRecently &&
         liveGrossEdgeBps >= CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
