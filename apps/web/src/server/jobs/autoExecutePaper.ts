@@ -519,7 +519,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }, 0);
 
   const hasInactivity = (inactivityPositions ?? []).length === 0;
-  const lowActivity = (lowActivityPositions ?? []).length <= 1;
+  const lowActivity =
+    (lowActivityPositions ?? []).length <= 1 ||
+    (recentPositions ?? []).length <= 1;
   const prolongedInactivity = (pilotInactivityPositions ?? []).length === 0;
   const losingRecently = recentPnlUsd <= LOSING_MODE_TRIGGER_USD;
   const severeLosing = recentPnlUsd <= SEVERE_LOSS_BLOCK_USD;
@@ -682,7 +684,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
       const typeConfidenceMin =
         typed.type === "xarb_spot"
-          ? Math.max(0.56, minConfidence - 0.04)
+          ? Math.max(0.54, minConfidence - 0.08)
           : typed.type === "tri_arb"
             ? Math.max(0.54, minConfidence - 0.08)
             : minConfidence;
