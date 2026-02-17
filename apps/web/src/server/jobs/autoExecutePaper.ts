@@ -29,6 +29,8 @@ const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
 const BASE_LOOKBACK_HOURS = 6;
 const WIDE_LOOKBACK_HOURS = 24;
+const XARB_REGIME_RECENT_HOURS = 2;
+const XARB_MAX_SIGNAL_AGE_HOURS = 3;
 const MIN_NET_EDGE_BPS = 12;
 const MIN_CONFIDENCE = 0.6;
 const MAX_BREAK_EVEN_HOURS = 24;
@@ -580,9 +582,22 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .map((opp) => Number((opp as OpportunityRow).net_edge_bps ?? 0))
     .filter((v) => Number.isFinite(v))
     .sort((a, b) => a - b);
+  const recentCutoffMs = Date.now() - XARB_REGIME_RECENT_HOURS * 60 * 60 * 1000;
+  const recentXarbEdgesSorted = (opportunities ?? [])
+    .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
+    .filter((opp) => Date.parse((opp as OpportunityRow).ts) >= recentCutoffMs)
+    .map((opp) => Number((opp as OpportunityRow).net_edge_bps ?? 0))
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
   const regimeXarbEdgeP70 =
     xarbEdgesSorted.length > 0
       ? xarbEdgesSorted[Math.min(xarbEdgesSorted.length - 1, Math.floor(xarbEdgesSorted.length * 0.7))]
+      : 0;
+  const regimeXarbEdgeRecentP60 =
+    recentXarbEdgesSorted.length > 0
+      ? recentXarbEdgesSorted[
+          Math.min(recentXarbEdgesSorted.length - 1, Math.floor(recentXarbEdgesSorted.length * 0.6))
+        ]
       : 0;
   const regimeXarbEdgeBps = Number.isFinite(maxSeenXarbNetEdgeBps) ? maxSeenXarbNetEdgeBps : 0;
   if (regimeXarbEdgeBps > 0) {
@@ -590,18 +605,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minNetEdgeBps = Math.min(minNetEdgeBps, Math.max(-1, regimeXarbEdgeBps * 0.4));
     minXarbNetEdgeBps = Math.min(minXarbNetEdgeBps, Math.max(0, regimeXarbEdgeBps * 0.55));
   }
-  const regimeAnchor = Math.max(regimeXarbEdgeP70, regimeXarbEdgeBps * 0.35);
+  const regimeAnchor = Math.max(
+    regimeXarbEdgeRecentP60,
+    regimeXarbEdgeP70 * 0.7,
+    regimeXarbEdgeBps * 0.2
+  );
   const losingPenalty = losingRecently ? 0.5 : 0;
+  const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
-      ? Math.max(
-          -0.25,
-          Math.min(
-            LIVE_XARB_ENTRY_FLOOR_BPS,
-            Math.max(minXarbNetEdgeBps - 1, regimeAnchor) + losingPenalty
-          )
-        )
-      : Math.max(0.5, Math.min(3, Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 1.1) + losingPenalty));
+      ? Math.max(0.75, Math.min(2.4, baseLiveThreshold + losingPenalty))
+      : Math.max(1, Math.min(2.8, baseLiveThreshold + losingPenalty));
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();
@@ -725,6 +739,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (typed.type === "xarb_spot" && netEdge < minXarbNetEdgeBps) {
         markPrefilter("xarb_below_min_edge");
         return false;
+      }
+      if (typed.type === "xarb_spot") {
+        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
+        if (!Number.isFinite(ageHours) || ageHours > XARB_MAX_SIGNAL_AGE_HOURS) {
+          markPrefilter("stale_xarb_signal");
+          return false;
+        }
       }
       return true;
     })
