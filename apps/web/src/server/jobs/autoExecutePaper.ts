@@ -614,8 +614,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
-      ? Math.max(0.75, Math.min(2.4, baseLiveThreshold + losingPenalty))
-      : Math.max(1, Math.min(2.8, baseLiveThreshold + losingPenalty));
+      ? Math.max(0.6, Math.min(2.1, baseLiveThreshold + losingPenalty))
+      : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();

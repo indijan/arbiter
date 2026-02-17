@@ -20,8 +20,9 @@ const HOLDING_HOURS = 24;
 const COSTS_BPS_XARB = {
   fee_bps_total: 6,
   slippage_bps_total: 4,
-  transfer_buffer_bps: 8
+  transfer_buffer_bps: 0
 };
+const XARB_EDGE_FORCE_CLOSE_BPS = -1.2;
 
 const KRAKEN_PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
@@ -529,7 +530,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
         agedEnough &&
         (
           shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_XARB, SL_PCT_XARB) ||
-          net_edge_bps < 0
+          net_edge_bps < XARB_EDGE_FORCE_CLOSE_BPS
         );
 
       if (!shouldClose) {
