@@ -24,6 +24,104 @@ async function runJob<T>(fn: () => Promise<T>): Promise<JobResult<T>> {
   }
 }
 
+type AutoOpenBucket = "normal" | "calibration" | "recovery" | "pilot";
+
+type AutoExpectancySnapshot = {
+  window_hours: number;
+  total: {
+    closed_count: number;
+    pnl_sum_usd: number;
+    expectancy_usd: number;
+    win_rate: number;
+  };
+  by_open_type: Record<
+    AutoOpenBucket,
+    {
+      closed_count: number;
+      pnl_sum_usd: number;
+      expectancy_usd: number;
+      win_rate: number;
+    }
+  >;
+};
+
+function pickAutoOpenType(meta: Record<string, unknown>): AutoOpenBucket {
+  if (meta.pilot_open === true) return "pilot";
+  if (meta.recovery_open === true) return "recovery";
+  if (meta.calibration_open === true) return "calibration";
+  return "normal";
+}
+
+function buildBucketStats(pnls: number[]) {
+  const closedCount = pnls.length;
+  const pnlSum = pnls.reduce((sum, v) => sum + v, 0);
+  const wins = pnls.filter((v) => v > 0).length;
+  return {
+    closed_count: closedCount,
+    pnl_sum_usd: Number(pnlSum.toFixed(4)),
+    expectancy_usd: Number((closedCount > 0 ? pnlSum / closedCount : 0).toFixed(4)),
+    win_rate: Number((closedCount > 0 ? wins / closedCount : 0).toFixed(4))
+  };
+}
+
+async function computeAutoExpectancy24h() {
+  const adminSupabase = createAdminSupabase();
+  if (!adminSupabase) {
+    throw new Error("Missing service role key.");
+  }
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await adminSupabase
+    .from("positions")
+    .select("realized_pnl_usd, meta")
+    .eq("status", "closed")
+    .gte("exit_ts", since)
+    .not("realized_pnl_usd", "is", null)
+    .limit(1000);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const bucketPnls: Record<AutoOpenBucket, number[]> = {
+    normal: [],
+    calibration: [],
+    recovery: [],
+    pilot: []
+  };
+
+  for (const row of data ?? []) {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    if (meta.auto_execute !== true) {
+      continue;
+    }
+    const pnl = Number(row.realized_pnl_usd ?? 0);
+    if (!Number.isFinite(pnl)) {
+      continue;
+    }
+    const bucket = pickAutoOpenType(meta);
+    bucketPnls[bucket].push(pnl);
+  }
+
+  const allPnls = [
+    ...bucketPnls.normal,
+    ...bucketPnls.calibration,
+    ...bucketPnls.recovery,
+    ...bucketPnls.pilot
+  ];
+
+  return {
+    window_hours: 24,
+    total: buildBucketStats(allPnls),
+    by_open_type: {
+      normal: buildBucketStats(bucketPnls.normal),
+      calibration: buildBucketStats(bucketPnls.calibration),
+      recovery: buildBucketStats(bucketPnls.recovery),
+      pilot: buildBucketStats(bucketPnls.pilot)
+    }
+  } satisfies AutoExpectancySnapshot;
+}
+
 async function handleTick(request: Request) {
   const expected = process.env.CRON_SECRET;
   const headerSecret = request.headers.get("x-cron-secret");
@@ -48,6 +146,7 @@ async function handleTick(request: Request) {
   const autoResult = await runJob(() => autoExecutePaper());
   const closeResult = await runJob(() => autoClosePaper());
   const pnlRows = await runJob(() => computeDailyPnl());
+  const autoExpectancy = await runJob(() => computeAutoExpectancy24h());
 
   const ingestErrors: string[] = [];
   if (ingestBinanceResult.ok) {
@@ -72,6 +171,7 @@ async function handleTick(request: Request) {
   if (!autoResult.ok) jobErrors.push(`auto_execute_failed: ${autoResult.error}`);
   if (!closeResult.ok) jobErrors.push(`auto_close_failed: ${closeResult.error}`);
   if (!pnlRows.ok) jobErrors.push(`compute_pnl_failed: ${pnlRows.error}`);
+  if (!autoExpectancy.ok) jobErrors.push(`auto_expectancy_failed: ${autoExpectancy.error}`);
 
   const autoReasons = autoResult.ok ? autoResult.data.reasons : [];
   const autoReasonCounts = autoReasons.reduce((acc, item) => {
@@ -116,6 +216,7 @@ async function handleTick(request: Request) {
               skipped: autoResult.data.skipped,
               reasons_top: autoTopReasons,
               diagnostics: autoResult.data.diagnostics,
+              expectancy_24h: autoExpectancy.ok ? autoExpectancy.data : null,
               llm_used: autoResult.data.llm_used,
               llm_remaining: autoResult.data.llm_remaining
             }
@@ -125,6 +226,7 @@ async function handleTick(request: Request) {
               skipped: 0,
               reasons_top: [],
               diagnostics: null,
+              expectancy_24h: autoExpectancy.ok ? autoExpectancy.data : null,
               llm_used: 0,
               llm_remaining: 0
             },
@@ -179,6 +281,7 @@ async function handleTick(request: Request) {
             skipped: autoResult.data.skipped,
             reasons: autoResult.data.reasons,
             diagnostics: autoResult.data.diagnostics,
+            expectancy_24h: autoExpectancy.ok ? autoExpectancy.data : null,
             llm_used: autoResult.data.llm_used,
             llm_remaining: autoResult.data.llm_remaining
           }
@@ -188,6 +291,7 @@ async function handleTick(request: Request) {
             skipped: 0,
             reasons: [],
             diagnostics: null,
+            expectancy_24h: autoExpectancy.ok ? autoExpectancy.data : null,
             llm_used: 0,
             llm_remaining: 0,
             error: autoResult.error
