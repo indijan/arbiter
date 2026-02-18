@@ -49,9 +49,9 @@ const PILOT_INACTIVITY_HOURS = 24;
 const PILOT_MIN_LIVE_GROSS_EDGE_BPS = -0.5;
 const PILOT_MIN_LIVE_NET_EDGE_BPS = -6;
 const PILOT_NOTIONAL_MULTIPLIER = 0.25;
-const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 0.1;
-const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -12;
-const CALIBRATION_NOTIONAL_MULTIPLIER = 0.2;
+const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 2.0;
+const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = 0.8;
+const CALIBRATION_NOTIONAL_MULTIPLIER = 0.08;
 const RECOVERY_MIN_LIVE_GROSS_EDGE_BPS = 1.2;
 const RECOVERY_MIN_LIVE_NET_EDGE_BPS = 0.8;
 const RECOVERY_NOTIONAL_MULTIPLIER = 0.1;
@@ -158,6 +158,9 @@ type AutoExecuteResult = {
     live_xarb_dynamic_threshold_bps: number;
     lookback_hours_used: number;
     regime_xarb_edge_p70_bps: number;
+    calibration_expectancy_24h_usd: number;
+    calibration_closed_24h: number;
+    calibration_disabled_by_expectancy: boolean;
     pilot_mode_active: boolean;
     inactivity_mode: boolean;
     low_activity_mode: boolean;
@@ -358,6 +361,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     live_xarb_dynamic_threshold_bps: 0,
     lookback_hours_used: BASE_LOOKBACK_HOURS,
     regime_xarb_edge_p70_bps: 0,
+    calibration_expectancy_24h_usd: 0,
+    calibration_closed_24h: 0,
+    calibration_disabled_by_expectancy: false,
     pilot_mode_active: false,
     inactivity_mode: false,
     low_activity_mode: false,
@@ -527,6 +533,32 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const recentPnlUsd = (recentClosed ?? []).reduce((sum, row) => {
     return sum + Number((row as { realized_pnl_usd?: number | null }).realized_pnl_usd ?? 0);
   }, 0);
+
+  const { data: recentCalibrationClosed, error: recentCalibrationClosedError } = await adminSupabase
+    .from("positions")
+    .select("realized_pnl_usd, meta")
+    .eq("user_id", userId)
+    .eq("status", "closed")
+    .gte("exit_ts", pnlSince)
+    .not("realized_pnl_usd", "is", null)
+    .limit(200);
+
+  if (recentCalibrationClosedError) {
+    throw new Error(recentCalibrationClosedError.message);
+  }
+
+  const calibrationPnls = (recentCalibrationClosed ?? [])
+    .filter((row) => {
+      const meta = (row.meta ?? {}) as Record<string, unknown>;
+      return meta.auto_execute === true && meta.calibration_open === true;
+    })
+    .map((row) => Number(row.realized_pnl_usd ?? 0))
+    .filter((v) => Number.isFinite(v));
+  const calibrationClosedCount = calibrationPnls.length;
+  const calibrationPnlSum = calibrationPnls.reduce((sum, v) => sum + v, 0);
+  const calibrationExpectancy = calibrationClosedCount > 0 ? calibrationPnlSum / calibrationClosedCount : 0;
+  const disableCalibrationByExpectancy =
+    calibrationClosedCount >= 4 && calibrationExpectancy < -0.02;
 
   const hasInactivity = (inactivityPositions ?? []).length === 0;
   const lowActivity =
@@ -786,6 +818,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
     lookback_hours_used: lookbackHours,
     regime_xarb_edge_p70_bps: Number(regimeXarbEdgeP70.toFixed(4)),
+    calibration_expectancy_24h_usd: Number(calibrationExpectancy.toFixed(4)),
+    calibration_closed_24h: calibrationClosedCount,
+    calibration_disabled_by_expectancy: disableCalibrationByExpectancy,
     pilot_mode_active: pilotModeActive,
     inactivity_mode: hasInactivity,
     low_activity_mode: lowActivity,
@@ -1117,6 +1152,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const canCalibrationOpen =
         (hasInactivity || lowActivity) &&
         !losingRecently &&
+        !disableCalibrationByExpectancy &&
         liveGrossEdgeBps >= CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
       const canRecoveryOpen =
