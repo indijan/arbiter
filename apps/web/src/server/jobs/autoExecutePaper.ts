@@ -52,6 +52,9 @@ const PILOT_NOTIONAL_MULTIPLIER = 0.25;
 const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 0.1;
 const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = -12;
 const CALIBRATION_NOTIONAL_MULTIPLIER = 0.2;
+const RECOVERY_MIN_LIVE_GROSS_EDGE_BPS = 1.2;
+const RECOVERY_MIN_LIVE_NET_EDGE_BPS = 0.8;
+const RECOVERY_NOTIONAL_MULTIPLIER = 0.1;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
 
@@ -1116,7 +1119,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !losingRecently &&
         liveGrossEdgeBps >= CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
-      const allowFallbackOpen = canPilotOpen || canCalibrationOpen;
+      const canRecoveryOpen =
+        hasInactivity &&
+        losingRecently &&
+        !severeLosing &&
+        liveGrossEdgeBps >= RECOVERY_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= RECOVERY_MIN_LIVE_NET_EDGE_BPS;
+      const allowFallbackOpen = canPilotOpen || canCalibrationOpen || canRecoveryOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
         if (!allowFallbackOpen) {
@@ -1129,7 +1138,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (allowFallbackOpen) {
         const fallbackMultiplier = canPilotOpen
           ? PILOT_NOTIONAL_MULTIPLIER
-          : CALIBRATION_NOTIONAL_MULTIPLIER;
+          : canRecoveryOpen
+            ? RECOVERY_NOTIONAL_MULTIPLIER
+            : CALIBRATION_NOTIONAL_MULTIPLIER;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
@@ -1177,6 +1188,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             notional_reason: derived.reason,
             auto_execute: true,
             pilot_open: canPilotOpen,
+            recovery_open: !canPilotOpen && canRecoveryOpen,
             calibration_open: !canPilotOpen && canCalibrationOpen,
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
