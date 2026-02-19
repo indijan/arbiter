@@ -31,6 +31,8 @@ const BASE_LOOKBACK_HOURS = 6;
 const WIDE_LOOKBACK_HOURS = 24;
 const XARB_REGIME_RECENT_HOURS = 2;
 const XARB_MAX_SIGNAL_AGE_HOURS = 3;
+const XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY = 8;
+const XARB_MAX_SIGNAL_AGE_HOURS_INACTIVITY = 12;
 const MIN_NET_EDGE_BPS = 12;
 const MIN_CONFIDENCE = 0.6;
 const MAX_BREAK_EVEN_HOURS = 24;
@@ -159,6 +161,7 @@ type AutoExecuteResult = {
     max_seen_xarb_net_edge_bps: number;
     live_xarb_entry_floor_bps: number;
     live_xarb_dynamic_threshold_bps: number;
+    xarb_max_signal_age_hours: number;
     lookback_hours_used: number;
     regime_xarb_edge_p70_bps: number;
     calibration_expectancy_24h_usd: number;
@@ -362,6 +365,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: 0,
+    xarb_max_signal_age_hours: XARB_MAX_SIGNAL_AGE_HOURS,
     lookback_hours_used: BASE_LOOKBACK_HOURS,
     regime_xarb_edge_p70_bps: 0,
     calibration_expectancy_24h_usd: 0,
@@ -587,6 +591,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     minXarbNetEdgeBps += 1;
   }
 
+  // In prolonged inactivity/pilot state, let live edge checks do the final gating.
+  if (hasInactivity && prolongedInactivity && !severeLosing) {
+    minXarbNetEdgeBps -= 1;
+  }
+
   minNetEdgeBps = inRange(minNetEdgeBps, -2, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
   minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, -2, 28);
@@ -650,6 +659,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   );
   const losingPenalty = losingRecently ? (disableCalibrationByExpectancy ? 0.25 : 0.5) : 0;
   const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
+  const xarbMaxSignalAgeHours = hasInactivity
+    ? XARB_MAX_SIGNAL_AGE_HOURS_INACTIVITY
+    : lowActivity
+      ? XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY
+      : XARB_MAX_SIGNAL_AGE_HOURS;
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
       ? Math.max(0.6, Math.min(2.1, baseLiveThreshold + losingPenalty))
@@ -780,7 +794,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
       if (typed.type === "xarb_spot") {
         const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
-        if (!Number.isFinite(ageHours) || ageHours > XARB_MAX_SIGNAL_AGE_HOURS) {
+        if (!Number.isFinite(ageHours) || ageHours > xarbMaxSignalAgeHours) {
           markPrefilter("stale_xarb_signal");
           return false;
         }
@@ -819,6 +833,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
     live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
+    xarb_max_signal_age_hours: xarbMaxSignalAgeHours,
     lookback_hours_used: lookbackHours,
     regime_xarb_edge_p70_bps: Number(regimeXarbEdgeP70.toFixed(4)),
     calibration_expectancy_24h_usd: Number(calibrationExpectancy.toFixed(4)),
