@@ -55,6 +55,9 @@ const CALIBRATION_NOTIONAL_MULTIPLIER = 0.08;
 const RECOVERY_MIN_LIVE_GROSS_EDGE_BPS = 1.2;
 const RECOVERY_MIN_LIVE_NET_EDGE_BPS = 0.8;
 const RECOVERY_NOTIONAL_MULTIPLIER = 0.1;
+const REENTRY_MIN_LIVE_GROSS_EDGE_BPS = 0.9;
+const REENTRY_MIN_LIVE_NET_EDGE_BPS = 0.4;
+const REENTRY_NOTIONAL_MULTIPLIER = 0.08;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
 
@@ -645,7 +648,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     regimeXarbEdgeP70 * 0.7,
     regimeXarbEdgeBps * 0.2
   );
-  const losingPenalty = losingRecently ? 0.5 : 0;
+  const losingPenalty = losingRecently ? (disableCalibrationByExpectancy ? 0.25 : 0.5) : 0;
   const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
@@ -1161,7 +1164,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !severeLosing &&
         liveGrossEdgeBps >= RECOVERY_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= RECOVERY_MIN_LIVE_NET_EDGE_BPS;
-      const allowFallbackOpen = canPilotOpen || canCalibrationOpen || canRecoveryOpen;
+      const canReentryOpen =
+        (hasInactivity || lowActivity) &&
+        !losingRecently &&
+        disableCalibrationByExpectancy &&
+        liveGrossEdgeBps >= REENTRY_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= REENTRY_MIN_LIVE_NET_EDGE_BPS;
+      const allowFallbackOpen = canPilotOpen || canCalibrationOpen || canRecoveryOpen || canReentryOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
         if (!allowFallbackOpen) {
@@ -1176,6 +1185,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           ? PILOT_NOTIONAL_MULTIPLIER
           : canRecoveryOpen
             ? RECOVERY_NOTIONAL_MULTIPLIER
+            : canReentryOpen
+              ? REENTRY_NOTIONAL_MULTIPLIER
             : CALIBRATION_NOTIONAL_MULTIPLIER;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
@@ -1225,6 +1236,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             auto_execute: true,
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
+            reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
             calibration_open: !canPilotOpen && canCalibrationOpen,
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),

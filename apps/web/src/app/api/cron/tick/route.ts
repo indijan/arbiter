@@ -24,7 +24,7 @@ async function runJob<T>(fn: () => Promise<T>): Promise<JobResult<T>> {
   }
 }
 
-type AutoOpenBucket = "normal" | "calibration" | "recovery" | "pilot";
+type AutoOpenBucket = "normal" | "calibration" | "recovery" | "reentry" | "pilot";
 
 type AutoExpectancySnapshot = {
   window_hours: number;
@@ -48,6 +48,7 @@ type AutoExpectancySnapshot = {
 function pickAutoOpenType(meta: Record<string, unknown>): AutoOpenBucket {
   if (meta.pilot_open === true) return "pilot";
   if (meta.recovery_open === true) return "recovery";
+  if (meta.reentry_open === true) return "reentry";
   if (meta.calibration_open === true) return "calibration";
   return "normal";
 }
@@ -87,6 +88,7 @@ async function computeAutoExpectancy24h() {
     normal: [],
     calibration: [],
     recovery: [],
+    reentry: [],
     pilot: []
   };
 
@@ -107,6 +109,7 @@ async function computeAutoExpectancy24h() {
     ...bucketPnls.normal,
     ...bucketPnls.calibration,
     ...bucketPnls.recovery,
+    ...bucketPnls.reentry,
     ...bucketPnls.pilot
   ];
 
@@ -117,6 +120,7 @@ async function computeAutoExpectancy24h() {
       normal: buildBucketStats(bucketPnls.normal),
       calibration: buildBucketStats(bucketPnls.calibration),
       recovery: buildBucketStats(bucketPnls.recovery),
+      reentry: buildBucketStats(bucketPnls.reentry),
       pilot: buildBucketStats(bucketPnls.pilot)
     }
   } satisfies AutoExpectancySnapshot;
