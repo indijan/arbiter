@@ -46,10 +46,10 @@ const LIVE_CARRY_BUFFER_BPS = 3;
 const LIVE_XARB_TOTAL_COSTS_BPS = 10;
 const LIVE_XARB_BUFFER_BPS = 1;
 const TRI_MIN_PROFIT_BPS = 6;
-const LIVE_XARB_ENTRY_FLOOR_BPS = 3;
+const LIVE_XARB_ENTRY_FLOOR_BPS = 2.0;
 const PILOT_INACTIVITY_HOURS = 24;
 const PILOT_MIN_LIVE_GROSS_EDGE_BPS = -0.5;
-const PILOT_MIN_LIVE_NET_EDGE_BPS = -6;
+const PILOT_MIN_LIVE_NET_EDGE_BPS = 0.8;
 const PILOT_NOTIONAL_MULTIPLIER = 0.25;
 const CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS = 2.0;
 const CALIBRATION_MIN_LIVE_NET_EDGE_BPS = 0.8;
@@ -60,6 +60,9 @@ const RECOVERY_NOTIONAL_MULTIPLIER = 0.1;
 const REENTRY_MIN_LIVE_GROSS_EDGE_BPS = 0.9;
 const REENTRY_MIN_LIVE_NET_EDGE_BPS = 0.4;
 const REENTRY_NOTIONAL_MULTIPLIER = 0.08;
+const INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS = 0.8;
+const INACTIVITY_MIN_LIVE_NET_EDGE_BPS = 0.8;
+const INACTIVITY_NOTIONAL_MULTIPLIER = 0.06;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
 
@@ -599,6 +602,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   minNetEdgeBps = inRange(minNetEdgeBps, -2, 18);
   minConfidence = inRange(minConfidence, 0.56, 0.8);
   minXarbNetEdgeBps = inRange(minXarbNetEdgeBps, -2, 28);
+  if (hasInactivity) {
+    minXarbNetEdgeBps = Math.min(minXarbNetEdgeBps, 0.5);
+  }
 
   const prefilterReasons: Record<string, number> = {};
   const markPrefilter = (reason: string) => {
@@ -666,7 +672,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       : XARB_MAX_SIGNAL_AGE_HOURS;
   const liveXarbThresholdBps =
     hasInactivity || lowActivity
-      ? Math.max(0.6, Math.min(2.1, baseLiveThreshold + losingPenalty))
+      ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
       : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
@@ -1185,7 +1191,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         disableCalibrationByExpectancy &&
         liveGrossEdgeBps >= REENTRY_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= REENTRY_MIN_LIVE_NET_EDGE_BPS;
-      const allowFallbackOpen = canPilotOpen || canCalibrationOpen || canRecoveryOpen || canReentryOpen;
+      const canInactivityOpen =
+        hasInactivity &&
+        !losingRecently &&
+        !severeLosing &&
+        liveGrossEdgeBps >= INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= INACTIVITY_MIN_LIVE_NET_EDGE_BPS;
+      const allowFallbackOpen =
+        canPilotOpen || canCalibrationOpen || canRecoveryOpen || canReentryOpen || canInactivityOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
         if (!allowFallbackOpen) {
@@ -1202,6 +1215,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             ? RECOVERY_NOTIONAL_MULTIPLIER
             : canReentryOpen
               ? REENTRY_NOTIONAL_MULTIPLIER
+              : canInactivityOpen
+                ? INACTIVITY_NOTIONAL_MULTIPLIER
             : CALIBRATION_NOTIONAL_MULTIPLIER;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
@@ -1252,6 +1267,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
+            inactivity_open:
+              !canPilotOpen && !canRecoveryOpen && !canReentryOpen && canInactivityOpen,
             calibration_open: !canPilotOpen && canCalibrationOpen,
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
