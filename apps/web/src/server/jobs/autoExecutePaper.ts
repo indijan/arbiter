@@ -63,6 +63,9 @@ const REENTRY_NOTIONAL_MULTIPLIER = 0.08;
 const INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS = 0.8;
 const INACTIVITY_MIN_LIVE_NET_EDGE_BPS = 0.4;
 const INACTIVITY_NOTIONAL_MULTIPLIER = 0.06;
+const STARVATION_MIN_LIVE_GROSS_EDGE_BPS = 0.4;
+const STARVATION_MIN_LIVE_NET_EDGE_BPS = 0.1;
+const STARVATION_NOTIONAL_MULTIPLIER = 0.04;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
 
@@ -665,13 +668,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   );
   const losingPenalty = losingRecently ? (disableCalibrationByExpectancy ? 0.25 : 0.5) : 0;
   const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
+  const starvationMode = hasInactivity && prolongedInactivity && !losingRecently && !severeLosing;
   const xarbMaxSignalAgeHours = hasInactivity
     ? XARB_MAX_SIGNAL_AGE_HOURS_INACTIVITY
     : lowActivity
       ? XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY
       : XARB_MAX_SIGNAL_AGE_HOURS;
   const liveXarbThresholdBps =
-    hasInactivity || lowActivity
+    starvationMode
+      ? Math.max(0.1, Math.min(1.2, baseLiveThreshold * 0.35))
+      : hasInactivity || lowActivity
       ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
       : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
   const pilotModeActive = prolongedInactivity && !severeLosing;
@@ -1197,8 +1203,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !severeLosing &&
         liveGrossEdgeBps >= INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS &&
         liveNetEdgeBps >= INACTIVITY_MIN_LIVE_NET_EDGE_BPS;
+      const canStarvationOpen =
+        starvationMode &&
+        liveGrossEdgeBps >= STARVATION_MIN_LIVE_GROSS_EDGE_BPS &&
+        liveNetEdgeBps >= STARVATION_MIN_LIVE_NET_EDGE_BPS;
       const allowFallbackOpen =
-        canPilotOpen || canCalibrationOpen || canRecoveryOpen || canReentryOpen || canInactivityOpen;
+        canPilotOpen ||
+        canCalibrationOpen ||
+        canRecoveryOpen ||
+        canReentryOpen ||
+        canInactivityOpen ||
+        canStarvationOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
         if (!allowFallbackOpen) {
@@ -1217,6 +1232,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
               ? REENTRY_NOTIONAL_MULTIPLIER
               : canInactivityOpen
                 ? INACTIVITY_NOTIONAL_MULTIPLIER
+                : canStarvationOpen
+                  ? STARVATION_NOTIONAL_MULTIPLIER
             : CALIBRATION_NOTIONAL_MULTIPLIER;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
@@ -1269,6 +1286,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
             inactivity_open:
               !canPilotOpen && !canRecoveryOpen && !canReentryOpen && canInactivityOpen,
+            starvation_open:
+              !canPilotOpen &&
+              !canRecoveryOpen &&
+              !canReentryOpen &&
+              !canInactivityOpen &&
+              canStarvationOpen,
             calibration_open: !canPilotOpen && canCalibrationOpen,
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
