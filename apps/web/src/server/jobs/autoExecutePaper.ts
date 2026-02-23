@@ -21,7 +21,7 @@ const MAX_OPEN_POSITIONS = 10;
 const MAX_OPEN_PER_SYMBOL = 2;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
-const MAX_EXECUTE_PER_TICK = 1;
+const MAX_EXECUTE_PER_TICK = 2;
 const MAX_ATTEMPTS_PER_TICK = 5;
 const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
@@ -63,8 +63,8 @@ const REENTRY_NOTIONAL_MULTIPLIER = 0.08;
 const INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS = 0.8;
 const INACTIVITY_MIN_LIVE_NET_EDGE_BPS = 0.4;
 const INACTIVITY_NOTIONAL_MULTIPLIER = 0.06;
-const STARVATION_MIN_LIVE_GROSS_EDGE_BPS = 0.4;
-const STARVATION_MIN_LIVE_NET_EDGE_BPS = 0.1;
+const STARVATION_MIN_LIVE_GROSS_EDGE_BPS = 0.2;
+const STARVATION_MIN_LIVE_NET_EDGE_BPS = 0.0;
 const STARVATION_NOTIONAL_MULTIPLIER = 0.04;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
@@ -676,7 +676,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       : XARB_MAX_SIGNAL_AGE_HOURS;
   const liveXarbThresholdBps =
     starvationMode
-      ? Math.max(0.1, Math.min(1.2, baseLiveThreshold * 0.35))
+      ? Math.max(0.0, Math.min(0.8, baseLiveThreshold * 0.25))
       : hasInactivity || lowActivity
       ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
       : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
