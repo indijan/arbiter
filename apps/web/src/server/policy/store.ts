@@ -71,10 +71,16 @@ export async function loadEffectivePolicy(
   let selected: RolloutRow | null = active ?? null;
   let canarySelected = false;
   if (canary) {
-    const bucket = hashBucket(`${userId}:${canary.id}`);
-    if (bucket < Number(canary.canary_ratio ?? 0)) {
+    if (!active) {
+      // No active rollout yet: canary must be the effective policy.
       selected = canary;
       canarySelected = true;
+    } else {
+      const bucket = hashBucket(`${userId}:${canary.id}`);
+      if (bucket < Number(canary.canary_ratio ?? 0)) {
+        selected = canary;
+        canarySelected = true;
+      }
     }
   }
 
