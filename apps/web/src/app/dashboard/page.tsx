@@ -5,6 +5,7 @@ import DetectSummaryPanel from "@/components/DetectSummaryPanel";
 import DevTickButton from "@/components/DevTickButton";
 import ClosePositionButton from "@/components/ClosePositionButton";
 import CloseAllButton from "@/components/CloseAllButton";
+import PolicyControllerPanel from "@/components/PolicyControllerPanel";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export default async function DashboardPage() {
@@ -100,6 +101,41 @@ export default async function DashboardPage() {
     ? positionsError.message
     : null;
 
+  const { data: latestTick } = await supabase
+    .from("system_ticks")
+    .select("detect_summary")
+    .order("ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const diagnostics = ((latestTick?.detect_summary as Record<string, unknown> | null)?.auto_execute as
+    | Record<string, unknown>
+    | null)?.diagnostics as Record<string, unknown> | null;
+
+  const { data: policyRollouts, error: policyRolloutsError } = await supabase
+    .from("strategy_policy_rollouts")
+    .select("id, status, canary_ratio, start_ts, end_ts")
+    .order("start_ts", { ascending: false })
+    .limit(10);
+
+  const { data: policyProposals, error: policyProposalsError } = await supabase
+    .from("strategy_policy_proposals")
+    .select("id, created_at, model, decision, decision_reason")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  const { data: policyEvents, error: policyEventsError } = await supabase
+    .from("strategy_policy_events")
+    .select("id, ts, event_type")
+    .order("ts", { ascending: false })
+    .limit(15);
+
+  const policyError =
+    policyRolloutsError?.message ??
+    policyProposalsError?.message ??
+    policyEventsError?.message ??
+    null;
+
   return (
     <div className="min-h-screen px-6 py-16">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -129,6 +165,13 @@ export default async function DashboardPage() {
         </header>
 
         <DetectSummaryPanel />
+        <PolicyControllerPanel
+          diagnostics={diagnostics}
+          proposals={policyProposals ?? []}
+          rollouts={policyRollouts ?? []}
+          events={policyEvents ?? []}
+          error={policyError}
+        />
 
         <section className="card">
           <h2 className="text-xl font-semibold">Market snapshots</h2>

@@ -9,6 +9,8 @@ import {
   variantForOpportunity
 } from "@/server/ai/opportunityScoring";
 import { scoreWithOpenAI } from "@/server/ai/openaiRanker";
+import { loadEffectivePolicy } from "@/server/policy/store";
+import { runStrategyPolicyController } from "@/server/policy/controller";
 
 const DEFAULT_NOTIONAL = 100;
 const DEFAULT_MIN_NOTIONAL = 100;
@@ -66,6 +68,16 @@ const INACTIVITY_NOTIONAL_MULTIPLIER = 0.06;
 const STARVATION_MIN_LIVE_GROSS_EDGE_BPS = 0.2;
 const STARVATION_MIN_LIVE_NET_EDGE_BPS = 0.0;
 const STARVATION_NOTIONAL_MULTIPLIER = 0.04;
+const CONTROLLER_LOOKBACK_HOURS = 3;
+const CONTROLLER_MIN_OPENINGS = 2;
+const CONTROLLER_LONG_LOOKBACK_DAYS = 30;
+const CONTROLLER_SHORT_WEIGHT = 0.65;
+const CONTROLLER_LONG_WEIGHT = 0.35;
+const CONTROLLER_MIN_CLOSED_SHORT = 2;
+const CONTROLLER_MIN_CLOSED_LONG = 5;
+const CONTROLLER_EMERGENCY_MIN_LIVE_GROSS_EDGE_BPS = 0.0;
+const CONTROLLER_EMERGENCY_MIN_LIVE_NET_EDGE_BPS = 0.05;
+const CONTROLLER_EMERGENCY_NOTIONAL_MULTIPLIER = 0.02;
 const LOSING_MODE_TRIGGER_USD = -1;
 const SEVERE_LOSS_BLOCK_USD = -10;
 
@@ -175,6 +187,20 @@ type AutoExecuteResult = {
     calibration_disabled_by_expectancy: boolean;
     pilot_mode_active: boolean;
     inactivity_mode: boolean;
+    emergency_mode: boolean;
+    auto_opens_6h: number;
+    auto_pnl_6h_usd: number;
+    auto_opens_30d: number;
+    auto_pnl_30d_usd: number;
+    controller_window_hours: number;
+    controller_long_window_days: number;
+    strategy_blocked_types: string[];
+    strategy_type_expectancy: Record<string, number>;
+    policy_rollout_id: string | null;
+    policy_config_id: string | null;
+    policy_rollout_status: string;
+    policy_is_canary: boolean;
+    policy_controller_action: string;
     low_activity_mode: boolean;
     losing_mode: boolean;
     prefilter_reasons: Record<string, number>;
@@ -379,6 +405,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     calibration_disabled_by_expectancy: false,
     pilot_mode_active: false,
     inactivity_mode: false,
+    emergency_mode: false,
+    auto_opens_6h: 0,
+    auto_pnl_6h_usd: 0,
+    auto_opens_30d: 0,
+    auto_pnl_30d_usd: 0,
+    controller_window_hours: CONTROLLER_LOOKBACK_HOURS,
+    controller_long_window_days: CONTROLLER_LONG_LOOKBACK_DAYS,
+    strategy_blocked_types: [],
+    strategy_type_expectancy: {},
+    policy_rollout_id: null,
+    policy_config_id: null,
+    policy_rollout_status: "default",
+    policy_is_canary: false,
+    policy_controller_action: "none",
     low_activity_mode: false,
     losing_mode: false,
     prefilter_reasons: {}
@@ -444,6 +484,51 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const minNotional = Number(account.min_notional_usd ?? DEFAULT_MIN_NOTIONAL);
   const maxNotional = Number(account.max_notional_usd ?? DEFAULT_MAX_NOTIONAL);
 
+  let policyControllerAction = "none";
+  try {
+    const controllerResult = await runStrategyPolicyController(adminSupabase, userId);
+    policyControllerAction = controllerResult.action ?? (controllerResult.skipped ? "skipped" : "none");
+  } catch (err) {
+    policyControllerAction = "error";
+  }
+
+  const effectivePolicy = await loadEffectivePolicy(adminSupabase, userId);
+  const policy = effectivePolicy.policy;
+
+  const maxExecutePerTick = Math.max(1, Math.round(policy.max_execute_per_tick));
+  const maxAttemptsPerTick = Math.max(1, Math.round(policy.max_attempts_per_tick));
+  const liveXarbEntryFloorBps = policy.live_xarb_entry_floor_bps;
+  const liveXarbTotalCostsBps = policy.live_xarb_total_costs_bps;
+  const liveXarbBufferBps = policy.live_xarb_buffer_bps;
+  const pilotMinLiveGrossEdgeBps = policy.pilot_min_live_gross_edge_bps;
+  const pilotMinLiveNetEdgeBps = policy.pilot_min_live_net_edge_bps;
+  const pilotNotionalMultiplier = policy.pilot_notional_multiplier;
+  const calibrationMinLiveGrossEdgeBps = policy.calibration_min_live_gross_edge_bps;
+  const calibrationMinLiveNetEdgeBps = policy.calibration_min_live_net_edge_bps;
+  const calibrationNotionalMultiplier = policy.calibration_notional_multiplier;
+  const recoveryMinLiveGrossEdgeBps = policy.recovery_min_live_gross_edge_bps;
+  const recoveryMinLiveNetEdgeBps = policy.recovery_min_live_net_edge_bps;
+  const recoveryNotionalMultiplier = policy.recovery_notional_multiplier;
+  const reentryMinLiveGrossEdgeBps = policy.reentry_min_live_gross_edge_bps;
+  const reentryMinLiveNetEdgeBps = policy.reentry_min_live_net_edge_bps;
+  const reentryNotionalMultiplier = policy.reentry_notional_multiplier;
+  const inactivityMinLiveGrossEdgeBps = policy.inactivity_min_live_gross_edge_bps;
+  const inactivityMinLiveNetEdgeBps = policy.inactivity_min_live_net_edge_bps;
+  const inactivityNotionalMultiplier = policy.inactivity_notional_multiplier;
+  const starvationMinLiveGrossEdgeBps = policy.starvation_min_live_gross_edge_bps;
+  const starvationMinLiveNetEdgeBps = policy.starvation_min_live_net_edge_bps;
+  const starvationNotionalMultiplier = policy.starvation_notional_multiplier;
+  const controllerLookbackHours = policy.controller_lookback_hours;
+  const controllerMinOpenings = policy.controller_min_openings;
+  const controllerLongLookbackDays = policy.controller_long_lookback_days;
+  const controllerShortWeight = policy.controller_short_weight;
+  const controllerLongWeight = policy.controller_long_weight;
+  const controllerMinClosedShort = policy.controller_min_closed_short;
+  const controllerMinClosedLong = policy.controller_min_closed_long;
+  const controllerEmergencyMinLiveGrossEdgeBps = policy.controller_emergency_min_live_gross_edge_bps;
+  const controllerEmergencyMinLiveNetEdgeBps = policy.controller_emergency_min_live_net_edge_bps;
+  const controllerEmergencyNotionalMultiplier = policy.controller_emergency_notional_multiplier;
+
   const { data: openPositions, error: openError } = await adminSupabase
     .from("positions")
     .select("id, symbol")
@@ -488,6 +573,131 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       diagnostics: defaultDiagnostics
     };
   }
+
+  const controllerSince = new Date(
+    Date.now() - controllerLookbackHours * 60 * 60 * 1000
+  ).toISOString();
+  const controllerLongSince = new Date(
+    Date.now() - controllerLongLookbackDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+  const { data: recentAutoPositions, error: recentAutoError } = await adminSupabase
+    .from("positions")
+    .select("entry_ts, exit_ts, realized_pnl_usd, meta")
+    .eq("user_id", userId)
+    .gte("entry_ts", controllerSince)
+    .limit(300);
+
+  if (recentAutoError) {
+    throw new Error(recentAutoError.message);
+  }
+  const { data: longAutoPositions, error: longAutoError } = await adminSupabase
+    .from("positions")
+    .select("entry_ts, exit_ts, realized_pnl_usd, meta")
+    .eq("user_id", userId)
+    .gte("entry_ts", controllerLongSince)
+    .limit(2000);
+
+  if (longAutoError) {
+    throw new Error(longAutoError.message);
+  }
+
+  const autoRows = (recentAutoPositions ?? []).filter((row) => {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    return meta.auto_execute === true;
+  });
+  const autoRowsLong = (longAutoPositions ?? []).filter((row) => {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    return meta.auto_execute === true;
+  });
+  const autoOpens6h = autoRows.length;
+  const autoPnl6h = autoRows.reduce((sum, row) => {
+    if (!row.exit_ts) {
+      return sum;
+    }
+    return sum + Number(row.realized_pnl_usd ?? 0);
+  }, 0);
+  const autoPnl30d = autoRowsLong.reduce((sum, row) => {
+    if (!row.exit_ts) {
+      return sum;
+    }
+    return sum + Number(row.realized_pnl_usd ?? 0);
+  }, 0);
+
+  const closedAutoRows = autoRows.filter((row) => row.exit_ts);
+  type OpenTypeKey =
+    | "pilot"
+    | "calibration"
+    | "recovery"
+    | "reentry"
+    | "inactivity"
+    | "starvation"
+    | "emergency"
+    | "normal";
+  const typeStatsShort: Record<OpenTypeKey, { count: number; pnl: number }> = {
+    pilot: { count: 0, pnl: 0 },
+    calibration: { count: 0, pnl: 0 },
+    recovery: { count: 0, pnl: 0 },
+    reentry: { count: 0, pnl: 0 },
+    inactivity: { count: 0, pnl: 0 },
+    starvation: { count: 0, pnl: 0 },
+    emergency: { count: 0, pnl: 0 },
+    normal: { count: 0, pnl: 0 }
+  };
+  const typeStatsLong: Record<OpenTypeKey, { count: number; pnl: number }> = {
+    pilot: { count: 0, pnl: 0 },
+    calibration: { count: 0, pnl: 0 },
+    recovery: { count: 0, pnl: 0 },
+    reentry: { count: 0, pnl: 0 },
+    inactivity: { count: 0, pnl: 0 },
+    starvation: { count: 0, pnl: 0 },
+    emergency: { count: 0, pnl: 0 },
+    normal: { count: 0, pnl: 0 }
+  };
+  const rowOpenType = (meta: Record<string, unknown>): OpenTypeKey => {
+    if (meta.pilot_open === true) return "pilot";
+    if (meta.calibration_open === true) return "calibration";
+    if (meta.recovery_open === true) return "recovery";
+    if (meta.reentry_open === true) return "reentry";
+    if (meta.inactivity_open === true) return "inactivity";
+    if (meta.starvation_open === true) return "starvation";
+    if (meta.emergency_open === true) return "emergency";
+    return "normal";
+  };
+  for (const row of closedAutoRows) {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    const key = rowOpenType(meta);
+    typeStatsShort[key].count += 1;
+    typeStatsShort[key].pnl += Number(row.realized_pnl_usd ?? 0);
+  }
+  const closedAutoRowsLong = autoRowsLong.filter((row) => row.exit_ts);
+  for (const row of closedAutoRowsLong) {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    const key = rowOpenType(meta);
+    typeStatsLong[key].count += 1;
+    typeStatsLong[key].pnl += Number(row.realized_pnl_usd ?? 0);
+  }
+
+  const typeExpectancy: Record<string, number> = {};
+  const isTypeEnabled = (key: OpenTypeKey) => {
+    const short = typeStatsShort[key];
+    const long = typeStatsLong[key];
+    const shortReady = short.count >= controllerMinClosedShort;
+    const longReady = long.count >= controllerMinClosedLong;
+    const shortExp = shortReady ? short.pnl / short.count : null;
+    const longExp = longReady ? long.pnl / long.count : null;
+
+    if (shortExp === null && longExp === null) {
+      typeExpectancy[key] = 0;
+      return true;
+    }
+
+    const weighted =
+      (shortExp ?? 0) * controllerShortWeight +
+      (longExp ?? 0) * controllerLongWeight;
+    typeExpectancy[key] = Number(weighted.toFixed(4));
+    return weighted > 0;
+  };
+  const blockedTypes = (Object.keys(typeStatsShort) as OpenTypeKey[]).filter((k) => !isTypeEnabled(k));
 
   const inactivitySince = new Date(
     Date.now() - INACTIVITY_LOOKBACK_HOURS * 60 * 60 * 1000
@@ -669,13 +879,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const losingPenalty = losingRecently ? (disableCalibrationByExpectancy ? 0.25 : 0.5) : 0;
   const baseLiveThreshold = Math.max(minXarbNetEdgeBps - 1, regimeAnchor * 0.55);
   const starvationMode = hasInactivity && prolongedInactivity && !losingRecently && !severeLosing;
+  const emergencyMode =
+    starvationMode &&
+    autoOpens6h < controllerMinOpenings &&
+    autoPnl6h > -1.0 &&
+    autoPnl30d > -8.0;
   const xarbMaxSignalAgeHours = hasInactivity
     ? XARB_MAX_SIGNAL_AGE_HOURS_INACTIVITY
     : lowActivity
       ? XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY
       : XARB_MAX_SIGNAL_AGE_HOURS;
   const liveXarbThresholdBps =
-    starvationMode
+    emergencyMode
+      ? Math.max(-0.15, Math.min(0.4, baseLiveThreshold * 0.15))
+      : starvationMode
       ? Math.max(0.0, Math.min(0.8, baseLiveThreshold * 0.25))
       : hasInactivity || lowActivity
       ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
@@ -843,7 +1060,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     min_xarb_net_edge_bps: Number(minXarbNetEdgeBps.toFixed(2)),
     max_seen_net_edge_bps: Number.isFinite(maxSeenNetEdgeBps) ? Number(maxSeenNetEdgeBps.toFixed(4)) : 0,
     max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
-    live_xarb_entry_floor_bps: LIVE_XARB_ENTRY_FLOOR_BPS,
+    live_xarb_entry_floor_bps: liveXarbEntryFloorBps,
     live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
     xarb_max_signal_age_hours: xarbMaxSignalAgeHours,
     lookback_hours_used: lookbackHours,
@@ -853,6 +1070,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     calibration_disabled_by_expectancy: disableCalibrationByExpectancy,
     pilot_mode_active: pilotModeActive,
     inactivity_mode: hasInactivity,
+    emergency_mode: emergencyMode,
+    auto_opens_6h: autoOpens6h,
+    auto_pnl_6h_usd: Number(autoPnl6h.toFixed(4)),
+    auto_opens_30d: autoRowsLong.length,
+    auto_pnl_30d_usd: Number(autoPnl30d.toFixed(4)),
+    controller_window_hours: controllerLookbackHours,
+    controller_long_window_days: controllerLongLookbackDays,
+    strategy_blocked_types: blockedTypes,
+    strategy_type_expectancy: typeExpectancy,
+    policy_rollout_id: effectivePolicy.rollout_id,
+    policy_config_id: effectivePolicy.config_id,
+    policy_rollout_status: effectivePolicy.rollout_status,
+    policy_is_canary: effectivePolicy.is_canary,
+    policy_controller_action: policyControllerAction,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -910,8 +1141,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let available = Math.max(0, balance - reserved);
   let reservedCurrent = reserved;
 
-  for (const opp of scored.slice(0, MAX_ATTEMPTS_PER_TICK)) {
-    if (created >= MAX_EXECUTE_PER_TICK) {
+  for (const opp of scored.slice(0, maxAttemptsPerTick)) {
+    if (created >= maxExecutePerTick) {
       break;
     }
     attempted += 1;
@@ -1174,46 +1405,58 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const liveNetEdgeBps =
-        liveGrossEdgeBps - LIVE_XARB_TOTAL_COSTS_BPS - LIVE_XARB_BUFFER_BPS;
+        liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
       const canPilotOpen =
+        isTypeEnabled("pilot") &&
         pilotModeActive &&
-        liveGrossEdgeBps >= PILOT_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= PILOT_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= pilotMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= pilotMinLiveNetEdgeBps;
       const canCalibrationOpen =
+        isTypeEnabled("calibration") &&
         (hasInactivity || lowActivity) &&
         !losingRecently &&
         !disableCalibrationByExpectancy &&
-        liveGrossEdgeBps >= CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= calibrationMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= calibrationMinLiveNetEdgeBps;
       const canRecoveryOpen =
+        isTypeEnabled("recovery") &&
         hasInactivity &&
         losingRecently &&
         !severeLosing &&
-        liveGrossEdgeBps >= RECOVERY_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= RECOVERY_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= recoveryMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= recoveryMinLiveNetEdgeBps;
       const canReentryOpen =
+        isTypeEnabled("reentry") &&
         (hasInactivity || lowActivity) &&
         !losingRecently &&
         disableCalibrationByExpectancy &&
-        liveGrossEdgeBps >= REENTRY_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= REENTRY_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= reentryMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= reentryMinLiveNetEdgeBps;
       const canInactivityOpen =
+        isTypeEnabled("inactivity") &&
         hasInactivity &&
         !losingRecently &&
         !severeLosing &&
-        liveGrossEdgeBps >= INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= INACTIVITY_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= inactivityMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= inactivityMinLiveNetEdgeBps;
       const canStarvationOpen =
+        isTypeEnabled("starvation") &&
         starvationMode &&
-        liveGrossEdgeBps >= STARVATION_MIN_LIVE_GROSS_EDGE_BPS &&
-        liveNetEdgeBps >= STARVATION_MIN_LIVE_NET_EDGE_BPS;
+        liveGrossEdgeBps >= starvationMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= starvationMinLiveNetEdgeBps;
+      const canEmergencyOpen =
+        isTypeEnabled("emergency") &&
+        emergencyMode &&
+        liveGrossEdgeBps >= controllerEmergencyMinLiveGrossEdgeBps &&
+        liveNetEdgeBps >= controllerEmergencyMinLiveNetEdgeBps;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
         canRecoveryOpen ||
         canReentryOpen ||
         canInactivityOpen ||
-        canStarvationOpen;
+        canStarvationOpen ||
+        canEmergencyOpen;
 
       if (liveNetEdgeBps < liveXarbThresholdBps) {
         if (!allowFallbackOpen) {
@@ -1225,16 +1468,18 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       if (allowFallbackOpen) {
         const fallbackMultiplier = canPilotOpen
-          ? PILOT_NOTIONAL_MULTIPLIER
+          ? pilotNotionalMultiplier
           : canRecoveryOpen
-            ? RECOVERY_NOTIONAL_MULTIPLIER
+            ? recoveryNotionalMultiplier
             : canReentryOpen
-              ? REENTRY_NOTIONAL_MULTIPLIER
+              ? reentryNotionalMultiplier
               : canInactivityOpen
-                ? INACTIVITY_NOTIONAL_MULTIPLIER
+                ? inactivityNotionalMultiplier
                 : canStarvationOpen
-                  ? STARVATION_NOTIONAL_MULTIPLIER
-            : CALIBRATION_NOTIONAL_MULTIPLIER;
+                  ? starvationNotionalMultiplier
+                  : canEmergencyOpen
+                    ? controllerEmergencyNotionalMultiplier
+            : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
@@ -1292,6 +1537,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
               !canReentryOpen &&
               !canInactivityOpen &&
               canStarvationOpen,
+            emergency_open:
+              !canPilotOpen &&
+              !canRecoveryOpen &&
+              !canReentryOpen &&
+              !canInactivityOpen &&
+              !canStarvationOpen &&
+              canEmergencyOpen,
             calibration_open: !canPilotOpen && canCalibrationOpen,
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
