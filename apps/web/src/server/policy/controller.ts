@@ -8,6 +8,7 @@ const CONTROLLER_THROTTLE_MINUTES = 15;
 const CANARY_MIN_CLOSED = 8;
 const CANARY_MAX_DRAWDOWN_USD = -2.0;
 const CANARY_MIN_EXPECTANCY_USD = 0;
+const CANARY_MAX_COLLECT_HOURS_NO_OPENS = 6;
 
 function nowIso() {
   return new Date().toISOString();
@@ -85,6 +86,15 @@ function heuristicProposal(current: StrategyPolicyConfig, s: PolicySummary): Str
     next.live_xarb_entry_floor_bps -= 0.15;
     next.inactivity_min_live_net_edge_bps -= 0.05;
     next.controller_emergency_min_live_net_edge_bps -= 0.03;
+    next.max_execute_per_tick += 1;
+  }
+
+  // If nothing opens at all, force a stronger but bounded exploration step.
+  if (s.opensShort === 0 && s.closedShort === 0) {
+    next.live_xarb_entry_floor_bps -= 0.25;
+    next.inactivity_min_live_net_edge_bps -= 0.1;
+    next.controller_emergency_min_live_net_edge_bps -= 0.08;
+    next.max_attempts_per_tick += 1;
     next.max_execute_per_tick += 1;
   }
 
@@ -244,7 +254,31 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
       return { ok: true, skipped: false, action: "evaluated_canary", summary };
     }
 
-    return { ok: true, skipped: false, action: "canary_collecting", summary };
+    const canaryAgeMs = Date.now() - new Date(canary.start_ts).getTime();
+    const staleNoOpen =
+      Number.isFinite(canaryAgeMs) &&
+      canaryAgeMs >= CANARY_MAX_COLLECT_HOURS_NO_OPENS * 60 * 60 * 1000 &&
+      canarySummary.opensShort === 0;
+
+    if (staleNoOpen) {
+      await adminSupabase
+        .from("strategy_policy_rollouts")
+        .update({
+          status: "failed",
+          end_ts: nowIso(),
+          metrics: { summary: canarySummary, reason: "canary_stale_no_opens" }
+        })
+        .eq("id", canary.id);
+      await insertEvent(adminSupabase, {
+        user_id: userId,
+        rollout_id: canary.id,
+        event_type: "rollout_failed",
+        details: { summary: canarySummary, reason: "canary_stale_no_opens" }
+      });
+      // Continue below and propose a new candidate in the same controller cycle.
+    } else {
+      return { ok: true, skipped: false, action: "canary_collecting", summary };
+    }
   }
 
   const heuristic = heuristicProposal(currentConfig, summary);
