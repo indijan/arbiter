@@ -20,11 +20,24 @@ type EventRow = {
   event_type: string;
 };
 
+type RolloutPerformanceRow = {
+  rollout_id: string;
+  config_id: string | null;
+  status: string;
+  opens: number;
+  closed: number;
+  pnl_sum_usd: number;
+  expectancy_usd: number;
+  canary_opens: number;
+  last_entry_ts: string | null;
+};
+
 type PolicyControllerPanelProps = {
   diagnostics: Record<string, unknown> | null;
   proposals: ProposalRow[];
   rollouts: RolloutRow[];
   events: EventRow[];
+  performance: RolloutPerformanceRow[];
   error?: string | null;
 };
 
@@ -37,6 +50,7 @@ export default function PolicyControllerPanel({
   proposals,
   rollouts,
   events,
+  performance,
   error
 }: PolicyControllerPanelProps) {
   const blockedTypes = Array.isArray(diagnostics?.strategy_blocked_types)
@@ -94,7 +108,29 @@ export default function PolicyControllerPanel({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-3">
+      <div className="mt-5 grid gap-6 lg:grid-cols-4">
+        <div>
+          <h3 className="text-sm font-semibold text-brand-100/80">Rollout Performance</h3>
+          <div className="mt-2 space-y-2 text-xs">
+            {performance.map((row) => (
+              <div key={row.rollout_id} className="rounded-lg border border-brand-300/15 p-2">
+                <p className="font-medium">{row.status}</p>
+                <p className="text-brand-100/70">opens: {row.opens} | closed: {row.closed}</p>
+                <p className="text-brand-100/70">
+                  pnl: {row.pnl_sum_usd.toFixed(4)} | exp: {row.expectancy_usd.toFixed(4)}
+                </p>
+                <p className="text-brand-100/70">canary opens: {row.canary_opens}</p>
+                <p className="text-brand-100/70">
+                  {row.last_entry_ts ? new Date(row.last_entry_ts).toLocaleString("hu-HU") : "no entries"}
+                </p>
+              </div>
+            ))}
+            {performance.length === 0 ? (
+              <p className="text-brand-100/60">Nincs rollout performance adat.</p>
+            ) : null}
+          </div>
+        </div>
+
         <div>
           <h3 className="text-sm font-semibold text-brand-100/80">Live Rollouts</h3>
           <div className="mt-2 space-y-2 text-xs">

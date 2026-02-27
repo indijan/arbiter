@@ -71,7 +71,8 @@ export async function loadEffectivePolicy(
   let selected: RolloutRow | null = active ?? null;
   let canarySelected = false;
   if (canary) {
-    if (!active) {
+    const forceCanaryFullTraffic = canary.guardrails?.force_canary_full_traffic === true;
+    if (!active || forceCanaryFullTraffic) {
       // No active rollout yet: canary must be the effective policy.
       selected = canary;
       canarySelected = true;

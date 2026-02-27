@@ -5,7 +5,6 @@ import { boundedStep, DEFAULT_POLICY_CONFIG, normalizePolicyConfig, type Strateg
 import { proposePolicyWithAI } from "@/server/policy/proposer";
 
 const CONTROLLER_THROTTLE_MINUTES = 15;
-const CANARY_MIN_CLOSED = 8;
 const CANARY_MAX_DRAWDOWN_USD = -2.0;
 const CANARY_MIN_EXPECTANCY_USD = 0;
 const CANARY_MAX_COLLECT_HOURS_NO_OPENS = 6;
@@ -25,7 +24,18 @@ type PolicySummary = {
   expectancyLong: number;
 };
 
-async function readPolicySummary(adminSupabase: SupabaseClient, userId: string, shortHours: number, longDays: number): Promise<PolicySummary> {
+type PolicySummaryScope = {
+  rolloutId?: string | null;
+  configId?: string | null;
+};
+
+async function readPolicySummary(
+  adminSupabase: SupabaseClient,
+  userId: string,
+  shortHours: number,
+  longDays: number,
+  scope?: PolicySummaryScope
+): Promise<PolicySummary> {
   const shortSince = new Date(Date.now() - shortHours * 60 * 60 * 1000).toISOString();
   const longSince = new Date(Date.now() - longDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -48,6 +58,8 @@ async function readPolicySummary(adminSupabase: SupabaseClient, userId: string, 
   for (const row of data ?? []) {
     const meta = (row.meta ?? {}) as Record<string, unknown>;
     if (meta.auto_execute !== true) continue;
+    if (scope?.rolloutId && String(meta.policy_rollout_id ?? "") !== scope.rolloutId) continue;
+    if (scope?.configId && String(meta.policy_config_id ?? "") !== scope.configId) continue;
     const entryTs = String(row.entry_ts ?? "");
     const exitTs = row.exit_ts ? String(row.exit_ts) : "";
 
@@ -114,6 +126,33 @@ function heuristicProposal(current: StrategyPolicyConfig, s: PolicySummary): Str
   }
 
   return normalizePolicyConfig(next);
+}
+
+function starvationProposal(current: StrategyPolicyConfig): StrategyPolicyConfig {
+  return normalizePolicyConfig({
+    ...current,
+    live_xarb_entry_floor_bps: current.live_xarb_entry_floor_bps - 0.5,
+    pilot_min_live_net_edge_bps: current.pilot_min_live_net_edge_bps - 0.15,
+    recovery_min_live_net_edge_bps: current.recovery_min_live_net_edge_bps - 0.15,
+    reentry_min_live_net_edge_bps: current.reentry_min_live_net_edge_bps - 0.12,
+    inactivity_min_live_net_edge_bps: current.inactivity_min_live_net_edge_bps - 0.12,
+    starvation_min_live_net_edge_bps: current.starvation_min_live_net_edge_bps - 0.08,
+    controller_emergency_min_live_net_edge_bps: current.controller_emergency_min_live_net_edge_bps - 0.05,
+    max_attempts_per_tick: current.max_attempts_per_tick + 2,
+    max_execute_per_tick: current.max_execute_per_tick + 1,
+    controller_min_openings: 1
+  });
+}
+
+function chooseCanaryRatio(summary: PolicySummary) {
+  if (summary.opensShort === 0 && summary.closedShort === 0) return 1;
+  if (summary.opensShort <= 1) return 0.75;
+  if (summary.opensShort <= 2) return 0.5;
+  return 0.25;
+}
+
+function shouldForceCanaryFullTraffic(summary: PolicySummary) {
+  return summary.opensShort === 0 && summary.closedShort === 0;
 }
 
 async function readActiveRollout(adminSupabase: SupabaseClient, userId: string) {
@@ -190,7 +229,13 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     adminSupabase,
     userId,
     currentConfig.controller_lookback_hours,
-    currentConfig.controller_long_lookback_days
+    currentConfig.controller_long_lookback_days,
+    active
+      ? {
+          rolloutId: active.id,
+          configId: active.config_id
+        }
+      : undefined
   );
 
   await insertEvent(adminSupabase, {
@@ -199,6 +244,15 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     event_type: "controller_cycle",
     details: {
       summary,
+      summary_scope: active
+        ? {
+            rollout_id: active.id,
+            config_id: active.config_id
+          }
+        : {
+            rollout_id: null,
+            config_id: null
+          },
       active_rollout_id: active?.id ?? null,
       canary_rollout_id: canary?.id ?? null
     }
@@ -206,14 +260,25 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
 
   if (canary) {
     const canaryConfig = (await readConfigById(adminSupabase, canary.config_id)) ?? currentConfig;
+    const canaryEvalHours = Math.max(canaryConfig.controller_lookback_hours, 24);
+    const canaryMinClosed = Math.max(1, canaryConfig.controller_min_closed_short);
     const canarySummary = await readPolicySummary(
       adminSupabase,
       userId,
-      canaryConfig.controller_lookback_hours,
-      canaryConfig.controller_long_lookback_days
+      canaryEvalHours,
+      canaryConfig.controller_long_lookback_days,
+      {
+        rolloutId: canary.id,
+        configId: canary.config_id
+      }
     );
 
-    if (canarySummary.closedShort >= CANARY_MIN_CLOSED) {
+    const acceleratedPromote =
+      canarySummary.closedShort >= 1 &&
+      canarySummary.expectancyShort > 0 &&
+      canarySummary.pnlShort > 0;
+
+    if (canarySummary.closedShort >= canaryMinClosed || acceleratedPromote) {
       const promote =
         canarySummary.expectancyShort >= CANARY_MIN_EXPECTANCY_USD &&
         canarySummary.pnlShort >= CANARY_MAX_DRAWDOWN_USD;
@@ -233,7 +298,11 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
           user_id: userId,
           rollout_id: canary.id,
           event_type: "rollout_promoted",
-          details: { summary: canarySummary }
+          details: {
+            summary: canarySummary,
+            summary_scope: { rollout_id: canary.id, config_id: canary.config_id },
+            accelerated: acceleratedPromote
+          }
         });
       } else {
         await adminSupabase
@@ -248,17 +317,59 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
           user_id: userId,
           rollout_id: canary.id,
           event_type: "rollout_failed",
-          details: { summary: canarySummary }
+          details: {
+            summary: canarySummary,
+            summary_scope: { rollout_id: canary.id, config_id: canary.config_id }
+          }
         });
       }
       return { ok: true, skipped: false, action: "evaluated_canary", summary };
     }
 
     const canaryAgeMs = Date.now() - new Date(canary.start_ts).getTime();
+    const shouldEscalateCanaryTraffic =
+      Number(canary.canary_ratio ?? 0) < 1 &&
+      Number.isFinite(canaryAgeMs) &&
+      canaryAgeMs >= 90 * 60 * 1000 &&
+      canarySummary.opensShort === 0 &&
+      canarySummary.closedShort === 0;
+
+    if (shouldEscalateCanaryTraffic) {
+      const escalatedRatio = Math.min(1, Math.max(0.75, Number(canary.canary_ratio ?? 0) * 2));
+      await adminSupabase
+        .from("strategy_policy_rollouts")
+        .update({
+          canary_ratio: escalatedRatio,
+          guardrails: {
+            force_canary_full_traffic: escalatedRatio >= 1
+          },
+          metrics: { summary: canarySummary, action: "canary_ratio_escalated" }
+        })
+        .eq("id", canary.id);
+      await insertEvent(adminSupabase, {
+        user_id: userId,
+        rollout_id: canary.id,
+        event_type: "canary_ratio_escalated",
+        details: {
+          summary: canarySummary,
+          summary_scope: { rollout_id: canary.id, config_id: canary.config_id },
+          canary_ratio: escalatedRatio,
+          force_canary_full_traffic: escalatedRatio >= 1
+        }
+      });
+      return {
+        ok: true,
+        skipped: false,
+        action: "canary_ratio_escalated",
+        summary
+      };
+    }
+
     const staleNoOpen =
       Number.isFinite(canaryAgeMs) &&
       canaryAgeMs >= CANARY_MAX_COLLECT_HOURS_NO_OPENS * 60 * 60 * 1000 &&
-      canarySummary.opensShort === 0;
+      canarySummary.opensShort === 0 &&
+      canarySummary.closedShort === 0;
 
     if (staleNoOpen) {
       await adminSupabase
@@ -273,7 +384,11 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
         user_id: userId,
         rollout_id: canary.id,
         event_type: "rollout_failed",
-        details: { summary: canarySummary, reason: "canary_stale_no_opens" }
+        details: {
+          summary: canarySummary,
+          summary_scope: { rollout_id: canary.id, config_id: canary.config_id },
+          reason: "canary_stale_no_opens"
+        }
       });
       // Continue below and propose a new candidate in the same controller cycle.
     } else {
@@ -281,14 +396,17 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     }
   }
 
-  const heuristic = heuristicProposal(currentConfig, summary);
+  const starvation = summary.opensShort === 0 && summary.closedShort === 0;
+  const heuristic = starvation ? starvationProposal(currentConfig) : heuristicProposal(currentConfig, summary);
   const ai = await proposePolicyWithAI({
     current: currentConfig,
     summary,
     typeExpectancy: {}
   });
   const candidate = ai.proposal ?? heuristic;
-  const stepped = boundedStep(currentConfig, candidate, 0.2);
+  const stepped = boundedStep(currentConfig, candidate, starvation ? 0.6 : 0.2);
+  const canaryRatio = chooseCanaryRatio(summary);
+  const forceCanaryFullTraffic = shouldForceCanaryFullTraffic(summary);
 
   const { data: proposal, error: proposalError } = await adminSupabase
     .from("strategy_policy_proposals")
@@ -335,9 +453,10 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
       user_id: userId,
       config_id: cfg.id,
       status: "canary",
-      canary_ratio: 0.25,
+      canary_ratio: canaryRatio,
       guardrails: {
-        min_closed_short: CANARY_MIN_CLOSED,
+        force_canary_full_traffic: forceCanaryFullTraffic,
+        min_closed_short: Math.max(1, stepped.controller_min_closed_short),
         min_expectancy_usd: CANARY_MIN_EXPECTANCY_USD,
         max_drawdown_usd: CANARY_MAX_DRAWDOWN_USD
       },
@@ -355,7 +474,13 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     rollout_id: rollout.id,
     proposal_id: proposal.id,
     event_type: "rollout_started",
-    details: { summary, config_id: cfg.id, canary_ratio: 0.25 }
+    details: {
+      summary,
+      config_id: cfg.id,
+      canary_ratio: canaryRatio,
+      starvation,
+      force_canary_full_traffic: forceCanaryFullTraffic
+    }
   });
 
   return { ok: true, skipped: false, action: "started_canary", summary, rollout_id: rollout.id };

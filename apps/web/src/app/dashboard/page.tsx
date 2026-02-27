@@ -8,6 +8,25 @@ import CloseAllButton from "@/components/CloseAllButton";
 import PolicyControllerPanel from "@/components/PolicyControllerPanel";
 import { createServerSupabase } from "@/lib/supabase/server";
 
+type PolicyPositionRow = {
+  entry_ts: string;
+  exit_ts: string | null;
+  realized_pnl_usd: number | string | null;
+  meta: Record<string, unknown> | null;
+};
+
+type RolloutPerf = {
+  rollout_id: string;
+  config_id: string | null;
+  status: string;
+  opens: number;
+  closed: number;
+  pnl_sum_usd: number;
+  expectancy_usd: number;
+  canary_opens: number;
+  last_entry_ts: string | null;
+};
+
 export default async function DashboardPage() {
   const supabase = createServerSupabase();
 
@@ -130,11 +149,64 @@ export default async function DashboardPage() {
     .order("ts", { ascending: false })
     .limit(15);
 
+  const { data: policyPositions, error: policyPositionsError } = await supabase
+    .from("positions")
+    .select("entry_ts, exit_ts, realized_pnl_usd, meta")
+    .eq("user_id", user.id)
+    .order("entry_ts", { ascending: false })
+    .limit(500);
+
   const policyError =
     policyRolloutsError?.message ??
     policyProposalsError?.message ??
     policyEventsError?.message ??
+    policyPositionsError?.message ??
     null;
+
+  const rolloutStatusMap = new Map((policyRollouts ?? []).map((row) => [row.id, row.status]));
+  const perfMap = new Map<string, RolloutPerf>();
+  for (const row of (policyPositions ?? []) as PolicyPositionRow[]) {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    if (meta.auto_execute !== true) continue;
+    const rolloutId = String(meta.policy_rollout_id ?? "");
+    if (!rolloutId) continue;
+    const configId = meta.policy_config_id ? String(meta.policy_config_id) : null;
+    const isCanary = meta.policy_is_canary === true;
+    const existing = perfMap.get(rolloutId) ?? {
+      rollout_id: rolloutId,
+      config_id: configId,
+      status: rolloutStatusMap.get(rolloutId) ?? "historical",
+      opens: 0,
+      closed: 0,
+      pnl_sum_usd: 0,
+      expectancy_usd: 0,
+      canary_opens: 0,
+      last_entry_ts: null
+    };
+    existing.opens += 1;
+    if (isCanary) existing.canary_opens += 1;
+    if (!existing.last_entry_ts || row.entry_ts > existing.last_entry_ts) {
+      existing.last_entry_ts = row.entry_ts;
+    }
+    if (row.exit_ts) {
+      existing.closed += 1;
+      const pnl = Number(row.realized_pnl_usd ?? 0);
+      if (Number.isFinite(pnl)) existing.pnl_sum_usd += pnl;
+    }
+    perfMap.set(rolloutId, existing);
+  }
+
+  const rolloutPerformance = Array.from(perfMap.values())
+    .map((row) => ({
+      ...row,
+      expectancy_usd: row.closed > 0 ? row.pnl_sum_usd / row.closed : 0
+    }))
+    .sort((a, b) => {
+      const at = a.last_entry_ts ?? "";
+      const bt = b.last_entry_ts ?? "";
+      return bt.localeCompare(at);
+    })
+    .slice(0, 10);
 
   return (
     <div className="min-h-screen px-6 py-16">
@@ -170,6 +242,7 @@ export default async function DashboardPage() {
           proposals={policyProposals ?? []}
           rollouts={policyRollouts ?? []}
           events={policyEvents ?? []}
+          performance={rolloutPerformance}
           error={policyError}
         />
 

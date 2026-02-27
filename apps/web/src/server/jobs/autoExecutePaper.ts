@@ -1273,7 +1273,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             slippage_bps: SLIPPAGE_BPS,
             notional_usd,
             notional_reason: derived.reason,
-            auto_execute: true
+            auto_execute: true,
+            policy_rollout_id: effectivePolicy.rollout_id,
+            policy_config_id: effectivePolicy.config_id,
+            policy_is_canary: effectivePolicy.is_canary
           }
         })
         .select("id")
@@ -1526,6 +1529,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             notional_usd,
             notional_reason: derived.reason,
             auto_execute: true,
+            policy_rollout_id: effectivePolicy.rollout_id,
+            policy_config_id: effectivePolicy.config_id,
+            policy_is_canary: effectivePolicy.is_canary,
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
@@ -1747,7 +1753,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             fee_bps: FEE_BPS,
             slippage_bps: SLIPPAGE_BPS,
             legs: executionLegs,
-            auto_execute: true
+            auto_execute: true,
+            policy_rollout_id: effectivePolicy.rollout_id,
+            policy_config_id: effectivePolicy.config_id,
+            policy_is_canary: effectivePolicy.is_canary
           }
         })
         .select("id")
