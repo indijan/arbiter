@@ -33,10 +33,26 @@ function hashBucket(input: string) {
   return (value % 10000) / 10000;
 }
 
+async function hasRecentPromotionHold(adminSupabase: SupabaseClient, userId: string, hours = 12) {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await adminSupabase
+    .from("strategy_policy_events")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("event_type", "rollout_promoted")
+    .gte("ts", since)
+    .limit(1);
+  if (error) {
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
 export async function loadEffectivePolicy(
   adminSupabase: SupabaseClient,
   userId: string
 ): Promise<EffectivePolicy> {
+  const recentPromotionHold = await hasRecentPromotionHold(adminSupabase, userId);
   const { data: rollouts, error } = await adminSupabase
     .from("strategy_policy_rollouts")
     .select("id, user_id, config_id, status, canary_ratio, start_ts, guardrails")
@@ -112,10 +128,18 @@ export async function loadEffectivePolicy(
   }
 
   const policy = normalizePolicyConfig((cfg as ConfigRow).config ?? {});
+  const boostedPolicy =
+    selected.status === "active" && recentPromotionHold
+      ? normalizePolicyConfig({
+          ...policy,
+          max_attempts_per_tick: policy.max_attempts_per_tick + 1,
+          max_execute_per_tick: policy.max_execute_per_tick + 1
+        })
+      : policy;
   return {
     rollout_id: selected.id,
     config_id: selected.config_id,
-    policy,
+    policy: boostedPolicy,
     is_canary: canarySelected,
     rollout_status: selected.status
   };

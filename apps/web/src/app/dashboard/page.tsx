@@ -145,7 +145,7 @@ export default async function DashboardPage() {
 
   const { data: policyEvents, error: policyEventsError } = await supabase
     .from("strategy_policy_events")
-    .select("id, ts, event_type")
+    .select("id, ts, event_type, details")
     .order("ts", { ascending: false })
     .limit(15);
 

@@ -8,6 +8,7 @@ const CONTROLLER_THROTTLE_MINUTES = 15;
 const CANARY_MAX_DRAWDOWN_USD = -2.0;
 const CANARY_MIN_EXPECTANCY_USD = 0;
 const CANARY_MAX_COLLECT_HOURS_NO_OPENS = 6;
+const POST_PROMOTION_HOLD_HOURS = 12;
 
 function nowIso() {
   return new Date().toISOString();
@@ -212,6 +213,20 @@ async function shouldThrottle(adminSupabase: SupabaseClient, userId: string) {
   return (data ?? []).length > 0;
 }
 
+async function hasRecentPromotionHold(adminSupabase: SupabaseClient, userId: string) {
+  const since = new Date(Date.now() - POST_PROMOTION_HOLD_HOURS * 60 * 60 * 1000).toISOString();
+  const { data, error } = await adminSupabase
+    .from("strategy_policy_events")
+    .select("id, ts")
+    .eq("user_id", userId)
+    .eq("event_type", "rollout_promoted")
+    .gte("ts", since)
+    .order("ts", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 export async function runStrategyPolicyController(adminSupabase: SupabaseClient, userId: string) {
   if (await shouldThrottle(adminSupabase, userId)) {
     return { ok: true, skipped: true, reason: "throttled" };
@@ -220,6 +235,7 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
   const liveRollouts = await readActiveRollout(adminSupabase, userId);
   const active = liveRollouts.find((r) => r.status === "active") ?? null;
   const canary = liveRollouts.find((r) => r.status === "canary") ?? null;
+  const recentPromotionHold = await hasRecentPromotionHold(adminSupabase, userId);
 
   const currentConfig = active
     ? (await readConfigById(adminSupabase, active.config_id)) ?? DEFAULT_POLICY_CONFIG
@@ -253,6 +269,7 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
             rollout_id: null,
             config_id: null
           },
+      recent_promotion_hold: recentPromotionHold,
       active_rollout_id: active?.id ?? null,
       canary_rollout_id: canary?.id ?? null
     }
@@ -394,6 +411,10 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     } else {
       return { ok: true, skipped: false, action: "canary_collecting", summary };
     }
+  }
+
+  if (recentPromotionHold && active) {
+    return { ok: true, skipped: false, action: "promotion_hold", summary };
   }
 
   const starvation = summary.opensShort === 0 && summary.closedShort === 0;
