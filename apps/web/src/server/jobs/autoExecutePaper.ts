@@ -902,6 +902,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     : lowActivity
       ? XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY
       : XARB_MAX_SIGNAL_AGE_HOURS;
+  const activeObserveThresholdDiscountBps = activeObserveMode ? 0.35 : 0;
   const liveXarbThresholdBps =
     emergencyMode
       ? Math.max(-0.15, Math.min(0.4, baseLiveThreshold * 0.15))
@@ -910,6 +911,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       : hasInactivity || lowActivity
       ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
       : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
+  const adjustedLiveXarbThresholdBps = Math.max(
+    -0.1,
+    liveXarbThresholdBps - activeObserveThresholdDiscountBps
+  );
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
   const openBySymbol = new Map<string, number>();
@@ -1074,7 +1079,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     max_seen_net_edge_bps: Number.isFinite(maxSeenNetEdgeBps) ? Number(maxSeenNetEdgeBps.toFixed(4)) : 0,
     max_seen_xarb_net_edge_bps: Number.isFinite(maxSeenXarbNetEdgeBps) ? Number(maxSeenXarbNetEdgeBps.toFixed(4)) : 0,
     live_xarb_entry_floor_bps: liveXarbEntryFloorBps,
-    live_xarb_dynamic_threshold_bps: Number(liveXarbThresholdBps.toFixed(4)),
+    live_xarb_dynamic_threshold_bps: Number(adjustedLiveXarbThresholdBps.toFixed(4)),
+    active_observe_threshold_discount_bps: Number(activeObserveThresholdDiscountBps.toFixed(4)),
     xarb_max_signal_age_hours: xarbMaxSignalAgeHours,
     lookback_hours_used: lookbackHours,
     regime_xarb_edge_p70_bps: Number(regimeXarbEdgeP70.toFixed(4)),
@@ -1475,7 +1481,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const canNearThresholdExplore =
         positiveExplorationMode &&
         liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - (activeObserveMode ? 0.4 : 0.25)) &&
-        liveNetEdgeBps >= liveXarbThresholdBps - nearThresholdBufferBps;
+        liveNetEdgeBps >= adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1486,7 +1492,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         canEmergencyOpen ||
         canNearThresholdExplore;
 
-      if (liveNetEdgeBps < liveXarbThresholdBps - nearThresholdBufferBps) {
+      if (liveNetEdgeBps < adjustedLiveXarbThresholdBps - nearThresholdBufferBps) {
         if (!allowFallbackOpen) {
           skipped += 1;
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
@@ -1582,7 +1588,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             live_edge: {
               gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
               net_bps: Number(liveNetEdgeBps.toFixed(4)),
-              threshold_bps: Number(liveXarbThresholdBps.toFixed(4))
+              threshold_bps: Number(adjustedLiveXarbThresholdBps.toFixed(4))
             }
           }
         })
