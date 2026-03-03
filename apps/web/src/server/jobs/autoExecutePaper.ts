@@ -494,9 +494,22 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const effectivePolicy = await loadEffectivePolicy(adminSupabase, userId);
   const policy = effectivePolicy.policy;
+  const activeObserveMode =
+    policyControllerAction === "active_observe" &&
+    effectivePolicy.rollout_status === "active" &&
+    !effectivePolicy.is_canary;
 
-  const maxExecutePerTick = Math.max(1, Math.round(policy.max_execute_per_tick));
-  const maxAttemptsPerTick = Math.max(1, Math.round(policy.max_attempts_per_tick));
+  const maxExecutePerTick = Math.max(
+    1,
+    Math.round(policy.max_execute_per_tick) + (activeObserveMode ? 1 : 0)
+  );
+  const maxAttemptsPerTick = Math.max(
+    1,
+    Math.round(policy.max_attempts_per_tick) + (activeObserveMode ? 2 : 0)
+  );
+  const candidateLimit = activeObserveMode
+    ? Math.max(MAX_CANDIDATES + 4, maxAttemptsPerTick + 2)
+    : MAX_CANDIDATES;
   const liveXarbEntryFloorBps = policy.live_xarb_entry_floor_bps;
   const liveXarbTotalCostsBps = policy.live_xarb_total_costs_bps;
   const liveXarbBufferBps = policy.live_xarb_buffer_bps;
@@ -1050,7 +1063,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       return { ...opp, variant, aiScore, effectiveScore };
     })
     .sort((a, b) => b.effectiveScore - a.effectiveScore)
-    .slice(0, MAX_CANDIDATES);
+    .slice(0, candidateLimit);
 
   const diagnostics = {
     opportunities_lookback: (opportunities ?? []).length,
@@ -1084,6 +1097,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     policy_rollout_status: effectivePolicy.rollout_status,
     policy_is_canary: effectivePolicy.is_canary,
     policy_controller_action: policyControllerAction,
+    active_observe_mode: activeObserveMode,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -1411,10 +1425,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
       const positiveExplorationMode =
         !losingRecently &&
-        autoPnl30d > 0 &&
+        (activeObserveMode || autoPnl30d > 0) &&
         autoOpens6h < Math.max(2, controllerMinOpenings + 1);
-      const positiveEdgeRelaxBps = positiveExplorationMode ? 0.12 : 0;
-      const nearThresholdBufferBps = positiveExplorationMode ? 0.25 : 0;
+      const positiveEdgeRelaxBps = positiveExplorationMode ? (activeObserveMode ? 0.25 : 0.12) : 0;
+      const nearThresholdBufferBps = positiveExplorationMode ? (activeObserveMode ? 0.45 : 0.25) : 0;
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1460,7 +1474,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         liveNetEdgeBps >= controllerEmergencyMinLiveNetEdgeBps - positiveEdgeRelaxBps;
       const canNearThresholdExplore =
         positiveExplorationMode &&
-        liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - 0.25) &&
+        liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - (activeObserveMode ? 0.4 : 0.25)) &&
         liveNetEdgeBps >= liveXarbThresholdBps - nearThresholdBufferBps;
       const allowFallbackOpen =
         canPilotOpen ||
