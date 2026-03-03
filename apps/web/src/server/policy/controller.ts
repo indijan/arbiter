@@ -9,6 +9,7 @@ const CANARY_MAX_DRAWDOWN_USD = -2.0;
 const CANARY_MIN_EXPECTANCY_USD = 0;
 const CANARY_MAX_COLLECT_HOURS_NO_OPENS = 6;
 const POST_PROMOTION_HOLD_HOURS = 12;
+const ACTIVE_OBSERVE_MAX_OPENS = 3;
 
 function nowIso() {
   return new Date().toISOString();
@@ -275,6 +276,15 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     }
   });
 
+  const positiveLowSampleActive =
+    Boolean(active) &&
+    summary.pnlLong > 0 &&
+    summary.expectancyLong > 0 &&
+    summary.opensLong > 0 &&
+    summary.opensLong <= ACTIVE_OBSERVE_MAX_OPENS &&
+    summary.opensShort === 0 &&
+    summary.closedShort === 0;
+
   if (canary) {
     const canaryConfig = (await readConfigById(adminSupabase, canary.config_id)) ?? currentConfig;
     const canaryEvalHours = Math.max(canaryConfig.controller_lookback_hours, 24);
@@ -341,6 +351,28 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
         });
       }
       return { ok: true, skipped: false, action: "evaluated_canary", summary };
+    }
+
+    if (positiveLowSampleActive && canarySummary.opensLong === 0 && canarySummary.closedLong === 0) {
+      await adminSupabase
+        .from("strategy_policy_rollouts")
+        .update({
+          status: "failed",
+          end_ts: nowIso(),
+          metrics: { summary: canarySummary, reason: "superseded_by_positive_active_observe" }
+        })
+        .eq("id", canary.id);
+      await insertEvent(adminSupabase, {
+        user_id: userId,
+        rollout_id: canary.id,
+        event_type: "rollout_failed",
+        details: {
+          summary: canarySummary,
+          summary_scope: { rollout_id: canary.id, config_id: canary.config_id },
+          reason: "superseded_by_positive_active_observe"
+        }
+      });
+      return { ok: true, skipped: false, action: "active_observe", summary };
     }
 
     const canaryAgeMs = Date.now() - new Date(canary.start_ts).getTime();
@@ -411,6 +443,10 @@ export async function runStrategyPolicyController(adminSupabase: SupabaseClient,
     } else {
       return { ok: true, skipped: false, action: "canary_collecting", summary };
     }
+  }
+
+  if (positiveLowSampleActive && active) {
+    return { ok: true, skipped: false, action: "active_observe", summary };
   }
 
   if (recentPromotionHold && active) {

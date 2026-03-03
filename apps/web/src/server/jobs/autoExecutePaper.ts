@@ -1409,11 +1409,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const liveNetEdgeBps =
         liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
+      const positiveExplorationMode =
+        !losingRecently &&
+        autoPnl30d > 0 &&
+        autoOpens6h < Math.max(2, controllerMinOpenings + 1);
+      const positiveEdgeRelaxBps = positiveExplorationMode ? 0.12 : 0;
+      const nearThresholdBufferBps = positiveExplorationMode ? 0.25 : 0;
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
         liveGrossEdgeBps >= pilotMinLiveGrossEdgeBps &&
-        liveNetEdgeBps >= pilotMinLiveNetEdgeBps;
+        liveNetEdgeBps >= pilotMinLiveNetEdgeBps - positiveEdgeRelaxBps;
       const canCalibrationOpen =
         isTypeEnabled("calibration") &&
         (hasInactivity || lowActivity) &&
@@ -1434,24 +1440,28 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !losingRecently &&
         disableCalibrationByExpectancy &&
         liveGrossEdgeBps >= reentryMinLiveGrossEdgeBps &&
-        liveNetEdgeBps >= reentryMinLiveNetEdgeBps;
+        liveNetEdgeBps >= reentryMinLiveNetEdgeBps - positiveEdgeRelaxBps;
       const canInactivityOpen =
         isTypeEnabled("inactivity") &&
         hasInactivity &&
         !losingRecently &&
         !severeLosing &&
         liveGrossEdgeBps >= inactivityMinLiveGrossEdgeBps &&
-        liveNetEdgeBps >= inactivityMinLiveNetEdgeBps;
+        liveNetEdgeBps >= inactivityMinLiveNetEdgeBps - positiveEdgeRelaxBps;
       const canStarvationOpen =
         isTypeEnabled("starvation") &&
         starvationMode &&
         liveGrossEdgeBps >= starvationMinLiveGrossEdgeBps &&
-        liveNetEdgeBps >= starvationMinLiveNetEdgeBps;
+        liveNetEdgeBps >= starvationMinLiveNetEdgeBps - positiveEdgeRelaxBps;
       const canEmergencyOpen =
         isTypeEnabled("emergency") &&
         emergencyMode &&
         liveGrossEdgeBps >= controllerEmergencyMinLiveGrossEdgeBps &&
-        liveNetEdgeBps >= controllerEmergencyMinLiveNetEdgeBps;
+        liveNetEdgeBps >= controllerEmergencyMinLiveNetEdgeBps - positiveEdgeRelaxBps;
+      const canNearThresholdExplore =
+        positiveExplorationMode &&
+        liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - 0.25) &&
+        liveNetEdgeBps >= liveXarbThresholdBps - nearThresholdBufferBps;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1459,9 +1469,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         canReentryOpen ||
         canInactivityOpen ||
         canStarvationOpen ||
-        canEmergencyOpen;
+        canEmergencyOpen ||
+        canNearThresholdExplore;
 
-      if (liveNetEdgeBps < liveXarbThresholdBps) {
+      if (liveNetEdgeBps < liveXarbThresholdBps - nearThresholdBufferBps) {
         if (!allowFallbackOpen) {
           skipped += 1;
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
@@ -1482,7 +1493,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
                   ? starvationNotionalMultiplier
                   : canEmergencyOpen
                     ? controllerEmergencyNotionalMultiplier
-            : calibrationNotionalMultiplier;
+                    : canNearThresholdExplore
+                      ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
+                      : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
@@ -1532,6 +1545,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             policy_rollout_id: effectivePolicy.rollout_id,
             policy_config_id: effectivePolicy.config_id,
             policy_is_canary: effectivePolicy.is_canary,
+            near_threshold_open: canNearThresholdExplore,
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,

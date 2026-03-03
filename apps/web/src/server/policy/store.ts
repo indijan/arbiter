@@ -12,6 +12,7 @@ type RolloutRow = {
   canary_ratio: number;
   start_ts: string;
   guardrails: Record<string, unknown> | null;
+  metrics?: Record<string, unknown> | null;
 };
 
 type ConfigRow = {
@@ -55,7 +56,7 @@ export async function loadEffectivePolicy(
   const recentPromotionHold = await hasRecentPromotionHold(adminSupabase, userId);
   const { data: rollouts, error } = await adminSupabase
     .from("strategy_policy_rollouts")
-    .select("id, user_id, config_id, status, canary_ratio, start_ts, guardrails")
+    .select("id, user_id, config_id, status, canary_ratio, start_ts, guardrails, metrics")
     .in("status", ["canary", "active"])
     .order("start_ts", { ascending: false })
     .limit(10);
@@ -83,6 +84,13 @@ export async function loadEffectivePolicy(
 
   const canary = scoped.find((r) => r.status === "canary");
   const active = scoped.find((r) => r.status === "active");
+  const activeSummary = (active?.metrics?.summary ?? null) as Record<string, unknown> | null;
+  const activeObserveBoost =
+    active?.status === "active" &&
+    Number(activeSummary?.pnlLong ?? 0) > 0 &&
+    Number(activeSummary?.expectancyLong ?? 0) > 0 &&
+    Number(activeSummary?.opensLong ?? 0) > 0 &&
+    Number(activeSummary?.opensLong ?? 0) <= 3;
 
   let selected: RolloutRow | null = active ?? null;
   let canarySelected = false;
@@ -129,7 +137,7 @@ export async function loadEffectivePolicy(
 
   const policy = normalizePolicyConfig((cfg as ConfigRow).config ?? {});
   const boostedPolicy =
-    selected.status === "active" && recentPromotionHold
+    selected.status === "active" && (recentPromotionHold || activeObserveBoost)
       ? normalizePolicyConfig({
           ...policy,
           max_attempts_per_tick: policy.max_attempts_per_tick + 1,
