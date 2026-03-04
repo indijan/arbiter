@@ -494,10 +494,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const effectivePolicy = await loadEffectivePolicy(adminSupabase, userId);
   const policy = effectivePolicy.policy;
+  const hasStableActiveRollout =
+    effectivePolicy.rollout_status === "active" && !effectivePolicy.is_canary;
   const activeObserveMode =
-    policyControllerAction === "active_observe" &&
-    effectivePolicy.rollout_status === "active" &&
-    !effectivePolicy.is_canary;
+    hasStableActiveRollout &&
+    (policyControllerAction === "active_observe" ||
+      policyControllerAction === "skipped" ||
+      policyControllerAction === "promotion_hold");
 
   const maxExecutePerTick = Math.max(
     1,
