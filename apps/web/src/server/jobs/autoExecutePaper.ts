@@ -1107,6 +1107,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     policy_is_canary: effectivePolicy.is_canary,
     policy_controller_action: policyControllerAction,
     active_observe_mode: activeObserveMode,
+    active_observe_probe_band_bps: activeObserveMode ? 0.9 : 0,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -1485,6 +1486,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         positiveExplorationMode &&
         liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - (activeObserveMode ? 0.4 : 0.25)) &&
         liveNetEdgeBps >= adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
+      const canMicroProbeOpen =
+        activeObserveMode &&
+        !losingRecently &&
+        !severeLosing &&
+        liveGrossEdgeBps >= Math.max(-0.25, liveXarbEntryFloorBps - 0.9) &&
+        liveNetEdgeBps >= adjustedLiveXarbThresholdBps - 0.9 &&
+        liveNetEdgeBps < adjustedLiveXarbThresholdBps;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1493,7 +1501,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         canInactivityOpen ||
         canStarvationOpen ||
         canEmergencyOpen ||
-        canNearThresholdExplore;
+        canNearThresholdExplore ||
+        canMicroProbeOpen;
 
       if (liveNetEdgeBps < adjustedLiveXarbThresholdBps - nearThresholdBufferBps) {
         if (!allowFallbackOpen) {
@@ -1518,6 +1527,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
                     ? controllerEmergencyNotionalMultiplier
                     : canNearThresholdExplore
                       ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
+                      : canMicroProbeOpen
+                        ? 0.01
                       : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
@@ -1569,6 +1580,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             policy_config_id: effectivePolicy.config_id,
             policy_is_canary: effectivePolicy.is_canary,
             near_threshold_open: canNearThresholdExplore,
+            micro_probe_open: canMicroProbeOpen,
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
