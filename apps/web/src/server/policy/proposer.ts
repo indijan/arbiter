@@ -30,7 +30,7 @@ export async function proposePolicyWithAI(input: {
   typeExpectancy: Record<string, number>;
 }): Promise<{ proposal: StrategyPolicyConfig | null; raw: string; model: string; used: boolean }> {
   const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_POLICY_MODEL ?? "gpt-4.1-mini";
+  const model = process.env.OPENAI_POLICY_MODEL ?? "gpt-5-mini";
 
   if (!apiKey) {
     return { proposal: null, raw: "missing_api_key", model, used: false };

@@ -626,6 +626,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     return meta.auto_execute === true;
   });
   const autoOpens6h = autoRows.length;
+  const lastMicroProbeEntryMs = autoRows.reduce((max, row) => {
+    const meta = (row.meta ?? {}) as Record<string, unknown>;
+    if (meta.micro_probe_open !== true) return max;
+    const ts = Date.parse(String(row.entry_ts ?? ""));
+    return Number.isFinite(ts) ? Math.max(max, ts) : max;
+  }, Number.NEGATIVE_INFINITY);
+  const microProbeCooldownMinutes = 60;
+  const microProbeCooldownPassed =
+    !Number.isFinite(lastMicroProbeEntryMs) ||
+    Date.now() - lastMicroProbeEntryMs >= microProbeCooldownMinutes * 60 * 1000;
+  const forceProbeMode = activeObserveMode && autoOpens6h === 0 && microProbeCooldownPassed;
   const autoPnl6h = autoRows.reduce((sum, row) => {
     if (!row.exit_ts) {
       return sum;
@@ -638,6 +649,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }
     return sum + Number(row.realized_pnl_usd ?? 0);
   }, 0);
+  const forceProbeNetFloorBps = autoPnl6h < 0 ? -0.05 : -0.15;
+  const forceProbeGrossFloorBps = autoPnl6h < 0 ? 9.5 : 8.5;
 
   const closedAutoRows = autoRows.filter((row) => row.exit_ts);
   type OpenTypeKey =
@@ -1109,6 +1122,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     active_observe_mode: activeObserveMode,
     active_observe_probe_band_bps: activeObserveMode ? 0.9 : 0,
     active_observe_micro_probe_net_floor_bps: activeObserveMode ? -0.25 : 0,
+    force_probe_mode: forceProbeMode,
+    force_probe_net_floor_bps: forceProbeNetFloorBps,
+    force_probe_gross_floor_bps: forceProbeGrossFloorBps,
+    micro_probe_cooldown_minutes: microProbeCooldownMinutes,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -1162,6 +1179,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let created = 0;
   let skipped = 0;
   const reasons: Array<{ opportunity_id: number; reason: string }> = [];
+  let forceProbeOpenedThisTick = false;
 
   let available = Math.max(0, balance - reserved);
   let reservedCurrent = reserved;
@@ -1488,11 +1506,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - (activeObserveMode ? 0.4 : 0.25)) &&
         liveNetEdgeBps >= adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
       const canMicroProbeOpen =
-        activeObserveMode &&
+        (activeObserveMode || forceProbeMode) &&
+        !(forceProbeMode && forceProbeOpenedThisTick) &&
         !losingRecently &&
         !severeLosing &&
-        liveGrossEdgeBps >= Math.max(0.5, liveXarbEntryFloorBps - 1.2) &&
-        liveNetEdgeBps >= -0.25 &&
+        liveGrossEdgeBps >=
+          Math.max(forceProbeMode ? forceProbeGrossFloorBps : 0.5, liveXarbEntryFloorBps - 1.2) &&
+        liveNetEdgeBps >= (forceProbeMode ? forceProbeNetFloorBps : -0.25) &&
         liveNetEdgeBps < adjustedLiveXarbThresholdBps;
       const allowFallbackOpen =
         canPilotOpen ||
@@ -1673,6 +1693,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       available = Number((available - notional_usd).toFixed(2));
       created += 1;
+      if (forceProbeMode && canMicroProbeOpen) {
+        forceProbeOpenedThisTick = true;
+      }
       if (decisionRow?.id) {
         await adminSupabase
           .from("opportunity_decisions")

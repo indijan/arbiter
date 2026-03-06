@@ -2,7 +2,7 @@ import "server-only";
 
 import { buildFeatureBundle } from "@/server/ai/opportunityScoring";
 
-const OPENAI_MODEL = "gpt-4.1-mini";
+const OPENAI_MODEL = process.env.OPENAI_RANKER_MODEL ?? "gpt-5-mini";
 const TIMEOUT_MS = 8000;
 
 type LlmScoreResult = {
