@@ -905,7 +905,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     : lowActivity
       ? XARB_MAX_SIGNAL_AGE_HOURS_LOW_ACTIVITY
       : XARB_MAX_SIGNAL_AGE_HOURS;
-  const activeObserveThresholdDiscountBps = activeObserveMode ? 0.35 : 0;
+  const activeObserveThresholdDiscountBps = activeObserveMode ? 0.9 : 0;
   const liveXarbThresholdBps =
     emergencyMode
       ? Math.max(-0.15, Math.min(0.4, baseLiveThreshold * 0.15))
@@ -915,7 +915,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       ? Math.max(0.35, Math.min(2.1, baseLiveThreshold + losingPenalty))
       : Math.max(0.9, Math.min(2.6, baseLiveThreshold + losingPenalty));
   const adjustedLiveXarbThresholdBps = Math.max(
-    -0.1,
+    -0.25,
     liveXarbThresholdBps - activeObserveThresholdDiscountBps
   );
   const pilotModeActive = prolongedInactivity && !severeLosing;
@@ -1108,6 +1108,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     policy_controller_action: policyControllerAction,
     active_observe_mode: activeObserveMode,
     active_observe_probe_band_bps: activeObserveMode ? 0.9 : 0,
+    active_observe_micro_probe_net_floor_bps: activeObserveMode ? -0.25 : 0,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
     prefilter_reasons: prefilterReasons
@@ -1490,8 +1491,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         activeObserveMode &&
         !losingRecently &&
         !severeLosing &&
-        liveGrossEdgeBps >= Math.max(-0.25, liveXarbEntryFloorBps - 0.9) &&
-        liveNetEdgeBps >= adjustedLiveXarbThresholdBps - 0.9 &&
+        liveGrossEdgeBps >= Math.max(0.5, liveXarbEntryFloorBps - 1.2) &&
+        liveNetEdgeBps >= -0.25 &&
         liveNetEdgeBps < adjustedLiveXarbThresholdBps;
       const allowFallbackOpen =
         canPilotOpen ||
