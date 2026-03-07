@@ -649,8 +649,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }
     return sum + Number(row.realized_pnl_usd ?? 0);
   }, 0);
-  const forceProbeNetFloorBps = autoPnl6h < 0 ? -0.05 : -0.15;
-  const forceProbeGrossFloorBps = autoPnl6h < 0 ? 9.5 : 8.5;
+  const forceProbeNetFloorBps = autoPnl6h < 0 ? -0.4 : -0.6;
+  const forceProbeGrossFloorBps = autoPnl6h < 0 ? 1.5 : 1.0;
 
   const closedAutoRows = autoRows.filter((row) => row.exit_ts);
   type OpenTypeKey =
@@ -1519,9 +1519,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !forceProbeOpenedThisTick &&
         !losingRecently &&
         !severeLosing &&
-        Number(opp.confidence ?? 0) >= 0.54 &&
-        liveGrossEdgeBps >= -0.2 &&
-        liveNetEdgeBps >= -0.6;
+        Number.isFinite(liveGrossEdgeBps) &&
+        Number.isFinite(liveNetEdgeBps);
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1555,13 +1554,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
                   ? starvationNotionalMultiplier
                   : canEmergencyOpen
                     ? controllerEmergencyNotionalMultiplier
-                    : canNearThresholdExplore
-                      ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
-                      : canMicroProbeOpen
-                        ? 0.01
-                        : canHardForceProbeOpen
+                      : canNearThresholdExplore
+                        ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
+                        : canMicroProbeOpen
                           ? 0.01
-                      : calibrationNotionalMultiplier;
+                          : canHardForceProbeOpen
+                            ? 0.003
+                            : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
