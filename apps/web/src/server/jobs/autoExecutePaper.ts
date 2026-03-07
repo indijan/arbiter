@@ -1514,6 +1514,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           Math.max(forceProbeMode ? forceProbeGrossFloorBps : 0.5, liveXarbEntryFloorBps - 1.2) &&
         liveNetEdgeBps >= (forceProbeMode ? forceProbeNetFloorBps : -0.25) &&
         liveNetEdgeBps < adjustedLiveXarbThresholdBps;
+      const canHardForceProbeOpen =
+        forceProbeMode &&
+        !forceProbeOpenedThisTick &&
+        !losingRecently &&
+        !severeLosing &&
+        Number(opp.confidence ?? 0) >= 0.54 &&
+        liveGrossEdgeBps >= -0.2 &&
+        liveNetEdgeBps >= -0.6;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1523,7 +1531,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         canStarvationOpen ||
         canEmergencyOpen ||
         canNearThresholdExplore ||
-        canMicroProbeOpen;
+        canMicroProbeOpen ||
+        canHardForceProbeOpen;
 
       if (liveNetEdgeBps < adjustedLiveXarbThresholdBps - nearThresholdBufferBps) {
         if (!allowFallbackOpen) {
@@ -1550,6 +1559,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
                       ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
                       : canMicroProbeOpen
                         ? 0.01
+                        : canHardForceProbeOpen
+                          ? 0.01
                       : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
@@ -1602,6 +1613,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             policy_is_canary: effectivePolicy.is_canary,
             near_threshold_open: canNearThresholdExplore,
             micro_probe_open: canMicroProbeOpen,
+            hard_force_probe_open: canHardForceProbeOpen,
             pilot_open: canPilotOpen,
             recovery_open: !canPilotOpen && canRecoveryOpen,
             reentry_open: !canPilotOpen && !canRecoveryOpen && canReentryOpen,
@@ -1693,7 +1705,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       available = Number((available - notional_usd).toFixed(2));
       created += 1;
-      if (forceProbeMode && canMicroProbeOpen) {
+      if (forceProbeMode && (canMicroProbeOpen || canHardForceProbeOpen)) {
         forceProbeOpenedThisTick = true;
       }
       if (decisionRow?.id) {
