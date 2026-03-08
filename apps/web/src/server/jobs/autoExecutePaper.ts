@@ -632,11 +632,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     const ts = Date.parse(String(row.entry_ts ?? ""));
     return Number.isFinite(ts) ? Math.max(max, ts) : max;
   }, Number.NEGATIVE_INFINITY);
-  const microProbeCooldownMinutes = 60;
+  const microProbeCooldownMinutes = 10;
   const microProbeCooldownPassed =
     !Number.isFinite(lastMicroProbeEntryMs) ||
     Date.now() - lastMicroProbeEntryMs >= microProbeCooldownMinutes * 60 * 1000;
-  const forceProbeMode = activeObserveMode && autoOpens6h === 0 && microProbeCooldownPassed;
+  const forceProbeMode = autoOpens6h <= 1 && microProbeCooldownPassed;
   const autoPnl6h = autoRows.reduce((sum, row) => {
     if (!row.exit_ts) {
       return sum;
