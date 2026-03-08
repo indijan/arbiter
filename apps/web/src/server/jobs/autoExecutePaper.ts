@@ -1023,14 +1023,24 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const confidence = Number(typed.confidence ?? 0);
       const details = typed.details ?? {};
       const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
+      const relaxedXarbPrefilter = forceProbeMode && typed.type === "xarb_spot";
+      const effectiveMinNetEdgeBps = relaxedXarbPrefilter ? -5 : minNetEdgeBps;
+      const effectiveMinXarbNetEdgeBps = relaxedXarbPrefilter
+        ? Math.min(-3, minXarbNetEdgeBps)
+        : minXarbNetEdgeBps;
+      const effectiveXarbMaxSignalAgeHours = relaxedXarbPrefilter
+        ? Math.max(24, xarbMaxSignalAgeHours)
+        : xarbMaxSignalAgeHours;
 
-      if (netEdge < minNetEdgeBps) {
+      if (netEdge < effectiveMinNetEdgeBps) {
         markPrefilter("below_min_net_edge");
         return false;
       }
       const typeConfidenceMin =
         typed.type === "xarb_spot"
-          ? Math.max(0.54, minConfidence - 0.08)
+          ? relaxedXarbPrefilter
+            ? 0.42
+            : Math.max(0.54, minConfidence - 0.08)
           : typed.type === "tri_arb"
             ? Math.max(0.54, minConfidence - 0.08)
             : minConfidence;
@@ -1051,13 +1061,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           return false;
         }
       }
-      if (typed.type === "xarb_spot" && netEdge < minXarbNetEdgeBps) {
+      if (typed.type === "xarb_spot" && netEdge < effectiveMinXarbNetEdgeBps) {
         markPrefilter("xarb_below_min_edge");
         return false;
       }
       if (typed.type === "xarb_spot") {
         const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
-        if (!Number.isFinite(ageHours) || ageHours > xarbMaxSignalAgeHours) {
+        if (!Number.isFinite(ageHours) || ageHours > effectiveXarbMaxSignalAgeHours) {
           markPrefilter("stale_xarb_signal");
           return false;
         }
