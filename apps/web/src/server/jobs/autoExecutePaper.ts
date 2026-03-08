@@ -29,6 +29,8 @@ const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
 const CONTRARIAN_UNTIL = process.env.CONTRARIAN_UNTIL ?? "";
+const HIGH_THROUGHPUT_POSITIVE_MODE =
+  (process.env.HIGH_THROUGHPUT_POSITIVE_MODE ?? "true").toLowerCase() === "true";
 const BASE_LOOKBACK_HOURS = 6;
 const WIDE_LOOKBACK_HOURS = 24;
 const XARB_REGIME_RECENT_HOURS = 2;
@@ -203,6 +205,8 @@ type AutoExecuteResult = {
     policy_controller_action: string;
     low_activity_mode: boolean;
     losing_mode: boolean;
+    high_throughput_positive_mode: boolean;
+    symbol_expectancy_bias: Record<string, number>;
     prefilter_reasons: Record<string, number>;
   };
 };
@@ -421,6 +425,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     policy_controller_action: "none",
     low_activity_mode: false,
     losing_mode: false,
+    high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
+    symbol_expectancy_bias: {},
     prefilter_reasons: {}
   };
 
@@ -504,15 +510,19 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
   const maxExecutePerTick = Math.max(
     1,
-    Math.round(policy.max_execute_per_tick) + (activeObserveMode ? 1 : 0)
+    Math.round(policy.max_execute_per_tick) +
+      (activeObserveMode ? 1 : 0) +
+      (HIGH_THROUGHPUT_POSITIVE_MODE ? 1 : 0)
   );
   const maxAttemptsPerTick = Math.max(
     1,
-    Math.round(policy.max_attempts_per_tick) + (activeObserveMode ? 2 : 0)
+    Math.round(policy.max_attempts_per_tick) +
+      (activeObserveMode ? 2 : 0) +
+      (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 0)
   );
   const candidateLimit = activeObserveMode
-    ? Math.max(MAX_CANDIDATES + 4, maxAttemptsPerTick + 2)
-    : MAX_CANDIDATES;
+    ? Math.max(MAX_CANDIDATES + 4 + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0), maxAttemptsPerTick + 2)
+    : MAX_CANDIDATES + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0);
   const liveXarbEntryFloorBps = policy.live_xarb_entry_floor_bps;
   const liveXarbTotalCostsBps = policy.live_xarb_total_costs_bps;
   const liveXarbBufferBps = policy.live_xarb_buffer_bps;
@@ -578,7 +588,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     throw new Error(recentError.message);
   }
 
-  if ((recentPositions ?? []).length >= MAX_NEW_PER_HOUR) {
+  const maxNewPerHour = HIGH_THROUGHPUT_POSITIVE_MODE ? MAX_NEW_PER_HOUR + 2 : MAX_NEW_PER_HOUR;
+  if ((recentPositions ?? []).length >= maxNewPerHour) {
     return {
       attempted: 0,
       created: 0,
@@ -598,7 +609,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   ).toISOString();
   const { data: recentAutoPositions, error: recentAutoError } = await adminSupabase
     .from("positions")
-    .select("entry_ts, exit_ts, realized_pnl_usd, meta")
+    .select("entry_ts, exit_ts, realized_pnl_usd, symbol, meta")
     .eq("user_id", userId)
     .gte("entry_ts", controllerSince)
     .limit(300);
@@ -608,7 +619,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
   const { data: longAutoPositions, error: longAutoError } = await adminSupabase
     .from("positions")
-    .select("entry_ts, exit_ts, realized_pnl_usd, meta")
+    .select("entry_ts, exit_ts, realized_pnl_usd, symbol, meta")
     .eq("user_id", userId)
     .gte("entry_ts", controllerLongSince)
     .limit(2000);
@@ -636,7 +647,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const microProbeCooldownPassed =
     !Number.isFinite(lastMicroProbeEntryMs) ||
     Date.now() - lastMicroProbeEntryMs >= microProbeCooldownMinutes * 60 * 1000;
-  const forceProbeMode = autoOpens6h <= 1 && microProbeCooldownPassed;
+  const forceProbeMode = autoOpens6h <= (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 1) && microProbeCooldownPassed;
   const autoPnl6h = autoRows.reduce((sum, row) => {
     if (!row.exit_ts) {
       return sum;
@@ -707,6 +718,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   const typeExpectancy: Record<string, number> = {};
+  const symbolStats = new Map<string, { count: number; pnl: number }>();
+  for (const row of closedAutoRowsLong) {
+    const symbol = String((row as { symbol?: string | null }).symbol ?? "");
+    if (!symbol) continue;
+    const cur = symbolStats.get(symbol) ?? { count: 0, pnl: 0 };
+    cur.count += 1;
+    cur.pnl += Number(row.realized_pnl_usd ?? 0);
+    symbolStats.set(symbol, cur);
+  }
+  const symbolExpectancyBias: Record<string, number> = {};
+  for (const [symbol, stat] of symbolStats.entries()) {
+    if (stat.count < 2) continue;
+    symbolExpectancyBias[symbol] = Number((stat.pnl / stat.count).toFixed(4));
+  }
   const isTypeEnabled = (key: OpenTypeKey) => {
     const short = typeStatsShort[key];
     const long = typeStatsLong[key];
@@ -853,7 +878,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     prefilterReasons[reason] = (prefilterReasons[reason] ?? 0) + 1;
   };
 
-  const lookbackHours = lowActivity || losingRecently ? WIDE_LOOKBACK_HOURS : BASE_LOOKBACK_HOURS;
+  const lookbackHours =
+    lowActivity || losingRecently
+      ? HIGH_THROUGHPUT_POSITIVE_MODE
+        ? Math.max(WIDE_LOOKBACK_HOURS, 36)
+        : WIDE_LOOKBACK_HOURS
+      : HIGH_THROUGHPUT_POSITIVE_MODE
+        ? Math.max(BASE_LOOKBACK_HOURS, 12)
+        : BASE_LOOKBACK_HOURS;
   const sinceOpps = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase
     .from("opportunities")
@@ -1088,6 +1120,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const variant = variantForOpportunity(opp.id);
       const aiScore = predictScore(weights, opp.features.vector);
       let effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
+      if (HIGH_THROUGHPUT_POSITIVE_MODE) {
+        const symbolBias = symbolExpectancyBias[opp.symbol] ?? 0;
+        // favor symbols with better realized expectancy and demote chronic losers
+        effectiveScore += Math.max(-0.25, Math.min(0.25, symbolBias / 4));
+      }
       if (variant === "B" && contrarianActive) {
         effectiveScore = -effectiveScore;
       }
@@ -1138,6 +1175,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     micro_probe_cooldown_minutes: microProbeCooldownMinutes,
     low_activity_mode: lowActivity,
     losing_mode: losingRecently,
+    high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
+    symbol_expectancy_bias: symbolExpectancyBias,
     prefilter_reasons: prefilterReasons
   };
 
