@@ -647,13 +647,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const microProbeCooldownPassed =
     !Number.isFinite(lastMicroProbeEntryMs) ||
     Date.now() - lastMicroProbeEntryMs >= microProbeCooldownMinutes * 60 * 1000;
-  const forceProbeMode = autoOpens6h <= (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 1) && microProbeCooldownPassed;
   const autoPnl6h = autoRows.reduce((sum, row) => {
     if (!row.exit_ts) {
       return sum;
     }
     return sum + Number(row.realized_pnl_usd ?? 0);
   }, 0);
+  const forceProbeMode =
+    autoOpens6h <= (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 1) &&
+    microProbeCooldownPassed &&
+    autoPnl6h >= 0;
   const autoPnl30d = autoRowsLong.reduce((sum, row) => {
     if (!row.exit_ts) {
       return sum;
@@ -1560,16 +1563,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !losingRecently &&
         !severeLosing &&
         liveGrossEdgeBps >=
-          Math.max(forceProbeMode ? forceProbeGrossFloorBps : 0.5, liveXarbEntryFloorBps - 1.2) &&
-        liveNetEdgeBps >= (forceProbeMode ? forceProbeNetFloorBps : -0.25) &&
+          Math.max(
+            forceProbeMode ? Math.max(forceProbeGrossFloorBps, 3.5) : 1.2,
+            liveXarbEntryFloorBps - 0.6
+          ) &&
+        liveNetEdgeBps >= (forceProbeMode ? Math.max(forceProbeNetFloorBps, 0.25) : 0.0) &&
         liveNetEdgeBps < adjustedLiveXarbThresholdBps;
       const canHardForceProbeOpen =
         forceProbeMode &&
         !forceProbeOpenedThisTick &&
         !losingRecently &&
         !severeLosing &&
-        Number.isFinite(liveGrossEdgeBps) &&
-        Number.isFinite(liveNetEdgeBps);
+        Number(opp.confidence ?? 0) >= 0.52 &&
+        liveGrossEdgeBps >= 4.0 &&
+        liveNetEdgeBps >= 0.35;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
