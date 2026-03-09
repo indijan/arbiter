@@ -207,6 +207,7 @@ type AutoExecuteResult = {
     losing_mode: boolean;
     high_throughput_positive_mode: boolean;
     symbol_expectancy_bias: Record<string, number>;
+    blocked_symbols: string[];
     prefilter_reasons: Record<string, number>;
   };
 };
@@ -427,6 +428,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     losing_mode: false,
     high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
     symbol_expectancy_bias: {},
+    blocked_symbols: [],
     prefilter_reasons: {}
   };
 
@@ -731,10 +733,19 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     symbolStats.set(symbol, cur);
   }
   const symbolExpectancyBias: Record<string, number> = {};
+  const symbolTradeCount: Record<string, number> = {};
   for (const [symbol, stat] of symbolStats.entries()) {
+    symbolTradeCount[symbol] = stat.count;
     if (stat.count < 2) continue;
     symbolExpectancyBias[symbol] = Number((stat.pnl / stat.count).toFixed(4));
   }
+  const blockedSymbols = Object.entries(symbolExpectancyBias)
+    .filter(([symbol, expectancy]) => {
+      const count = symbolTradeCount[symbol] ?? 0;
+      return count >= 8 && expectancy <= -0.08;
+    })
+    .map(([symbol]) => symbol);
+  const blockedSymbolSet = new Set(blockedSymbols);
   const isTypeEnabled = (key: OpenTypeKey) => {
     const short = typeStatsShort[key];
     const long = typeStatsLong[key];
@@ -1058,6 +1069,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const confidence = Number(typed.confidence ?? 0);
       const details = typed.details ?? {};
       const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
+      if (typed.type === "xarb_spot" && blockedSymbolSet.has(typed.symbol)) {
+        markPrefilter("blocked_symbol");
+        return false;
+      }
       const relaxedXarbPrefilter = forceProbeMode && typed.type === "xarb_spot";
       const effectiveMinNetEdgeBps = relaxedXarbPrefilter ? -5 : minNetEdgeBps;
       const effectiveMinXarbNetEdgeBps = relaxedXarbPrefilter
@@ -1180,6 +1195,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     losing_mode: losingRecently,
     high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
     symbol_expectancy_bias: symbolExpectancyBias,
+    blocked_symbols: blockedSymbols,
     prefilter_reasons: prefilterReasons
   };
 
@@ -1504,6 +1520,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const liveNetEdgeBps =
         liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
+      const symbolBias = symbolExpectancyBias[opp.symbol] ?? 0;
+      const symbolClosedCount = symbolTradeCount[opp.symbol] ?? 0;
+      const favorableSymbol = symbolClosedCount >= 2 && symbolBias > 0.02;
+      const xarbQualityNetFloor =
+        opp.type === "xarb_spot"
+          ? favorableSymbol
+            ? Math.max(adjustedLiveXarbThresholdBps, 4.5)
+            : Math.max(adjustedLiveXarbThresholdBps, 8)
+          : adjustedLiveXarbThresholdBps;
+      const xarbQualityGrossFloor =
+        opp.type === "xarb_spot" ? (favorableSymbol ? 15 : 18) : 0;
+      const meetsXarbQualityFloor =
+        opp.type !== "xarb_spot" ||
+        (liveNetEdgeBps >= xarbQualityNetFloor && liveGrossEdgeBps >= xarbQualityGrossFloor);
       const positiveExplorationMode =
         !losingRecently &&
         (activeObserveMode || autoPnl30d > 0) &&
@@ -1557,26 +1587,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         positiveExplorationMode &&
         liveGrossEdgeBps >= Math.max(0, liveXarbEntryFloorBps - (activeObserveMode ? 0.4 : 0.25)) &&
         liveNetEdgeBps >= adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
-      const canMicroProbeOpen =
-        (activeObserveMode || forceProbeMode) &&
-        !(forceProbeMode && forceProbeOpenedThisTick) &&
-        !losingRecently &&
-        !severeLosing &&
-        liveGrossEdgeBps >=
-          Math.max(
-            forceProbeMode ? Math.max(forceProbeGrossFloorBps, 3.5) : 1.2,
-            liveXarbEntryFloorBps - 0.6
-          ) &&
-        liveNetEdgeBps >= (forceProbeMode ? Math.max(forceProbeNetFloorBps, 0.25) : 0.0) &&
-        liveNetEdgeBps < adjustedLiveXarbThresholdBps;
-      const canHardForceProbeOpen =
-        forceProbeMode &&
-        !forceProbeOpenedThisTick &&
-        !losingRecently &&
-        !severeLosing &&
-        Number(opp.confidence ?? 0) >= 0.52 &&
-        liveGrossEdgeBps >= 4.0 &&
-        liveNetEdgeBps >= 0.35;
+      const canMicroProbeOpen = false;
+      const canHardForceProbeOpen = false;
       const allowFallbackOpen =
         canPilotOpen ||
         canCalibrationOpen ||
@@ -1595,6 +1607,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
           continue;
         }
+      }
+
+      if (!meetsXarbQualityFloor && !allowFallbackOpen) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "quality_floor_not_met" });
+        continue;
       }
 
       if (allowFallbackOpen) {
