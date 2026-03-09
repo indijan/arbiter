@@ -207,6 +207,7 @@ type AutoExecuteResult = {
     losing_mode: boolean;
     high_throughput_positive_mode: boolean;
     symbol_expectancy_bias: Record<string, number>;
+    unfavorable_symbols: string[];
     blocked_symbols: string[];
     prefilter_reasons: Record<string, number>;
   };
@@ -428,6 +429,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     losing_mode: false,
     high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
     symbol_expectancy_bias: {},
+    unfavorable_symbols: [],
     blocked_symbols: [],
     prefilter_reasons: {}
   };
@@ -734,18 +736,35 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
   const symbolExpectancyBias: Record<string, number> = {};
   const symbolTradeCount: Record<string, number> = {};
+  const symbolWinCount: Record<string, number> = {};
   for (const [symbol, stat] of symbolStats.entries()) {
     symbolTradeCount[symbol] = stat.count;
     if (stat.count < 2) continue;
     symbolExpectancyBias[symbol] = Number((stat.pnl / stat.count).toFixed(4));
   }
+  for (const row of closedAutoRowsLong) {
+    const symbol = String((row as { symbol?: string | null }).symbol ?? "");
+    if (!symbol) continue;
+    if (Number(row.realized_pnl_usd ?? 0) > 0) {
+      symbolWinCount[symbol] = (symbolWinCount[symbol] ?? 0) + 1;
+    }
+  }
+  const unfavorableSymbols = Object.entries(symbolExpectancyBias)
+    .filter(([symbol, expectancy]) => {
+      const count = symbolTradeCount[symbol] ?? 0;
+      const wins = symbolWinCount[symbol] ?? 0;
+      return count >= 8 && expectancy <= -0.08 && wins <= 1;
+    })
+    .map(([symbol]) => symbol);
   const blockedSymbols = Object.entries(symbolExpectancyBias)
     .filter(([symbol, expectancy]) => {
       const count = symbolTradeCount[symbol] ?? 0;
-      return count >= 8 && expectancy <= -0.08;
+      const wins = symbolWinCount[symbol] ?? 0;
+      return count >= 12 && expectancy <= -0.12 && wins === 0;
     })
     .map(([symbol]) => symbol);
   const blockedSymbolSet = new Set(blockedSymbols);
+  const unfavorableSymbolSet = new Set(unfavorableSymbols);
   const isTypeEnabled = (key: OpenTypeKey) => {
     const short = typeStatsShort[key];
     const long = typeStatsLong[key];
@@ -1195,6 +1214,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     losing_mode: losingRecently,
     high_throughput_positive_mode: HIGH_THROUGHPUT_POSITIVE_MODE,
     symbol_expectancy_bias: symbolExpectancyBias,
+    unfavorable_symbols: unfavorableSymbols,
     blocked_symbols: blockedSymbols,
     prefilter_reasons: prefilterReasons
   };
@@ -1522,15 +1542,24 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
       const symbolBias = symbolExpectancyBias[opp.symbol] ?? 0;
       const symbolClosedCount = symbolTradeCount[opp.symbol] ?? 0;
+      const unfavorableSymbol = unfavorableSymbolSet.has(opp.symbol);
       const favorableSymbol = symbolClosedCount >= 2 && symbolBias > 0.02;
       const xarbQualityNetFloor =
         opp.type === "xarb_spot"
           ? favorableSymbol
             ? Math.max(adjustedLiveXarbThresholdBps, 4.5)
-            : Math.max(adjustedLiveXarbThresholdBps, 8)
+            : unfavorableSymbol
+              ? Math.max(adjustedLiveXarbThresholdBps, 12)
+              : Math.max(adjustedLiveXarbThresholdBps, 8)
           : adjustedLiveXarbThresholdBps;
       const xarbQualityGrossFloor =
-        opp.type === "xarb_spot" ? (favorableSymbol ? 15 : 18) : 0;
+        opp.type === "xarb_spot"
+          ? favorableSymbol
+            ? 15
+            : unfavorableSymbol
+              ? 22
+              : 18
+          : 0;
       const meetsXarbQualityFloor =
         opp.type !== "xarb_spot" ||
         (liveNetEdgeBps >= xarbQualityNetFloor && liveGrossEdgeBps >= xarbQualityGrossFloor);
