@@ -1092,14 +1092,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         markPrefilter("blocked_symbol");
         return false;
       }
-      const relaxedXarbPrefilter = forceProbeMode && typed.type === "xarb_spot";
+      const relaxedXarbPrefilter = false;
       const effectiveMinNetEdgeBps = relaxedXarbPrefilter ? -5 : minNetEdgeBps;
       const effectiveMinXarbNetEdgeBps = relaxedXarbPrefilter
         ? Math.min(-3, minXarbNetEdgeBps)
         : minXarbNetEdgeBps;
       const effectiveXarbMaxSignalAgeHours = relaxedXarbPrefilter
         ? Math.max(24, xarbMaxSignalAgeHours)
-        : xarbMaxSignalAgeHours;
+        : Math.min(xarbMaxSignalAgeHours, 2);
 
       if (netEdge < effectiveMinNetEdgeBps) {
         markPrefilter("below_min_net_edge");

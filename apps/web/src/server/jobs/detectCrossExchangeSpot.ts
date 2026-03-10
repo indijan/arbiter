@@ -7,10 +7,12 @@ const IDEMPOTENT_MINUTES = 5;
 const COSTS_BPS = {
   fee_bps_total: 6,
   slippage_bps_total: 2,
-  transfer_buffer_bps: 0
+  transfer_buffer_bps: 3
 };
 
-const MIN_NET_EDGE_BPS = 0;
+const MIN_NET_EDGE_BPS = 3;
+const MAX_SNAPSHOT_AGE_SECONDS = 120;
+const MAX_SNAPSHOT_SKEW_SECONDS = 20;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
@@ -52,16 +54,19 @@ export type DetectCrossExchangeResult = {
 };
 
 function confidenceForXarb(netEdgeBps: number) {
-  if (netEdgeBps >= 40) {
+  if (netEdgeBps >= 20) {
     return 0.72;
   }
-  if (netEdgeBps >= 30) {
+  if (netEdgeBps >= 14) {
     return 0.68;
   }
-  if (netEdgeBps >= 22) {
+  if (netEdgeBps >= 9) {
     return 0.64;
   }
-  return 0.6;
+  if (netEdgeBps >= 5) {
+    return 0.61;
+  }
+  return 0.56;
 }
 
 export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResult> {
@@ -170,6 +175,15 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         q.ask !== null && q.bid !== null && q.ask > 0 && q.bid > 0 && q.ask > q.bid
     );
 
+    const quoteAgesSeconds = validQuotes
+      .map((q) => {
+        const snap =
+          q.exchange === "bybit" ? bybitSnap : q.exchange === "okx" ? okxSnap : krakenSnap;
+        const ageMs = snap?.ts ? Date.now() - Date.parse(String(snap.ts)) : Number.NaN;
+        return Number.isFinite(ageMs) ? ageMs / 1000 : Number.NaN;
+      })
+      .filter((age): age is number => Number.isFinite(age));
+
     if (validQuotes.length < 2) {
       skipped += 1;
       evaluated.push({
@@ -182,6 +196,41 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         net_edge_bps: 0,
         decision: "skipped",
         reason: "invalid quotes"
+      });
+      continue;
+    }
+
+    if (
+      quoteAgesSeconds.length < 2 ||
+      Math.max(...quoteAgesSeconds) > MAX_SNAPSHOT_AGE_SECONDS
+    ) {
+      skipped += 1;
+      evaluated.push({
+        canonical_symbol: mapping.canonical,
+        buy_exchange: "-",
+        sell_exchange: "-",
+        buy_ask: 0,
+        sell_bid: 0,
+        gross_edge_bps: 0,
+        net_edge_bps: 0,
+        decision: "skipped",
+        reason: "stale snapshots"
+      });
+      continue;
+    }
+
+    if (Math.max(...quoteAgesSeconds) - Math.min(...quoteAgesSeconds) > MAX_SNAPSHOT_SKEW_SECONDS) {
+      skipped += 1;
+      evaluated.push({
+        canonical_symbol: mapping.canonical,
+        buy_exchange: "-",
+        sell_exchange: "-",
+        buy_ask: 0,
+        sell_bid: 0,
+        gross_edge_bps: 0,
+        net_edge_bps: 0,
+        decision: "skipped",
+        reason: "snapshot skew"
       });
       continue;
     }
