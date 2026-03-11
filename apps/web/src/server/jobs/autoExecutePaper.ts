@@ -89,6 +89,8 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   tri_arb: 2
 };
 
+const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
+
 const CANONICAL_MAP: Record<
   string,
   { bybit: string; okx: string; kraken?: string }
@@ -1558,21 +1560,22 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const symbolClosedCount = symbolTradeCount[opp.symbol] ?? 0;
       const unfavorableSymbol = unfavorableSymbolSet.has(opp.symbol);
       const favorableSymbol = symbolClosedCount >= 2 && symbolBias > 0.02;
+      const isCoreXarbSymbol = CORE_XARB_SYMBOLS.has(opp.symbol);
       const xarbQualityNetFloor =
         opp.type === "xarb_spot"
           ? favorableSymbol
             ? Math.max(adjustedLiveXarbThresholdBps, 4.5)
             : unfavorableSymbol
-              ? Math.max(adjustedLiveXarbThresholdBps, 8)
-              : Math.max(adjustedLiveXarbThresholdBps, 5)
+              ? Math.max(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 8 : 6)
+              : Math.max(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 5 : 3)
           : adjustedLiveXarbThresholdBps;
       const xarbQualityGrossFloor =
         opp.type === "xarb_spot"
           ? favorableSymbol
             ? 14
             : unfavorableSymbol
-              ? 18
-              : 14
+              ? (isCoreXarbSymbol ? 18 : 15)
+              : (isCoreXarbSymbol ? 14 : 10)
           : 0;
       const meetsXarbQualityFloor =
         opp.type !== "xarb_spot" ||
