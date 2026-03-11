@@ -1616,6 +1616,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         autoOpens6h < Math.max(2, controllerMinOpenings + 1);
       const positiveEdgeRelaxBps = positiveExplorationMode ? (activeObserveMode ? 0.25 : 0.12) : 0;
       const nearThresholdBufferBps = positiveExplorationMode ? (activeObserveMode ? 0.45 : 0.25) : 0;
+      const xarbPolicyHardBlocked =
+        blockedTypes.includes("normal") &&
+        blockedTypes.includes("pilot") &&
+        blockedTypes.includes("calibration");
+      const canRiskClampXarbOpen =
+        xarbPolicyHardBlocked &&
+        opp.type === "xarb_spot" &&
+        !losingRecently &&
+        !severeLosing &&
+        liveGrossEdgeBps >= (isCoreXarbSymbol ? 14 : 10) &&
+        liveNetEdgeBps >= (isCoreXarbSymbol ? 5.5 : 3.5);
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1666,6 +1677,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const canMicroProbeOpen = false;
       const canHardForceProbeOpen = false;
       const allowFallbackOpen =
+        canRiskClampXarbOpen ||
         canPilotOpen ||
         canCalibrationOpen ||
         canRecoveryOpen ||
@@ -1692,25 +1704,27 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       if (allowFallbackOpen) {
-        const fallbackMultiplier = canPilotOpen
-          ? pilotNotionalMultiplier
-          : canRecoveryOpen
-            ? recoveryNotionalMultiplier
-            : canReentryOpen
-              ? reentryNotionalMultiplier
-              : canInactivityOpen
-                ? inactivityNotionalMultiplier
-                : canStarvationOpen
-                  ? starvationNotionalMultiplier
-                  : canEmergencyOpen
-                    ? controllerEmergencyNotionalMultiplier
-                      : canNearThresholdExplore
-                        ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
-                        : canMicroProbeOpen
-                          ? 0.01
-                          : canHardForceProbeOpen
-                            ? 0.003
-                            : calibrationNotionalMultiplier;
+        const fallbackMultiplier = canRiskClampXarbOpen
+          ? 0.05
+          : canPilotOpen
+            ? pilotNotionalMultiplier
+            : canRecoveryOpen
+              ? recoveryNotionalMultiplier
+              : canReentryOpen
+                ? reentryNotionalMultiplier
+                : canInactivityOpen
+                  ? inactivityNotionalMultiplier
+                  : canStarvationOpen
+                    ? starvationNotionalMultiplier
+                    : canEmergencyOpen
+                      ? controllerEmergencyNotionalMultiplier
+                        : canNearThresholdExplore
+                          ? Math.min(controllerEmergencyNotionalMultiplier, 0.015)
+                          : canMicroProbeOpen
+                            ? 0.01
+                            : canHardForceProbeOpen
+                              ? 0.003
+                              : calibrationNotionalMultiplier;
         const pilotNotional = clampNotional(
           Math.max(minNotional, notional_usd * fallbackMultiplier),
           minNotional,
