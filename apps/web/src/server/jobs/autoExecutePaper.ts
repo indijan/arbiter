@@ -93,20 +93,20 @@ const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
 
 const CANONICAL_MAP: Record<
   string,
-  { bybit: string; okx: string; kraken?: string }
+  { bybit: string; okx: string; coinbase?: string; kraken?: string }
 > = {
-  BTCUSD: { bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
-  ETHUSD: { bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
-  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT", kraken: "SOLUSD" },
-  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT", kraken: "XRPUSD" },
+  BTCUSD: { bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
+  ETHUSD: { bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
+  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
+  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
   BNBUSD: { bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
-  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT", kraken: "ADAUSD" },
+  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
   DOGEUSD: { bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT", kraken: "AVAXUSD" },
-  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT", kraken: "LINKUSD" },
-  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT", kraken: "LTCUSD" },
-  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT", kraken: "DOTUSD" },
-  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT", kraken: "BCHUSD" },
+  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
+  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
+  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
+  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
+  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
   TRXUSD: { bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 };
 
@@ -155,6 +155,11 @@ type KrakenTicker = {
 type KrakenResponse = {
   error: string[];
   result: Record<string, KrakenTicker>;
+};
+
+type CoinbaseTicker = {
+  bid?: string;
+  ask?: string;
 };
 
 type OpportunityRow = {
@@ -356,6 +361,19 @@ async function fetchSpotTicker(exchange: string, symbol: string) {
     const bid = toNumber(ticker?.b?.[0]);
     if (!bid || !ask || ask <= bid) {
       throw new Error("Kraken invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "coinbase") {
+    const productId = symbol.replace("USD", "-USD");
+    const data = await fetchJson<CoinbaseTicker>(
+      `https://api.exchange.coinbase.com/products/${productId}/ticker`
+    );
+    const ask = toNumber(data.ask);
+    const bid = toNumber(data.bid);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Coinbase invalid bid/ask");
     }
     return { bid, ask };
   }
@@ -1513,9 +1531,21 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const sellExchange = String((details as Record<string, unknown>).sell_exchange ?? "");
 
       const buySymbol =
-        buyExchange === "kraken" ? mapping.kraken : buyExchange === "okx" ? mapping.okx : mapping.bybit;
+        buyExchange === "kraken"
+          ? mapping.kraken
+          : buyExchange === "coinbase"
+            ? mapping.coinbase
+            : buyExchange === "okx"
+              ? mapping.okx
+              : mapping.bybit;
       const sellSymbol =
-        sellExchange === "kraken" ? mapping.kraken : sellExchange === "okx" ? mapping.okx : mapping.bybit;
+        sellExchange === "kraken"
+          ? mapping.kraken
+          : sellExchange === "coinbase"
+            ? mapping.coinbase
+            : sellExchange === "okx"
+              ? mapping.okx
+              : mapping.bybit;
 
       if (!buyExchange || !sellExchange || !buySymbol || !sellSymbol) {
         skipped += 1;

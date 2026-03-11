@@ -19,20 +19,21 @@ const CANONICAL_MAP: Array<{
   canonical: string;
   bybit: string;
   okx: string;
+  coinbase?: string;
   kraken?: string;
 }> = [
-  { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
-  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
-  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT", kraken: "SOLUSD" },
-  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT", kraken: "XRPUSD" },
+  { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
+  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
+  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
+  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
   { canonical: "BNBUSD", bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
-  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT", kraken: "ADAUSD" },
+  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
   { canonical: "DOGEUSD", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT", kraken: "AVAXUSD" },
-  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT", kraken: "LINKUSD" },
-  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT", kraken: "LTCUSD" },
-  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT", kraken: "DOTUSD" },
-  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT", kraken: "BCHUSD" },
+  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
+  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
+  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
+  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
+  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
   { canonical: "TRXUSD", bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 ];
 
@@ -111,6 +112,23 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       throw new Error(okxError.message);
     }
 
+    let coinbaseSnap: { ts: string; spot_bid: number | null; spot_ask: number | null } | null = null;
+    if (mapping.coinbase) {
+      const { data, error } = await adminSupabase
+        .from("market_snapshots")
+        .select("ts, spot_bid, spot_ask")
+        .eq("exchange", "coinbase")
+        .eq("symbol", mapping.coinbase)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      coinbaseSnap = data;
+    }
+
     let krakenSnap: { ts: string; spot_bid: number | null; spot_ask: number | null } | null = null;
     if (mapping.kraken) {
       const { data, error } = await adminSupabase
@@ -128,7 +146,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       krakenSnap = data;
     }
 
-    if (!bybitSnap && !okxSnap && !krakenSnap) {
+    if (!bybitSnap && !okxSnap && !coinbaseSnap && !krakenSnap) {
       skipped += 1;
       evaluated.push({
         canonical_symbol: mapping.canonical,
@@ -161,6 +179,14 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
             note: "USDT proxy"
           }
         : null,
+      coinbaseSnap
+        ? {
+            exchange: "coinbase",
+            ask: coinbaseSnap.spot_ask,
+            bid: coinbaseSnap.spot_bid,
+            note: "USD"
+          }
+        : null,
       krakenSnap
         ? {
             exchange: "kraken",
@@ -179,7 +205,13 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     const quoteAgesSeconds = validQuotes
       .map((q) => {
         const snap =
-          q.exchange === "bybit" ? bybitSnap : q.exchange === "okx" ? okxSnap : krakenSnap;
+          q.exchange === "bybit"
+            ? bybitSnap
+            : q.exchange === "okx"
+              ? okxSnap
+              : q.exchange === "coinbase"
+                ? coinbaseSnap
+                : krakenSnap;
         const ageMs = snap?.ts ? Date.now() - Date.parse(String(snap.ts)) : Number.NaN;
         return Number.isFinite(ageMs) ? ageMs / 1000 : Number.NaN;
       })

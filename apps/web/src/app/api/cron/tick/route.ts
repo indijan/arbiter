@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestBinance } from "@/server/jobs/ingestBinance";
+import { ingestCoinbase } from "@/server/jobs/ingestCoinbase";
 import { ingestKraken } from "@/server/jobs/ingestKraken";
 import { detectCarry } from "@/server/jobs/detectCarry";
 import { detectCrossExchangeSpot } from "@/server/jobs/detectCrossExchangeSpot";
@@ -141,6 +142,7 @@ async function handleTick(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const ingestBinanceResult = await runJob(() => ingestBinance());
+  const ingestCoinbaseResult = await runJob(() => ingestCoinbase());
   const ingestKrakenResult = await runJob(() => ingestKraken());
   const carryResult = await runJob(() =>
     detectCarry({ holding_hours: body?.holding_hours })
@@ -159,6 +161,13 @@ async function handleTick(request: Request) {
     );
   } else {
     ingestErrors.push(`ingest_binance_failed: ${ingestBinanceResult.error}`);
+  }
+  if (ingestCoinbaseResult.ok) {
+    ingestErrors.push(
+      ...ingestCoinbaseResult.data.errors.map((e) => `${e.symbol}: ${e.error}`)
+    );
+  } else {
+    ingestErrors.push(`ingest_coinbase_failed: ${ingestCoinbaseResult.error}`);
   }
   if (ingestKrakenResult.ok) {
     ingestErrors.push(
@@ -254,6 +263,9 @@ async function handleTick(request: Request) {
       bybit_okx: ingestBinanceResult.ok
         ? ingestBinanceResult.data
         : { ok: false, error: ingestBinanceResult.error },
+      coinbase: ingestCoinbaseResult.ok
+        ? ingestCoinbaseResult.data
+        : { ok: false, error: ingestCoinbaseResult.error },
       kraken: ingestKrakenResult.ok
         ? ingestKrakenResult.data
         : { ok: false, error: ingestKrakenResult.error }

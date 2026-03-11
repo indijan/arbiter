@@ -26,7 +26,17 @@ const XARB_EDGE_FORCE_CLOSE_BPS = -1.2;
 
 const KRAKEN_PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
-  ETHUSD: "XETHZUSD"
+  ETHUSD: "XETHZUSD",
+  SOLUSD: "SOLUSD",
+  XRPUSD: "XXRPZUSD",
+  BNBUSD: "BNBUSD",
+  ADAUSD: "ADAUSD",
+  AVAXUSD: "AVAXUSD",
+  LINKUSD: "LINKUSD",
+  LTCUSD: "XLTCZUSD",
+  DOTUSD: "DOTUSD",
+  BCHUSD: "BCHUSD",
+  TRXUSD: "TRXUSD"
 };
 
 type BybitTicker = {
@@ -72,6 +82,11 @@ type KrakenTicker = {
 type KrakenResponse = {
   error: string[];
   result: Record<string, KrakenTicker>;
+};
+
+type CoinbaseTicker = {
+  bid?: string;
+  ask?: string;
 };
 
 type CloseResult = {
@@ -158,6 +173,19 @@ async function fetchSpotTicker(exchange: string, symbol: string) {
     const bid = toNumber(ticker?.b?.[0]);
     if (!bid || !ask || ask <= bid) {
       throw new Error("Kraken invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "coinbase") {
+    const productId = symbol.replace("USD", "-USD");
+    const data = await fetchJson<CoinbaseTicker>(
+      `https://api.exchange.coinbase.com/products/${productId}/ticker`
+    );
+    const ask = toNumber(data.ask);
+    const bid = toNumber(data.bid);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Coinbase invalid bid/ask");
     }
     return { bid, ask };
   }
