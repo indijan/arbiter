@@ -95,22 +95,32 @@ const CANONICAL_MAP: Record<
 > = {
   BTCUSD: { bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
   ETHUSD: { bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
-  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT" },
-  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT" },
-  BNBUSD: { bybit: "BNBUSDT", okx: "BNBUSDT" },
-  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT" },
+  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT", kraken: "SOLUSD" },
+  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT", kraken: "XRPUSD" },
+  BNBUSD: { bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
+  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT", kraken: "ADAUSD" },
   DOGEUSD: { bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT" },
-  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT" },
-  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT" },
-  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT" },
-  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT" },
-  TRXUSD: { bybit: "TRXUSDT", okx: "TRXUSDT" }
+  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT", kraken: "AVAXUSD" },
+  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT", kraken: "LINKUSD" },
+  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT", kraken: "LTCUSD" },
+  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT", kraken: "DOTUSD" },
+  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT", kraken: "BCHUSD" },
+  TRXUSD: { bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 };
 
 const KRAKEN_PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
-  ETHUSD: "XETHZUSD"
+  ETHUSD: "XETHZUSD",
+  SOLUSD: "SOLUSD",
+  XRPUSD: "XXRPZUSD",
+  BNBUSD: "BNBUSD",
+  ADAUSD: "ADAUSD",
+  AVAXUSD: "AVAXUSD",
+  LINKUSD: "LINKUSD",
+  LTCUSD: "XLTCZUSD",
+  DOTUSD: "DOTUSD",
+  BCHUSD: "BCHUSD",
+  TRXUSD: "TRXUSD"
 };
 
 type BybitTicker = {

@@ -6,7 +6,17 @@ const TIMEOUT_MS = 9000;
 
 const PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
-  ETHUSD: "XETHZUSD"
+  ETHUSD: "XETHZUSD",
+  SOLUSD: "SOLUSD",
+  XRPUSD: "XXRPZUSD",
+  BNBUSD: "BNBUSD",
+  ADAUSD: "ADAUSD",
+  AVAXUSD: "AVAXUSD",
+  LINKUSD: "LINKUSD",
+  LTCUSD: "XLTCZUSD",
+  DOTUSD: "DOTUSD",
+  BCHUSD: "BCHUSD",
+  TRXUSD: "TRXUSD"
 };
 
 type KrakenTicker = {

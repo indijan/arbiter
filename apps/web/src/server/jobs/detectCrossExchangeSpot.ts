@@ -23,17 +23,17 @@ const CANONICAL_MAP: Array<{
 }> = [
   { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", kraken: "BTCUSD" },
   { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", kraken: "ETHUSD" },
-  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT" },
-  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT" },
-  { canonical: "BNBUSD", bybit: "BNBUSDT", okx: "BNBUSDT" },
-  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT" },
+  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT", kraken: "SOLUSD" },
+  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT", kraken: "XRPUSD" },
+  { canonical: "BNBUSD", bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
+  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT", kraken: "ADAUSD" },
   { canonical: "DOGEUSD", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT" },
-  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT" },
-  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT" },
-  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT" },
-  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT" },
-  { canonical: "TRXUSD", bybit: "TRXUSDT", okx: "TRXUSDT" }
+  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT", kraken: "AVAXUSD" },
+  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT", kraken: "LINKUSD" },
+  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT", kraken: "LTCUSD" },
+  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT", kraken: "DOTUSD" },
+  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT", kraken: "BCHUSD" },
+  { canonical: "TRXUSD", bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 ];
 
 export type EvaluatedRow = {
