@@ -1625,8 +1625,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         opp.type === "xarb_spot" &&
         !losingRecently &&
         !severeLosing &&
-        liveGrossEdgeBps >= (isCoreXarbSymbol ? 14 : 10) &&
-        liveNetEdgeBps >= (isCoreXarbSymbol ? 5.5 : 3.5);
+        liveGrossEdgeBps >= (isCoreXarbSymbol ? 10 : 7) &&
+        liveNetEdgeBps >= (isCoreXarbSymbol ? 2.5 : 1.25);
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1689,7 +1689,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         canMicroProbeOpen ||
         canHardForceProbeOpen;
 
-      if (liveNetEdgeBps < adjustedLiveXarbThresholdBps - nearThresholdBufferBps) {
+      const effectiveLiveThresholdBps = canRiskClampXarbOpen
+        ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 2.5 : 1.25)
+        : adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
+
+      if (liveNetEdgeBps < effectiveLiveThresholdBps) {
         if (!allowFallbackOpen) {
           skipped += 1;
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
