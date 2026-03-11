@@ -924,10 +924,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const lookbackHours =
     lowActivity || losingRecently
       ? HIGH_THROUGHPUT_POSITIVE_MODE
-        ? Math.max(WIDE_LOOKBACK_HOURS, 36)
+        ? Math.max(WIDE_LOOKBACK_HOURS, 6)
         : WIDE_LOOKBACK_HOURS
       : HIGH_THROUGHPUT_POSITIVE_MODE
-        ? Math.max(BASE_LOOKBACK_HOURS, 12)
+        ? Math.max(BASE_LOOKBACK_HOURS, 3)
         : BASE_LOOKBACK_HOURS;
   const sinceOpps = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
   const { data: opportunities, error: oppError } = await adminSupabase

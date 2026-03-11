@@ -10,7 +10,7 @@ const COSTS_BPS = {
   transfer_buffer_bps: 3
 };
 
-const MIN_NET_EDGE_BPS = 1;
+const MIN_NET_EDGE_BPS = 0;
 // Snapshot ingestion runs roughly every 10 minutes, so freshness must tolerate one full cycle.
 const MAX_SNAPSHOT_AGE_SECONDS = 15 * 60;
 const MAX_SNAPSHOT_SKEW_SECONDS = 20;
@@ -67,7 +67,7 @@ function confidenceForXarb(netEdgeBps: number) {
   if (netEdgeBps >= 5) {
     return 0.61;
   }
-  return 0.56;
+  return 0.54;
 }
 
 export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResult> {
