@@ -1098,6 +1098,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const confidence = Number(typed.confidence ?? 0);
       const details = typed.details ?? {};
       const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
+      if (typed.type === "tri_arb") {
+        markPrefilter("tri_arb_disabled");
+        return false;
+      }
       if (typed.type === "xarb_spot" && blockedSymbolSet.has(typed.symbol)) {
         markPrefilter("blocked_symbol");
         return false;
@@ -1559,16 +1563,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           ? favorableSymbol
             ? Math.max(adjustedLiveXarbThresholdBps, 4.5)
             : unfavorableSymbol
-              ? Math.max(adjustedLiveXarbThresholdBps, 12)
-              : Math.max(adjustedLiveXarbThresholdBps, 8)
+              ? Math.max(adjustedLiveXarbThresholdBps, 8)
+              : Math.max(adjustedLiveXarbThresholdBps, 5)
           : adjustedLiveXarbThresholdBps;
       const xarbQualityGrossFloor =
         opp.type === "xarb_spot"
           ? favorableSymbol
-            ? 15
+            ? 14
             : unfavorableSymbol
-              ? 22
-              : 18
+              ? 18
+              : 14
           : 0;
       const meetsXarbQualityFloor =
         opp.type !== "xarb_spot" ||
