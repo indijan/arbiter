@@ -17,24 +17,25 @@ const MAX_SNAPSHOT_SKEW_SECONDS = 20;
 
 const CANONICAL_MAP: Array<{
   canonical: string;
+  binance?: string;
   bybit: string;
   okx: string;
   coinbase?: string;
   kraken?: string;
 }> = [
-  { canonical: "BTCUSD", bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
-  { canonical: "ETHUSD", bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
-  { canonical: "SOLUSD", bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
-  { canonical: "XRPUSD", bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
-  { canonical: "BNBUSD", bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
-  { canonical: "ADAUSD", bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
-  { canonical: "DOGEUSD", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  { canonical: "AVAXUSD", bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
-  { canonical: "LINKUSD", bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
-  { canonical: "LTCUSD", bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
-  { canonical: "DOTUSD", bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
-  { canonical: "BCHUSD", bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
-  { canonical: "TRXUSD", bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
+  { canonical: "BTCUSD", binance: "BTCUSDT", bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
+  { canonical: "ETHUSD", binance: "ETHUSDT", bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
+  { canonical: "SOLUSD", binance: "SOLUSDT", bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
+  { canonical: "XRPUSD", binance: "XRPUSDT", bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
+  { canonical: "BNBUSD", binance: "BNBUSDT", bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
+  { canonical: "ADAUSD", binance: "ADAUSDT", bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
+  { canonical: "DOGEUSD", binance: "DOGEUSDT", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
+  { canonical: "AVAXUSD", binance: "AVAXUSDT", bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
+  { canonical: "LINKUSD", binance: "LINKUSDT", bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
+  { canonical: "LTCUSD", binance: "LTCUSDT", bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
+  { canonical: "DOTUSD", binance: "DOTUSDT", bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
+  { canonical: "BCHUSD", binance: "BCHUSDT", bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
+  { canonical: "TRXUSD", binance: "TRXUSDT", bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 ];
 
 export type EvaluatedRow = {
@@ -86,6 +87,23 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
   const evaluated: EvaluatedRow[] = [];
 
   for (const mapping of CANONICAL_MAP) {
+    let binanceSnap: { ts: string; spot_bid: number | null; spot_ask: number | null } | null = null;
+    if (mapping.binance) {
+      const { data, error } = await adminSupabase
+        .from("market_snapshots")
+        .select("ts, spot_bid, spot_ask")
+        .eq("exchange", "binance")
+        .eq("symbol", mapping.binance)
+        .order("ts", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      binanceSnap = data;
+    }
+
     const { data: bybitSnap, error: bybitError } = await adminSupabase
       .from("market_snapshots")
       .select("ts, spot_bid, spot_ask")
@@ -146,7 +164,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       krakenSnap = data;
     }
 
-    if (!bybitSnap && !okxSnap && !coinbaseSnap && !krakenSnap) {
+    if (!binanceSnap && !bybitSnap && !okxSnap && !coinbaseSnap && !krakenSnap) {
       skipped += 1;
       evaluated.push({
         canonical_symbol: mapping.canonical,
@@ -163,6 +181,14 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     }
 
     const quotes = [
+      binanceSnap
+        ? {
+            exchange: "binance",
+            ask: binanceSnap.spot_ask,
+            bid: binanceSnap.spot_bid,
+            note: "USDT proxy"
+          }
+        : null,
       bybitSnap
         ? {
             exchange: "bybit",
@@ -205,7 +231,9 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     const quoteAgesSeconds = validQuotes
       .map((q) => {
         const snap =
-          q.exchange === "bybit"
+          q.exchange === "binance"
+            ? binanceSnap
+            : q.exchange === "bybit"
             ? bybitSnap
             : q.exchange === "okx"
               ? okxSnap

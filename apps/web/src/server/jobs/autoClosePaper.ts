@@ -39,6 +39,12 @@ const KRAKEN_PAIR_MAP: Record<string, string> = {
   TRXUSD: "TRXUSD"
 };
 
+const BINANCE_BASE_URLS = [
+  "https://api.binance.com",
+  "https://api1.binance.com",
+  "https://api-gcp.binance.com"
+];
+
 type BybitTicker = {
   bid1Price: string;
   ask1Price: string;
@@ -89,6 +95,11 @@ type CoinbaseTicker = {
   ask?: string;
 };
 
+type BinanceBookTicker = {
+  bidPrice: string;
+  askPrice: string;
+};
+
 type CloseResult = {
   attempted: number;
   closed: number;
@@ -112,6 +123,20 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(`HTTP ${response.status}`);
   }
   return (await response.json()) as T;
+}
+
+async function fetchBinanceJson<T>(path: string): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (const baseUrl of BINANCE_BASE_URLS) {
+    try {
+      return await fetchJson<T>(`${baseUrl}${path}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Unknown Binance error");
+    }
+  }
+
+  throw lastError ?? new Error("Unable to reach Binance");
 }
 
 function okxSpotInstId(symbol: string) {
@@ -153,6 +178,18 @@ async function fetchSpotTicker(exchange: string, symbol: string) {
     const ask = toNumber(ticker?.askPx ?? null);
     if (!bid || !ask || ask <= bid) {
       throw new Error("OKX invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "binance") {
+    const ticker = await fetchBinanceJson<BinanceBookTicker>(
+      `/api/v3/ticker/bookTicker?symbol=${symbol}`
+    );
+    const bid = toNumber(ticker.bidPrice);
+    const ask = toNumber(ticker.askPrice);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Binance invalid bid/ask");
     }
     return { bid, ask };
   }

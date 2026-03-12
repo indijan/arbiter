@@ -93,22 +93,28 @@ const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
 
 const CANONICAL_MAP: Record<
   string,
-  { bybit: string; okx: string; coinbase?: string; kraken?: string }
+  { binance?: string; bybit: string; okx: string; coinbase?: string; kraken?: string }
 > = {
-  BTCUSD: { bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
-  ETHUSD: { bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
-  SOLUSD: { bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
-  XRPUSD: { bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
-  BNBUSD: { bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
-  ADAUSD: { bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
-  DOGEUSD: { bybit: "DOGEUSDT", okx: "DOGEUSDT" },
-  AVAXUSD: { bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
-  LINKUSD: { bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
-  LTCUSD: { bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
-  DOTUSD: { bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
-  BCHUSD: { bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
-  TRXUSD: { bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
+  BTCUSD: { binance: "BTCUSDT", bybit: "BTCUSDT", okx: "BTCUSDT", coinbase: "BTCUSD", kraken: "BTCUSD" },
+  ETHUSD: { binance: "ETHUSDT", bybit: "ETHUSDT", okx: "ETHUSDT", coinbase: "ETHUSD", kraken: "ETHUSD" },
+  SOLUSD: { binance: "SOLUSDT", bybit: "SOLUSDT", okx: "SOLUSDT", coinbase: "SOLUSD", kraken: "SOLUSD" },
+  XRPUSD: { binance: "XRPUSDT", bybit: "XRPUSDT", okx: "XRPUSDT", coinbase: "XRPUSD", kraken: "XRPUSD" },
+  BNBUSD: { binance: "BNBUSDT", bybit: "BNBUSDT", okx: "BNBUSDT", kraken: "BNBUSD" },
+  ADAUSD: { binance: "ADAUSDT", bybit: "ADAUSDT", okx: "ADAUSDT", coinbase: "ADAUSD", kraken: "ADAUSD" },
+  DOGEUSD: { binance: "DOGEUSDT", bybit: "DOGEUSDT", okx: "DOGEUSDT" },
+  AVAXUSD: { binance: "AVAXUSDT", bybit: "AVAXUSDT", okx: "AVAXUSDT", coinbase: "AVAXUSD", kraken: "AVAXUSD" },
+  LINKUSD: { binance: "LINKUSDT", bybit: "LINKUSDT", okx: "LINKUSDT", coinbase: "LINKUSD", kraken: "LINKUSD" },
+  LTCUSD: { binance: "LTCUSDT", bybit: "LTCUSDT", okx: "LTCUSDT", coinbase: "LTCUSD", kraken: "LTCUSD" },
+  DOTUSD: { binance: "DOTUSDT", bybit: "DOTUSDT", okx: "DOTUSDT", coinbase: "DOTUSD", kraken: "DOTUSD" },
+  BCHUSD: { binance: "BCHUSDT", bybit: "BCHUSDT", okx: "BCHUSDT", coinbase: "BCHUSD", kraken: "BCHUSD" },
+  TRXUSD: { binance: "TRXUSDT", bybit: "TRXUSDT", okx: "TRXUSDT", kraken: "TRXUSD" }
 };
+
+const BINANCE_BASE_URLS = [
+  "https://api.binance.com",
+  "https://api1.binance.com",
+  "https://api-gcp.binance.com"
+];
 
 const KRAKEN_PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
@@ -311,6 +317,25 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function fetchBinanceJson<T>(path: string): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (const baseUrl of BINANCE_BASE_URLS) {
+    try {
+      return await fetchJson<T>(`${baseUrl}${path}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Unknown Binance error");
+    }
+  }
+
+  throw lastError ?? new Error("Unable to reach Binance");
+}
+
+type BinanceBookTicker = {
+  bidPrice: string;
+  askPrice: string;
+};
+
 async function fetchSpotTicker(exchange: string, symbol: string) {
   if (exchange === "bybit") {
     const spot = await fetchJson<BybitResponse>(
@@ -324,6 +349,18 @@ async function fetchSpotTicker(exchange: string, symbol: string) {
     const ask = toNumber(ticker?.ask1Price ?? null);
     if (!bid || !ask || ask <= bid) {
       throw new Error("Bybit invalid bid/ask");
+    }
+    return { bid, ask };
+  }
+
+  if (exchange === "binance") {
+    const ticker = await fetchBinanceJson<BinanceBookTicker>(
+      `/api/v3/ticker/bookTicker?symbol=${symbol}`
+    );
+    const bid = toNumber(ticker.bidPrice);
+    const ask = toNumber(ticker.askPrice);
+    if (!bid || !ask || ask <= bid) {
+      throw new Error("Binance invalid bid/ask");
     }
     return { bid, ask };
   }
@@ -1533,6 +1570,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const buySymbol =
         buyExchange === "kraken"
           ? mapping.kraken
+          : buyExchange === "binance"
+            ? mapping.binance
           : buyExchange === "coinbase"
             ? mapping.coinbase
             : buyExchange === "okx"
@@ -1541,6 +1580,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const sellSymbol =
         sellExchange === "kraken"
           ? mapping.kraken
+          : sellExchange === "binance"
+            ? mapping.binance
           : sellExchange === "coinbase"
             ? mapping.coinbase
             : sellExchange === "okx"
