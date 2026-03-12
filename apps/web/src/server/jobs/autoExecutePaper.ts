@@ -2067,7 +2067,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   }
 
   if (created === 0 && !losingRecently && !severeLosing && available >= minNotional) {
-    const freshBypassCandidates = (opportunities ?? [])
+    let freshBypassCandidates = (opportunities ?? [])
       .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
       .filter((opp) => {
         const ageMinutes = (Date.now() - Date.parse((opp as OpportunityRow).ts)) / (60 * 1000);
@@ -2079,6 +2079,93 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           Number((a as OpportunityRow).net_edge_bps ?? 0)
       )
       .slice(0, 3) as OpportunityRow[];
+
+    if (freshBypassCandidates.length === 0) {
+      const syntheticCandidates: OpportunityRow[] = [];
+
+      for (const [canonicalSymbol, mapping] of Object.entries(CANONICAL_MAP)) {
+        const quoteRequests = [
+          { exchange: "bybit", symbol: mapping.bybit },
+          { exchange: "okx", symbol: mapping.okx },
+          mapping.coinbase ? { exchange: "coinbase", symbol: mapping.coinbase } : null,
+          mapping.kraken ? { exchange: "kraken", symbol: mapping.kraken } : null
+        ].filter(Boolean) as Array<{ exchange: string; symbol: string }>;
+
+        const quoteResults = await Promise.all(
+          quoteRequests.map(async (request) => {
+            try {
+              const quote = await fetchSpotTicker(request.exchange, request.symbol);
+              return { ...request, ...quote };
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        const validQuotes = quoteResults.filter(
+          (
+            quote
+          ): quote is { exchange: string; symbol: string; bid: number; ask: number } =>
+            !!quote && Number.isFinite(quote.bid) && Number.isFinite(quote.ask) && quote.ask > quote.bid
+        );
+
+        if (validQuotes.length < 2) {
+          continue;
+        }
+
+        const buy = validQuotes.reduce((min, quote) => (quote.ask < min.ask ? quote : min));
+        const sell = validQuotes.reduce((max, quote) => (quote.bid > max.bid ? quote : max));
+        if (buy.exchange === sell.exchange) {
+          continue;
+        }
+
+        const grossEdgeBps = ((sell.bid - buy.ask) / buy.ask) * 10000;
+        const netEdgeBps = grossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
+        const isCore = CORE_XARB_SYMBOLS.has(canonicalSymbol);
+        if (grossEdgeBps < (isCore ? 6 : 4) || netEdgeBps < (isCore ? 0.9 : 0.35)) {
+          continue;
+        }
+
+        const { data: insertedOpp, error: insertedOppError } = await adminSupabase
+          .from("opportunities")
+          .insert({
+            ts: new Date().toISOString(),
+            exchange: [buy.exchange, sell.exchange].sort().join("_"),
+            symbol: canonicalSymbol,
+            type: "xarb_spot",
+            net_edge_bps: Number(netEdgeBps.toFixed(4)),
+            expected_daily_bps: null,
+            confidence: 0.58,
+            status: "new",
+            details: {
+              buy_exchange: buy.exchange,
+              sell_exchange: sell.exchange,
+              buy_ask: buy.ask,
+              sell_bid: sell.bid,
+              gross_edge_bps: Number(grossEdgeBps.toFixed(4)),
+              costs_bps_breakdown: {
+                fee_bps_total: liveXarbTotalCostsBps - liveXarbBufferBps,
+                slippage_bps_total: 0,
+                transfer_buffer_bps: liveXarbBufferBps
+              },
+              canonical_symbol: canonicalSymbol,
+              synthetic_fresh_xarb_bypass: true
+            }
+          })
+          .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
+          .single();
+
+        if (insertedOppError || !insertedOpp) {
+          continue;
+        }
+
+        syntheticCandidates.push(insertedOpp as OpportunityRow);
+      }
+
+      freshBypassCandidates = syntheticCandidates
+        .sort((a, b) => Number(b.net_edge_bps ?? 0) - Number(a.net_edge_bps ?? 0))
+        .slice(0, 3);
+    }
 
     for (const opp of freshBypassCandidates) {
       if (created >= 1) {
