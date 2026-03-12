@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { ingestBinance } from "@/server/jobs/ingestBinance";
-import { ingestBinanceSpot } from "@/server/jobs/ingestBinanceSpot";
 import { ingestCoinbase } from "@/server/jobs/ingestCoinbase";
 import { ingestKraken } from "@/server/jobs/ingestKraken";
 import { detectCarry } from "@/server/jobs/detectCarry";
@@ -18,6 +17,51 @@ type JobResult<T> = JobSuccess<T> | JobFailure;
 async function runJob<T>(fn: () => Promise<T>): Promise<JobResult<T>> {
   try {
     return { ok: true, data: await fn() };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown job error"
+    };
+  }
+}
+
+async function runRemoteBinanceSpotIngest(request: Request): Promise<JobResult<{
+  inserted: number;
+  skipped: number;
+  errors: Array<{ symbol: string; error: string }>;
+}>> {
+  try {
+    const expected = process.env.CRON_SECRET;
+    if (!expected) {
+      throw new Error("Missing CRON_SECRET.");
+    }
+
+    const origin = new URL(request.url).origin;
+    const response = await fetch(`${origin}/api/internal/ingest/binance-spot`, {
+      method: "POST",
+      headers: {
+        "x-cron-secret": expected,
+        accept: "application/json"
+      },
+      cache: "no-store"
+    });
+
+    const json = (await response.json().catch(() => null)) as
+      | { inserted?: number; skipped?: number; errors?: Array<{ symbol: string; error: string }>; error?: string }
+      | null;
+
+    if (!response.ok) {
+      throw new Error(json?.error ?? `HTTP ${response.status}`);
+    }
+
+    return {
+      ok: true,
+      data: {
+        inserted: Number(json?.inserted ?? 0),
+        skipped: Number(json?.skipped ?? 0),
+        errors: Array.isArray(json?.errors) ? json.errors : []
+      }
+    };
   } catch (err) {
     return {
       ok: false,
@@ -143,7 +187,7 @@ async function handleTick(request: Request) {
 
   const body = await request.json().catch(() => ({}));
   const ingestBinanceResult = await runJob(() => ingestBinance());
-  const ingestBinanceSpotResult = await runJob(() => ingestBinanceSpot());
+  const ingestBinanceSpotResult = await runRemoteBinanceSpotIngest(request);
   const ingestCoinbaseResult = await runJob(() => ingestCoinbase());
   const ingestKrakenResult = await runJob(() => ingestKraken());
   const carryResult = await runJob(() =>

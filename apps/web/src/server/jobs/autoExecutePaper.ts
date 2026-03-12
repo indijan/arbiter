@@ -2126,6 +2126,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       for (const [canonicalSymbol, mapping] of Object.entries(CANONICAL_MAP)) {
         const quoteRequests = [
+          mapping.binance ? { exchange: "binance", symbol: mapping.binance } : null,
           { exchange: "bybit", symbol: mapping.bybit },
           { exchange: "okx", symbol: mapping.okx },
           mapping.coinbase ? { exchange: "coinbase", symbol: mapping.coinbase } : null,
@@ -2228,6 +2229,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const buySymbol =
         buyExchange === "kraken"
           ? mapping.kraken
+          : buyExchange === "binance"
+            ? mapping.binance
           : buyExchange === "coinbase"
             ? mapping.coinbase
             : buyExchange === "okx"
@@ -2236,6 +2239,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const sellSymbol =
         sellExchange === "kraken"
           ? mapping.kraken
+          : sellExchange === "binance"
+            ? mapping.binance
           : sellExchange === "coinbase"
             ? mapping.coinbase
             : sellExchange === "okx"
