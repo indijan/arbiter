@@ -303,6 +303,20 @@ async function handleTick(request: Request) {
               skipped: closeResult.data.skipped
             }
           : { attempted: 0, closed: 0, skipped: 0 },
+        ingest_binance_spot_remote: ingestBinanceSpotResult.ok
+          ? {
+              ok: true,
+              inserted: ingestBinanceSpotResult.data.inserted,
+              skipped: ingestBinanceSpotResult.data.skipped,
+              errors: ingestBinanceSpotResult.data.errors
+            }
+          : {
+              ok: false,
+              inserted: 0,
+              skipped: 0,
+              errors: [],
+              error: ingestBinanceSpotResult.error
+            },
         job_errors: jobErrors
       }
     });
