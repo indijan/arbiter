@@ -41,6 +41,7 @@ async function runRemoteBinanceSpotIngest(request: Request): Promise<JobResult<{
       method: "POST",
       headers: {
         "x-cron-secret": expected,
+        "x-arbiter-internal": "1",
         accept: "application/json"
       },
       cache: "no-store"
