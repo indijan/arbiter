@@ -91,7 +91,10 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
 
 const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
 const REPLAY_VALIDATED_XARB_PAIRS = new Set([
-  "ETHUSD:bybit_kraken",
+  "BTCUSD:bybit_coinbase",
+  "ETHUSD:coinbase_okx",
+  "SOLUSD:bybit_coinbase",
+  "LINKUSD:coinbase_okx",
   "SOLUSD:coinbase_okx"
 ]);
 
