@@ -7,7 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "replay:xarb": "node ./scripts/replay-xarb.mjs",
+    "export:xarb": "node ./scripts/export-xarb-snapshots.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.0",

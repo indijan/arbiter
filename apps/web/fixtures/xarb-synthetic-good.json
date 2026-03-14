@@ -1,0 +1,17 @@
+{
+  "snapshots": [
+    { "ts": "2026-03-14T00:00:00.000Z", "exchange": "binance", "symbol": "AVAXUSDT", "bid": 30.01, "ask": 30.02 },
+    { "ts": "2026-03-14T00:00:00.000Z", "exchange": "okx", "symbol": "AVAXUSDT", "bid": 30.07, "ask": 30.08 },
+    { "ts": "2026-03-14T00:10:00.000Z", "exchange": "binance", "symbol": "AVAXUSDT", "bid": 30.02, "ask": 30.03 },
+    { "ts": "2026-03-14T00:10:00.000Z", "exchange": "okx", "symbol": "AVAXUSDT", "bid": 30.08, "ask": 30.09 },
+    { "ts": "2026-03-14T00:20:00.000Z", "exchange": "binance", "symbol": "AVAXUSDT", "bid": 30.03, "ask": 30.04 },
+    { "ts": "2026-03-14T00:20:00.000Z", "exchange": "okx", "symbol": "AVAXUSDT", "bid": 30.09, "ask": 30.10 },
+
+    { "ts": "2026-03-14T00:00:00.000Z", "exchange": "binance", "symbol": "ETHUSDT", "bid": 2040.0, "ask": 2040.3 },
+    { "ts": "2026-03-14T00:00:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "bid": 2043.2, "ask": 2043.5 },
+    { "ts": "2026-03-14T00:10:00.000Z", "exchange": "binance", "symbol": "ETHUSDT", "bid": 2040.4, "ask": 2040.7 },
+    { "ts": "2026-03-14T00:10:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "bid": 2043.4, "ask": 2043.7 },
+    { "ts": "2026-03-14T00:20:00.000Z", "exchange": "binance", "symbol": "ETHUSDT", "bid": 2040.5, "ask": 2040.8 },
+    { "ts": "2026-03-14T00:20:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "bid": 2043.6, "ask": 2043.9 }
+  ]
+}

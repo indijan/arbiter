@@ -90,6 +90,10 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
 };
 
 const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
+const REPLAY_VALIDATED_XARB_PAIRS = new Set([
+  "ETHUSD:bybit_kraken",
+  "SOLUSD:coinbase_okx"
+]);
 
 const CANONICAL_MAP: Record<
   string,
@@ -238,6 +242,10 @@ type AutoExecuteResult = {
 
 function clampNotional(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function sortedExchangePairKey(symbol: string, exchangeA: string, exchangeB: string) {
+  return `${symbol}:${[exchangeA, exchangeB].sort().join("_")}`;
 }
 
 function deriveNotional(
@@ -1628,6 +1636,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveNetEdgeBps =
         liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
       const opportunityAgeMinutes = (Date.now() - Date.parse(opp.ts)) / (60 * 1000);
+      const exchangePairKey = sortedExchangePairKey(opp.symbol, buyExchange, sellExchange);
       const symbolBias = symbolExpectancyBias[opp.symbol] ?? 0;
       const symbolClosedCount = symbolTradeCount[opp.symbol] ?? 0;
       const unfavorableSymbol = unfavorableSymbolSet.has(opp.symbol);
@@ -1677,6 +1686,15 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !severeLosing &&
         liveGrossEdgeBps >= (isCoreXarbSymbol ? 8 : 5) &&
         liveNetEdgeBps >= (isCoreXarbSymbol ? 1.5 : 0.6);
+      const canReplayValidatedLaneOpen =
+        opp.type === "xarb_spot" &&
+        Number.isFinite(opportunityAgeMinutes) &&
+        opportunityAgeMinutes <= 30 &&
+        !losingRecently &&
+        !severeLosing &&
+        REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) &&
+        liveGrossEdgeBps >= (isCoreXarbSymbol ? 16 : 11) &&
+        liveNetEdgeBps >= (isCoreXarbSymbol ? 6 : 2);
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1727,6 +1745,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const canMicroProbeOpen = false;
       const canHardForceProbeOpen = false;
       const allowFallbackOpen =
+        canReplayValidatedLaneOpen ||
         canFreshXarbLaneOpen ||
         canRiskClampXarbOpen ||
         canPilotOpen ||
@@ -1742,6 +1761,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       const effectiveLiveThresholdBps = canRiskClampXarbOpen
         ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 2.5 : 1.25)
+        : canReplayValidatedLaneOpen
+          ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 6 : 2)
         : canFreshXarbLaneOpen
           ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 1.5 : 0.6)
           : adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
@@ -1761,8 +1782,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       if (allowFallbackOpen) {
-        const fallbackMultiplier = canFreshXarbLaneOpen
-          ? 0.04
+        const fallbackMultiplier = canReplayValidatedLaneOpen
+          ? 0.05
+          : canFreshXarbLaneOpen
+            ? 0.04
           : canRiskClampXarbOpen
             ? 0.05
           : canPilotOpen
@@ -1830,6 +1853,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             notional_usd,
             notional_reason: derived.reason,
             auto_execute: true,
+            replay_validated_xarb_open: canReplayValidatedLaneOpen,
             fresh_xarb_lane_open: canFreshXarbLaneOpen,
             risk_clamp_xarb_open: canRiskClampXarbOpen,
             policy_rollout_id: effectivePolicy.rollout_id,
@@ -2107,296 +2131,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     reasons.push({ opportunity_id: opp.id, reason: "execution_not_supported" });
   }
 
-  if (created === 0 && !losingRecently && !severeLosing && available >= minNotional) {
-    let freshBypassCandidates = (opportunities ?? [])
-      .filter((opp) => (opp as OpportunityRow).type === "xarb_spot")
-      .filter((opp) => {
-        const ageMinutes = (Date.now() - Date.parse((opp as OpportunityRow).ts)) / (60 * 1000);
-        return Number.isFinite(ageMinutes) && ageMinutes <= 30;
-      })
-      .sort(
-        (a, b) =>
-          Number((b as OpportunityRow).net_edge_bps ?? 0) -
-          Number((a as OpportunityRow).net_edge_bps ?? 0)
-      )
-      .slice(0, 3) as OpportunityRow[];
-
-    if (freshBypassCandidates.length === 0) {
-      const syntheticCandidates: OpportunityRow[] = [];
-
-      for (const [canonicalSymbol, mapping] of Object.entries(CANONICAL_MAP)) {
-        const quoteRequests = [
-          mapping.binance ? { exchange: "binance", symbol: mapping.binance } : null,
-          { exchange: "bybit", symbol: mapping.bybit },
-          { exchange: "okx", symbol: mapping.okx },
-          mapping.coinbase ? { exchange: "coinbase", symbol: mapping.coinbase } : null,
-          mapping.kraken ? { exchange: "kraken", symbol: mapping.kraken } : null
-        ].filter(Boolean) as Array<{ exchange: string; symbol: string }>;
-
-        const quoteResults = await Promise.all(
-          quoteRequests.map(async (request) => {
-            try {
-              const quote = await fetchSpotTicker(request.exchange, request.symbol);
-              return { ...request, ...quote };
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        const validQuotes = quoteResults.filter(
-          (
-            quote
-          ): quote is { exchange: string; symbol: string; bid: number; ask: number } =>
-            !!quote && Number.isFinite(quote.bid) && Number.isFinite(quote.ask) && quote.ask > quote.bid
-        );
-
-        if (validQuotes.length < 2) {
-          continue;
-        }
-
-        const buy = validQuotes.reduce((min, quote) => (quote.ask < min.ask ? quote : min));
-        const sell = validQuotes.reduce((max, quote) => (quote.bid > max.bid ? quote : max));
-        if (buy.exchange === sell.exchange) {
-          continue;
-        }
-
-        const grossEdgeBps = ((sell.bid - buy.ask) / buy.ask) * 10000;
-        const netEdgeBps = grossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
-        const isCore = CORE_XARB_SYMBOLS.has(canonicalSymbol);
-        if (grossEdgeBps < (isCore ? 6 : 4) || netEdgeBps < (isCore ? 0.9 : 0.35)) {
-          continue;
-        }
-
-        const { data: insertedOpp, error: insertedOppError } = await adminSupabase
-          .from("opportunities")
-          .insert({
-            ts: new Date().toISOString(),
-            exchange: [buy.exchange, sell.exchange].sort().join("_"),
-            symbol: canonicalSymbol,
-            type: "xarb_spot",
-            net_edge_bps: Number(netEdgeBps.toFixed(4)),
-            expected_daily_bps: null,
-            confidence: 0.58,
-            status: "new",
-            details: {
-              buy_exchange: buy.exchange,
-              sell_exchange: sell.exchange,
-              buy_ask: buy.ask,
-              sell_bid: sell.bid,
-              gross_edge_bps: Number(grossEdgeBps.toFixed(4)),
-              costs_bps_breakdown: {
-                fee_bps_total: liveXarbTotalCostsBps - liveXarbBufferBps,
-                slippage_bps_total: 0,
-                transfer_buffer_bps: liveXarbBufferBps
-              },
-              canonical_symbol: canonicalSymbol,
-              synthetic_fresh_xarb_bypass: true
-            }
-          })
-          .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
-          .single();
-
-        if (insertedOppError || !insertedOpp) {
-          continue;
-        }
-
-        syntheticCandidates.push(insertedOpp as OpportunityRow);
-      }
-
-      freshBypassCandidates = syntheticCandidates
-        .sort((a, b) => Number(b.net_edge_bps ?? 0) - Number(a.net_edge_bps ?? 0))
-        .slice(0, 3);
-    }
-
-    for (const opp of freshBypassCandidates) {
-      if (created >= 1) {
-        break;
-      }
-
-      attempted += 1;
-
-      const mapping = CANONICAL_MAP[opp.symbol];
-      if (!mapping) {
-        reasons.push({ opportunity_id: opp.id, reason: "symbol_not_supported" });
-        skipped += 1;
-        continue;
-      }
-
-      const details = opp.details ?? {};
-      const buyExchange = String((details.buy_exchange as string | undefined) ?? "");
-      const sellExchange = String((details.sell_exchange as string | undefined) ?? "");
-      const buySymbol =
-        buyExchange === "kraken"
-          ? mapping.kraken
-          : buyExchange === "binance"
-            ? mapping.binance
-          : buyExchange === "coinbase"
-            ? mapping.coinbase
-            : buyExchange === "okx"
-              ? mapping.okx
-              : mapping.bybit;
-      const sellSymbol =
-        sellExchange === "kraken"
-          ? mapping.kraken
-          : sellExchange === "binance"
-            ? mapping.binance
-          : sellExchange === "coinbase"
-            ? mapping.coinbase
-            : sellExchange === "okx"
-              ? mapping.okx
-              : mapping.bybit;
-
-      if (!buyExchange || !sellExchange || !buySymbol || !sellSymbol) {
-        reasons.push({ opportunity_id: opp.id, reason: "missing_exchange_mapping" });
-        skipped += 1;
-        continue;
-      }
-
-      let buyQuote: { bid: number; ask: number };
-      let sellQuote: { bid: number; ask: number };
-      try {
-        [buyQuote, sellQuote] = await Promise.all([
-          fetchSpotTicker(buyExchange, buySymbol),
-          fetchSpotTicker(sellExchange, sellSymbol)
-        ]);
-      } catch {
-        reasons.push({ opportunity_id: opp.id, reason: "live_price_error" });
-        skipped += 1;
-        continue;
-      }
-
-      const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
-      const liveNetEdgeBps = liveGrossEdgeBps - liveXarbTotalCostsBps - liveXarbBufferBps;
-      const isCoreXarbSymbol = CORE_XARB_SYMBOLS.has(opp.symbol);
-      const bypassNetFloor = isCoreXarbSymbol ? 0.9 : 0.35;
-      const bypassGrossFloor = isCoreXarbSymbol ? 6 : 4;
-
-      if (liveNetEdgeBps < bypassNetFloor || liveGrossEdgeBps < bypassGrossFloor) {
-        reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
-        skipped += 1;
-        continue;
-      }
-
-      const notional_usd = minNotional;
-      const buyFill = paperFill({
-        side: "buy",
-        price: buyQuote.ask,
-        notional_usd,
-        slippage_bps: SLIPPAGE_BPS,
-        fee_bps: FEE_BPS
-      });
-      const sellFill = paperFill({
-        side: "sell",
-        price: sellQuote.bid,
-        notional_usd,
-        slippage_bps: SLIPPAGE_BPS,
-        fee_bps: FEE_BPS
-      });
-
-      const { data: position, error: positionError } = await adminSupabase
-        .from("positions")
-        .insert({
-          user_id: userId,
-          opportunity_id: opp.id,
-          symbol: opp.symbol,
-          mode: "paper",
-          status: "open",
-          entry_spot_price: buyFill.fill_price,
-          entry_perp_price: sellFill.fill_price,
-          spot_qty: buyFill.qty,
-          perp_qty: -sellFill.qty,
-          meta: {
-            opportunity_id: opp.id,
-            type: "xarb_spot",
-            buy_exchange: buyExchange,
-            sell_exchange: sellExchange,
-            buy_symbol: buySymbol,
-            sell_symbol: sellSymbol,
-            buy_entry_price: buyFill.fill_price,
-            sell_entry_price: sellFill.fill_price,
-            buy_qty: buyFill.qty,
-            sell_qty: sellFill.qty,
-            fee_bps: FEE_BPS,
-            slippage_bps: SLIPPAGE_BPS,
-            notional_usd,
-            notional_reason: "fresh_xarb_bypass",
-            auto_execute: true,
-            fresh_xarb_lane_open: true,
-            direct_fresh_xarb_open: true,
-            policy_rollout_id: effectivePolicy.rollout_id,
-            policy_config_id: effectivePolicy.config_id,
-            policy_is_canary: effectivePolicy.is_canary,
-            live_edge: {
-              gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
-              net_bps: Number(liveNetEdgeBps.toFixed(4)),
-              threshold_bps: Number(bypassNetFloor.toFixed(4))
-            }
-          }
-        })
-        .select("id")
-        .single();
-
-      if (positionError || !position) {
-        throw new Error(positionError?.message ?? "Failed to create bypass xarb position.");
-      }
-
-      const { error: executionError } = await adminSupabase.from("executions").insert([
-        {
-          position_id: position.id,
-          leg: "spot_buy",
-          requested_qty: buyFill.qty,
-          filled_qty: buyFill.qty,
-          avg_price: buyFill.fill_price,
-          fee: buyFill.fee_usd,
-          raw: {
-            side: "buy",
-            price: buyQuote.ask,
-            fill_price: buyFill.fill_price,
-            slippage_bps: SLIPPAGE_BPS,
-            fee_bps: FEE_BPS,
-            notional_usd
-          }
-        },
-        {
-          position_id: position.id,
-          leg: "spot_sell",
-          requested_qty: sellFill.qty,
-          filled_qty: sellFill.qty,
-          avg_price: sellFill.fill_price,
-          fee: sellFill.fee_usd,
-          raw: {
-            side: "sell",
-            price: sellQuote.bid,
-            fill_price: sellFill.fill_price,
-            slippage_bps: SLIPPAGE_BPS,
-            fee_bps: FEE_BPS,
-            notional_usd
-          }
-        }
-      ]);
-
-      if (executionError) {
-        throw new Error(executionError.message);
-      }
-
-      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
-      const { error: reserveError } = await adminSupabase
-        .from("paper_accounts")
-        .update({
-          reserved_usd: reservedCurrent,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", account.id);
-
-      if (reserveError) {
-        throw new Error(reserveError.message);
-      }
-
-      available = Number((available - notional_usd).toFixed(2));
-      created += 1;
-    }
-  }
 
   return {
     attempted,

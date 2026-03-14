@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
-import ExecuteButton from "@/components/ExecuteButton";
 import DetectSummaryPanel from "@/components/DetectSummaryPanel";
 import DevTickButton from "@/components/DevTickButton";
-import ClosePositionButton from "@/components/ClosePositionButton";
-import CloseAllButton from "@/components/CloseAllButton";
 import PolicyControllerPanel from "@/components/PolicyControllerPanel";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -26,6 +23,14 @@ type RolloutPerf = {
   canary_opens: number;
   last_entry_ts: string | null;
 };
+
+function formatUsd(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USD`;
+}
+
+function formatScore(score: number) {
+  return `${Math.max(0, Math.min(100, Math.round(score)))}/100`;
+}
 
 export default async function DashboardPage() {
   const supabase = createServerSupabase();
@@ -57,68 +62,10 @@ export default async function DashboardPage() {
     .select("id")
     .limit(5);
 
-  const { data: snapshots, error: snapshotsError } = await supabase
-    .from("market_snapshots")
-    .select("id, ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask, funding_rate")
-    .order("ts", { ascending: false })
-    .limit(20);
-
-  const { data: opportunities, error: opportunitiesListError } = await supabase
-    .from("opportunities")
-    .select("id, ts, exchange, symbol, type, net_edge_bps, expected_daily_bps, confidence, status")
-    .order("ts", { ascending: false })
-    .limit(20);
-
-  const { data: positions, error: positionsError } = await supabase
-    .from("positions")
-    .select("id, entry_ts, symbol, mode, status, spot_qty, perp_qty, entry_spot_price, entry_perp_price, exit_ts, realized_pnl_usd")
-    .eq("user_id", user.id)
-    .order("entry_ts", { ascending: false })
-    .limit(20);
-
-  const openPositionIds = (positions ?? [])
-    .filter((row) => row.status === "open")
-    .map((row) => row.id);
-  const symbols = Array.from(new Set((positions ?? []).map((row) => row.symbol)));
-  const { data: snapshotRows } = symbols.length > 0
-    ? await supabase
-        .from("market_snapshots")
-        .select("symbol, spot_bid, spot_ask, perp_bid, perp_ask, ts")
-        .in("symbol", symbols)
-        .order("ts", { ascending: false })
-        .limit(Math.min(symbols.length * 6, 200))
-    : { data: [] };
-
-  const snapshotMap = new Map<string, { spot_mid: number | null; perp_mid: number | null }>();
-  for (const row of snapshotRows ?? []) {
-    if (snapshotMap.has(row.symbol)) {
-      continue;
-    }
-    const spot_bid = row.spot_bid ?? null;
-    const spot_ask = row.spot_ask ?? null;
-    const perp_bid = row.perp_bid ?? null;
-    const perp_ask = row.perp_ask ?? null;
-    const spot_mid = spot_bid !== null && spot_ask !== null ? (spot_bid + spot_ask) / 2 : null;
-    const perp_mid = perp_bid !== null && perp_ask !== null ? (perp_bid + perp_ask) / 2 : null;
-    snapshotMap.set(row.symbol, { spot_mid, perp_mid });
-  }
-
   const dbStatus = opportunitiesError ? "ERROR" : "OK";
   const dbMessage = opportunitiesError
     ? opportunitiesError.message
     : "Sikerült lekérni 5 sort.";
-
-  const snapshotsErrorMessage = snapshotsError
-    ? snapshotsError.message
-    : null;
-
-  const opportunitiesErrorMessage = opportunitiesListError
-    ? opportunitiesListError.message
-    : null;
-
-  const positionsErrorMessage = positionsError
-    ? positionsError.message
-    : null;
 
   const { data: latestTick } = await supabase
     .from("system_ticks")
@@ -155,6 +102,33 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
     .order("entry_ts", { ascending: false })
     .limit(500);
+
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: positions24h } = await supabase
+    .from("positions")
+    .select("id, entry_ts, exit_ts, realized_pnl_usd, symbol, status, meta")
+    .eq("user_id", user.id)
+    .gte("entry_ts", since24h)
+    .order("entry_ts", { ascending: false })
+    .limit(300);
+
+  const { data: positions7d } = await supabase
+    .from("positions")
+    .select("id, entry_ts, exit_ts, realized_pnl_usd, symbol, status, meta")
+    .eq("user_id", user.id)
+    .gte("entry_ts", since7d)
+    .order("entry_ts", { ascending: false })
+    .limit(1000);
+
+  const { data: recentSignals } = await supabase
+    .from("opportunities")
+    .select("id, ts, exchange, symbol, type, net_edge_bps, details")
+    .eq("type", "xarb_spot")
+    .gte("ts", since24h)
+    .order("net_edge_bps", { ascending: false })
+    .limit(20);
 
   const policyError =
     policyRolloutsError?.message ??
@@ -208,6 +182,75 @@ export default async function DashboardPage() {
     })
     .slice(0, 10);
 
+  const detectSummary = (latestTick?.detect_summary ?? {}) as Record<string, unknown>;
+  const xarbSummary = (detectSummary.xarb_spot ?? {}) as Record<string, unknown>;
+  const autoSummary = (detectSummary.auto_execute ?? {}) as Record<string, unknown>;
+  const reasonsTop = Array.isArray(autoSummary.reasons_top)
+    ? (autoSummary.reasons_top as Array<{ reason?: string; count?: number }>)
+    : [];
+  const topReason = reasonsTop[0]?.reason ?? "none";
+  const topReasonCount = Number(reasonsTop[0]?.count ?? 0);
+
+  const positions24hRows = positions24h ?? [];
+  const positions7dRows = positions7d ?? [];
+  const closed24h = positions24hRows.filter((row) => row.status === "closed");
+  const closed7d = positions7dRows.filter((row) => row.status === "closed");
+  const opens24h = positions24hRows.length;
+  const opens7d = positions7dRows.length;
+  const pnl24h = closed24h.reduce(
+    (sum, row) => sum + Number(row.realized_pnl_usd ?? 0),
+    0
+  );
+  const pnl7d = closed7d.reduce(
+    (sum, row) => sum + Number(row.realized_pnl_usd ?? 0),
+    0
+  );
+
+  const topSignal = (recentSignals ?? [])[0] as
+    | {
+        ts: string;
+        exchange: string;
+        symbol: string;
+        net_edge_bps: number | null;
+        details: Record<string, unknown> | null;
+      }
+    | undefined;
+
+  const topSignalLabel = topSignal
+    ? `${topSignal.symbol} · ${topSignal.exchange}`
+    : "No live xarb signal";
+  const topSignalEdge = topSignal?.net_edge_bps ?? null;
+
+  let readinessScore = 20;
+  if (opens7d >= 2) readinessScore += 15;
+  if (closed7d.length >= 2) readinessScore += 15;
+  if (pnl7d > 0) readinessScore += 20;
+  if (pnl24h > 0) readinessScore += 10;
+  if ((Number(xarbSummary.inserted ?? 0) || 0) > 0) readinessScore += 10;
+  if (topSignalEdge !== null && topSignalEdge >= 2) readinessScore += 10;
+  if (topReason === "live_edge_below_threshold") readinessScore -= 10;
+  if (opens24h === 0) readinessScore -= 10;
+  readinessScore = Math.max(0, Math.min(100, readinessScore));
+
+  const recommendation =
+    readinessScore >= 70
+      ? "Paper mehet"
+      : readinessScore >= 40
+        ? "Observe only"
+        : "Ne engedd live-ra";
+
+  const recommendationTone =
+    readinessScore >= 70
+      ? "border-emerald-300/30 bg-emerald-500/10 text-emerald-100"
+      : readinessScore >= 40
+        ? "border-amber-300/30 bg-amber-500/10 text-amber-100"
+        : "border-rose-300/30 bg-rose-500/10 text-rose-100";
+
+  const blockerLabel =
+    topReason === "none"
+      ? "Nincs friss nyitási próbálkozás"
+      : `${topReason}${topReasonCount > 0 ? ` (${topReasonCount})` : ""}`;
+
   return (
     <div className="min-h-screen px-6 py-16">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -222,6 +265,9 @@ export default async function DashboardPage() {
             </p>
             <p className="text-sm text-brand-100/70">{dbMessage}</p>
             <div className="mt-3 flex gap-3 text-sm">
+              <a className="text-brand-300 hover:text-white" href="/ops">
+                Ops
+              </a>
               <a className="text-brand-300 hover:text-white" href="/settings">
                 Settings
               </a>
@@ -236,6 +282,54 @@ export default async function DashboardPage() {
           </div>
         </header>
 
+        <section className="grid gap-4 lg:grid-cols-12">
+          <div className="card lg:col-span-4">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-300">Recommendation</p>
+            <div className={`mt-4 rounded-2xl border px-4 py-4 ${recommendationTone}`}>
+              <p className="text-sm text-current/70">Current mode</p>
+              <p className="mt-1 text-2xl font-semibold">{recommendation}</p>
+              <p className="mt-3 text-sm text-current/80">
+                Main blocker: {blockerLabel}
+              </p>
+            </div>
+          </div>
+
+          <div className="card lg:col-span-2">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-300">Readiness</p>
+            <p className="mt-4 text-4xl font-semibold">{formatScore(readinessScore)}</p>
+            <p className="mt-2 text-sm text-brand-100/70">
+              Replay + live feed confidence
+            </p>
+          </div>
+
+          <div className="card lg:col-span-2">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-300">24h</p>
+            <p className="mt-4 text-3xl font-semibold">{opens24h}</p>
+            <p className="mt-1 text-sm text-brand-100/70">opens</p>
+            <p className="mt-3 text-lg font-semibold">{formatUsd(pnl24h)}</p>
+            <p className="text-sm text-brand-100/70">closed pnl</p>
+          </div>
+
+          <div className="card lg:col-span-2">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-300">7d</p>
+            <p className="mt-4 text-3xl font-semibold">{opens7d}</p>
+            <p className="mt-1 text-sm text-brand-100/70">opens</p>
+            <p className="mt-3 text-lg font-semibold">{formatUsd(pnl7d)}</p>
+            <p className="text-sm text-brand-100/70">closed pnl</p>
+          </div>
+
+          <div className="card lg:col-span-2">
+            <p className="text-sm uppercase tracking-[0.24em] text-brand-300">Top pair</p>
+            <p className="mt-4 text-xl font-semibold">{topSignalLabel}</p>
+            <p className="mt-2 text-sm text-brand-100/70">
+              {topSignalEdge !== null ? `${topSignalEdge.toFixed(2)} bps net` : "No edge"}
+            </p>
+            <p className="mt-3 text-sm text-brand-100/70">
+              Xarb inserted: {Number(xarbSummary.inserted ?? 0)}
+            </p>
+          </div>
+        </section>
+
         <DetectSummaryPanel />
         <PolicyControllerPanel
           diagnostics={diagnostics}
@@ -245,182 +339,6 @@ export default async function DashboardPage() {
           performance={rolloutPerformance}
           error={policyError}
         />
-
-        <section className="card">
-          <h2 className="text-xl font-semibold">Market snapshots</h2>
-          {snapshotsErrorMessage ? (
-            <p className="mt-2 text-sm text-red-200">
-              {snapshotsErrorMessage}
-            </p>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-brand-100/70">
-                  <tr>
-                    <th className="pb-2">Timestamp</th>
-                    <th className="pb-2">Exchange</th>
-                    <th className="pb-2">Symbol</th>
-                    <th className="pb-2">Spot bid/ask</th>
-                    <th className="pb-2">Perp bid/ask</th>
-                    <th className="pb-2">Funding</th>
-                  </tr>
-                </thead>
-                <tbody className="text-brand-100/90">
-                  {snapshots?.map((row) => (
-                    <tr key={row.id} className="border-t border-brand-300/10">
-                      <td className="py-2">
-                        {new Date(row.ts).toLocaleString("hu-HU")}
-                      </td>
-                      <td className="py-2">{row.exchange}</td>
-                      <td className="py-2">{row.symbol}</td>
-                      <td className="py-2">
-                        {row.spot_bid ?? "-"} / {row.spot_ask ?? "-"}
-                      </td>
-                      <td className="py-2">
-                        {row.perp_bid ?? "-"} / {row.perp_ask ?? "-"}
-                      </td>
-                      <td className="py-2">{row.funding_rate ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {snapshots && snapshots.length === 0 ? (
-                <p className="mt-3 text-sm text-brand-100/70">
-                  Nincs még market snapshot.
-                </p>
-              ) : null}
-            </div>
-          )}
-        </section>
-
-        <section className="card">
-          <h2 className="text-xl font-semibold">Opportunities</h2>
-          {opportunitiesErrorMessage ? (
-            <p className="mt-2 text-sm text-red-200">
-              {opportunitiesErrorMessage}
-            </p>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-brand-100/70">
-                  <tr>
-                    <th className="pb-2">Timestamp</th>
-                    <th className="pb-2">Exchange</th>
-                    <th className="pb-2">Symbol</th>
-                    <th className="pb-2">Type</th>
-                    <th className="pb-2">Net edge (bps)</th>
-                    <th className="pb-2">Expected daily (bps)</th>
-                    <th className="pb-2">Confidence</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="text-brand-100/90">
-                  {opportunities?.map((row) => (
-                    <tr key={row.id} className="border-t border-brand-300/10">
-                      <td className="py-2">
-                        {new Date(row.ts).toLocaleString("hu-HU")}
-                      </td>
-                      <td className="py-2">{row.exchange}</td>
-                      <td className="py-2">{row.symbol}</td>
-                      <td className="py-2">{row.type}</td>
-                      <td className="py-2">{row.net_edge_bps ?? "-"}</td>
-                      <td className="py-2">{row.expected_daily_bps ?? "-"}</td>
-                      <td className="py-2">{row.confidence ?? "-"}</td>
-                      <td className="py-2">{row.status}</td>
-                      <td className="py-2">
-                        <ExecuteButton opportunityId={row.id} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {opportunities && opportunities.length === 0 ? (
-                <p className="mt-3 text-sm text-brand-100/70">
-                  Nincs még opportunity.
-                </p>
-              ) : null}
-            </div>
-          )}
-        </section>
-
-        <section className="card">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Positions</h2>
-            <CloseAllButton positionIds={openPositionIds} />
-          </div>
-          {positionsErrorMessage ? (
-            <p className="mt-2 text-sm text-red-200">
-              {positionsErrorMessage}
-            </p>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-brand-100/70">
-                  <tr>
-                    <th className="pb-2">Entry time</th>
-                    <th className="pb-2">Symbol</th>
-                    <th className="pb-2">Mode</th>
-                    <th className="pb-2">Status</th>
-                    <th className="pb-2">Spot qty</th>
-                    <th className="pb-2">Perp qty</th>
-                    <th className="pb-2">Entry spot</th>
-                    <th className="pb-2">Entry perp</th>
-                    <th className="pb-2">Unrealized</th>
-                    <th className="pb-2">Realized</th>
-                    <th className="pb-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="text-brand-100/90">
-                  {positions?.map((row) => (
-                    <tr key={row.id} className="border-t border-brand-300/10">
-                      <td className="py-2">
-                        {new Date(row.entry_ts).toLocaleString("hu-HU")}
-                      </td>
-                      <td className="py-2">{row.symbol}</td>
-                      <td className="py-2">{row.mode}</td>
-                      <td className="py-2">{row.status}</td>
-                      <td className="py-2">{row.spot_qty ?? "-"}</td>
-                      <td className="py-2">{row.perp_qty ?? "-"}</td>
-                      <td className="py-2">{row.entry_spot_price ?? "-"}</td>
-                      <td className="py-2">{row.entry_perp_price ?? "-"}</td>
-                      <td className="py-2">
-                        {(() => {
-                          if (row.status !== "open") {
-                            return "-";
-                          }
-                          const prices = snapshotMap.get(row.symbol);
-                          if (!prices || prices.spot_mid === null || prices.perp_mid === null) {
-                            return "-";
-                          }
-                          const spotQty = Number(row.spot_qty ?? 0);
-                          const perpQty = Number(row.perp_qty ?? 0);
-                          const entrySpot = Number(row.entry_spot_price ?? 0);
-                          const entryPerp = Number(row.entry_perp_price ?? 0);
-                          const pnl =
-                            spotQty * (prices.spot_mid - entrySpot) +
-                            perpQty * (prices.perp_mid - entryPerp);
-                          return pnl.toFixed(2);
-                        })()}
-                      </td>
-                      <td className="py-2">{row.realized_pnl_usd ?? "-"}</td>
-                      <td className="py-2">
-                        {row.status === "open" ? (
-                          <ClosePositionButton positionId={row.id} />
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {positions && positions.length === 0 ? (
-                <p className="mt-3 text-sm text-brand-100/70">
-                  Nincs még position.
-                </p>
-              ) : null}
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
