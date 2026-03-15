@@ -54,6 +54,7 @@ export type DetectCrossExchangeResult = {
   inserted: number;
   skipped: number;
   evaluated: EvaluatedRow[];
+  skip_reasons: Record<string, number>;
 };
 
 function confidenceForXarb(netEdgeBps: number) {
@@ -85,6 +86,13 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
   let inserted = 0;
   let skipped = 0;
   const evaluated: EvaluatedRow[] = [];
+  const skip_reasons: Record<string, number> = {};
+
+  const markSkipped = (row: EvaluatedRow, reason: string) => {
+    skipped += 1;
+    skip_reasons[reason] = (skip_reasons[reason] ?? 0) + 1;
+    evaluated.push({ ...row, decision: "skipped", reason });
+  };
 
   for (const mapping of CANONICAL_MAP) {
     let binanceSnap: { ts: string; spot_bid: number | null; spot_ask: number | null } | null = null;
@@ -165,8 +173,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     }
 
     if (!binanceSnap && !bybitSnap && !okxSnap && !coinbaseSnap && !krakenSnap) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: "-",
         sell_exchange: "-",
@@ -174,9 +181,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: 0,
         gross_edge_bps: 0,
         net_edge_bps: 0,
-        decision: "skipped",
-        reason: "missing snapshots"
-      });
+        decision: "skipped"
+      }, "missing_snapshots");
       continue;
     }
 
@@ -246,8 +252,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       .filter((age): age is number => Number.isFinite(age));
 
     if (validQuotes.length < 2) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: "-",
         sell_exchange: "-",
@@ -255,9 +260,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: 0,
         gross_edge_bps: 0,
         net_edge_bps: 0,
-        decision: "skipped",
-        reason: "invalid quotes"
-      });
+        decision: "skipped"
+      }, "invalid_quotes");
       continue;
     }
 
@@ -265,8 +269,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       quoteAgesSeconds.length < 2 ||
       Math.max(...quoteAgesSeconds) > MAX_SNAPSHOT_AGE_SECONDS
     ) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: "-",
         sell_exchange: "-",
@@ -274,15 +277,13 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: 0,
         gross_edge_bps: 0,
         net_edge_bps: 0,
-        decision: "skipped",
-        reason: "stale snapshots"
-      });
+        decision: "skipped"
+      }, "stale_snapshots");
       continue;
     }
 
     if (Math.max(...quoteAgesSeconds) - Math.min(...quoteAgesSeconds) > MAX_SNAPSHOT_SKEW_SECONDS) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: "-",
         sell_exchange: "-",
@@ -290,9 +291,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: 0,
         gross_edge_bps: 0,
         net_edge_bps: 0,
-        decision: "skipped",
-        reason: "snapshot skew"
-      });
+        decision: "skipped"
+      }, "snapshot_skew");
       continue;
     }
 
@@ -300,8 +300,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     const sell = validQuotes.reduce((max, q) => (q.bid > max.bid ? q : max));
 
     if (buy.exchange === sell.exchange) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: buy.exchange,
         sell_exchange: sell.exchange,
@@ -309,9 +308,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: sell.bid as number,
         gross_edge_bps: 0,
         net_edge_bps: 0,
-        decision: "skipped",
-        reason: "no cross-exchange edge"
-      });
+        decision: "skipped"
+      }, "same_exchange_best_quote");
       continue;
     }
 
@@ -323,8 +321,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     const net_edge_bps = gross_edge_bps - costs_bps;
 
     if (net_edge_bps < MIN_NET_EDGE_BPS) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: buy.exchange,
         sell_exchange: sell.exchange,
@@ -332,9 +329,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: sell.bid as number,
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
         net_edge_bps: Number(net_edge_bps.toFixed(4)),
-        decision: "skipped",
-        reason: "below threshold"
-      });
+        decision: "skipped"
+      }, "below_min_net_edge");
       continue;
     }
 
@@ -355,8 +351,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     }
 
     if (existing) {
-      skipped += 1;
-      evaluated.push({
+      markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: buy.exchange,
         sell_exchange: sell.exchange,
@@ -364,9 +359,8 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         sell_bid: sell.bid as number,
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
         net_edge_bps: Number(net_edge_bps.toFixed(4)),
-        decision: "skipped",
-        reason: "recent opportunity exists"
-      });
+        decision: "skipped"
+      }, "recent_opportunity_exists");
       continue;
     }
 
@@ -408,5 +402,5 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     });
   }
 
-  return { inserted, skipped, evaluated };
+  return { inserted, skipped, evaluated, skip_reasons };
 }

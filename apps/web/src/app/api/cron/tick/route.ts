@@ -267,7 +267,8 @@ async function handleTick(request: Request) {
         xarb_spot: crossResult.ok
           ? {
               inserted: crossResult.data.inserted,
-              skipped: crossResult.data.skipped
+              skipped: crossResult.data.skipped,
+              skip_reasons: crossResult.data.skip_reasons
             }
           : { inserted: 0, skipped: 0 },
         tri_arb: triResult.ok
@@ -352,7 +353,8 @@ async function handleTick(request: Request) {
       xarb_spot: crossResult.ok
         ? {
             inserted: crossResult.data.inserted,
-            skipped: crossResult.data.skipped
+            skipped: crossResult.data.skipped,
+            skip_reasons: crossResult.data.skip_reasons
           }
         : { inserted: 0, skipped: 0, error: crossResult.error },
       tri_arb: triResult.ok
