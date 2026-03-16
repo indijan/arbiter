@@ -243,6 +243,17 @@ type AutoExecuteResult = {
     unfavorable_symbols: string[];
     blocked_symbols: string[];
     prefilter_reasons: Record<string, number>;
+    live_reject_samples: Array<{
+      symbol: string;
+      exchange_pair: string;
+      buy_exchange: string;
+      sell_exchange: string;
+      live_gross_bps: number;
+      live_net_bps: number;
+      threshold_bps: number;
+      replay_validated_pair: boolean;
+      reason: string;
+    }>;
   };
 };
 
@@ -512,7 +523,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     symbol_expectancy_bias: {},
     unfavorable_symbols: [],
     blocked_symbols: [],
-    prefilter_reasons: {}
+    prefilter_reasons: {},
+    live_reject_samples: []
   };
 
   let { data: account, error: accountError } = await adminSupabase
@@ -1301,7 +1313,18 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     symbol_expectancy_bias: symbolExpectancyBias,
     unfavorable_symbols: unfavorableSymbols,
     blocked_symbols: blockedSymbols,
-    prefilter_reasons: prefilterReasons
+    prefilter_reasons: prefilterReasons,
+    live_reject_samples: [] as Array<{
+      symbol: string;
+      exchange_pair: string;
+      buy_exchange: string;
+      sell_exchange: string;
+      live_gross_bps: number;
+      live_net_bps: number;
+      threshold_bps: number;
+      replay_validated_pair: boolean;
+      reason: string;
+    }>
   };
 
   let llmCallsUsed = 0;
@@ -1775,6 +1798,19 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
       if (liveNetEdgeBps < effectiveLiveThresholdBps) {
         if (!allowFallbackOpen) {
+          if (diagnostics.live_reject_samples.length < 10) {
+            diagnostics.live_reject_samples.push({
+              symbol: opp.symbol,
+              exchange_pair: exchangePairKey,
+              buy_exchange: buyExchange,
+              sell_exchange: sellExchange,
+              live_gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
+              live_net_bps: Number(liveNetEdgeBps.toFixed(4)),
+              threshold_bps: Number(effectiveLiveThresholdBps.toFixed(4)),
+              replay_validated_pair: REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey),
+              reason: "live_edge_below_threshold"
+            });
+          }
           skipped += 1;
           reasons.push({ opportunity_id: opp.id, reason: "live_edge_below_threshold" });
           continue;
@@ -1782,6 +1818,19 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       if (!meetsXarbQualityFloor && !allowFallbackOpen) {
+        if (diagnostics.live_reject_samples.length < 10) {
+          diagnostics.live_reject_samples.push({
+            symbol: opp.symbol,
+            exchange_pair: exchangePairKey,
+            buy_exchange: buyExchange,
+            sell_exchange: sellExchange,
+            live_gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
+            live_net_bps: Number(liveNetEdgeBps.toFixed(4)),
+            threshold_bps: Number(xarbQualityNetFloor.toFixed(4)),
+            replay_validated_pair: REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey),
+            reason: "quality_floor_not_met"
+          });
+        }
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "quality_floor_not_met" });
         continue;
