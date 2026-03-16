@@ -11,8 +11,9 @@ const COSTS_BPS = {
 };
 
 const MIN_NET_EDGE_BPS = 0;
-// Snapshot ingestion runs roughly every 10 minutes, so freshness must tolerate one full cycle.
-const MAX_SNAPSHOT_AGE_SECONDS = 15 * 60;
+// Snapshot ingestion can drift well beyond a single 10-minute cycle in production.
+// Allow a wider freshness window so the detector can evaluate live edges before discarding the feed.
+const MAX_SNAPSHOT_AGE_SECONDS = 40 * 60;
 const MAX_SNAPSHOT_SKEW_SECONDS = 20;
 
 const CANONICAL_MAP: Array<{
