@@ -1699,8 +1699,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         !losingRecently &&
         !severeLosing &&
         REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) &&
-        liveGrossEdgeBps >= (isCoreXarbSymbol ? 16 : 11) &&
-        liveNetEdgeBps >= (isCoreXarbSymbol ? 6 : 2);
+        liveGrossEdgeBps >= (isCoreXarbSymbol ? 14 : 11) &&
+        liveNetEdgeBps >= (isCoreXarbSymbol ? 4 : 2);
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1768,7 +1768,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const effectiveLiveThresholdBps = canRiskClampXarbOpen
         ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 2.5 : 1.25)
         : canReplayValidatedLaneOpen
-          ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 6 : 2)
+          ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 4 : 2)
         : canFreshXarbLaneOpen
           ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 1.5 : 0.6)
           : adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
