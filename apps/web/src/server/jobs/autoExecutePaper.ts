@@ -91,11 +91,14 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
 
 const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
 const REPLAY_VALIDATED_XARB_PAIRS = new Set([
-  "BTCUSD:bybit_coinbase",
-  "ETHUSD:coinbase_okx",
-  "SOLUSD:bybit_coinbase",
   "LINKUSD:coinbase_okx",
-  "SOLUSD:coinbase_okx"
+  "ADAUSD:bybit_coinbase",
+  "ETHUSD:bybit_kraken",
+  "ETHUSD:bybit_coinbase",
+  "AVAXUSD:coinbase_okx",
+  "BTCUSD:kraken_okx",
+  "SOLUSD:bybit_coinbase",
+  "BTCUSD:coinbase_okx"
 ]);
 
 const CANONICAL_MAP: Record<
