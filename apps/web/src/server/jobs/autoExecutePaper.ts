@@ -1601,6 +1601,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
 
       const details = opp.details ?? {};
+      const detectorNetEdgeBps = Number(opp.net_edge_bps ?? 0);
       const buyExchange = String((details as Record<string, unknown>).buy_exchange ?? "");
       const sellExchange = String((details as Record<string, unknown>).sell_exchange ?? "");
 
@@ -1701,27 +1702,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         blockedTypes.includes("pilot") &&
         blockedTypes.includes("calibration");
       const canRiskClampXarbOpen =
-        xarbPolicyHardBlocked &&
-        opp.type === "xarb_spot" &&
-        !losingRecently &&
-        !severeLosing &&
-        liveGrossEdgeBps >= (isCoreXarbSymbol ? 10 : 7) &&
-        liveNetEdgeBps >= (isCoreXarbSymbol ? 2.5 : 1.25);
+        false;
       const canFreshXarbLaneOpen =
-        opp.type === "xarb_spot" &&
-        Number.isFinite(opportunityAgeMinutes) &&
-        opportunityAgeMinutes <= 30 &&
-        !losingRecently &&
-        !severeLosing &&
-        liveGrossEdgeBps >= (isCoreXarbSymbol ? 8 : 5) &&
-        liveNetEdgeBps >= (isCoreXarbSymbol ? 1.5 : 0.6);
+        false;
       const canReplayValidatedLaneOpen =
         opp.type === "xarb_spot" &&
         Number.isFinite(opportunityAgeMinutes) &&
-        opportunityAgeMinutes <= 30 &&
+        opportunityAgeMinutes <= 10 &&
         !losingRecently &&
         !severeLosing &&
         REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) &&
+        detectorNetEdgeBps >= (isCoreXarbSymbol ? 6 : 3) &&
         liveGrossEdgeBps >= (isCoreXarbSymbol ? 14 : 11) &&
         liveNetEdgeBps >= (isCoreXarbSymbol ? 4 : 2);
       const canPilotOpen =
@@ -1774,27 +1765,24 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const canMicroProbeOpen = false;
       const canHardForceProbeOpen = false;
       const allowFallbackOpen =
-        canReplayValidatedLaneOpen ||
-        canFreshXarbLaneOpen ||
-        canRiskClampXarbOpen ||
-        canPilotOpen ||
-        canCalibrationOpen ||
-        canRecoveryOpen ||
-        canReentryOpen ||
-        canInactivityOpen ||
-        canStarvationOpen ||
-        canEmergencyOpen ||
-        canNearThresholdExplore ||
-        canMicroProbeOpen ||
-        canHardForceProbeOpen;
+        opp.type === "xarb_spot"
+          ? canReplayValidatedLaneOpen
+          : canPilotOpen ||
+            canCalibrationOpen ||
+            canRecoveryOpen ||
+            canReentryOpen ||
+            canInactivityOpen ||
+            canStarvationOpen ||
+            canEmergencyOpen ||
+            canNearThresholdExplore ||
+            canMicroProbeOpen ||
+            canHardForceProbeOpen;
 
       const effectiveLiveThresholdBps = canRiskClampXarbOpen
         ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 2.5 : 1.25)
         : canReplayValidatedLaneOpen
           ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 4 : 2)
-        : canFreshXarbLaneOpen
-          ? Math.min(adjustedLiveXarbThresholdBps, isCoreXarbSymbol ? 1.5 : 0.6)
-          : adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
+        : adjustedLiveXarbThresholdBps - nearThresholdBufferBps;
 
       if (liveNetEdgeBps < effectiveLiveThresholdBps) {
         if (!allowFallbackOpen) {
