@@ -8,6 +8,8 @@ const IDEMPOTENT_MINUTES = 5;
 
 const DEFAULT_HOLDING_HOURS = 24;
 const MAX_HOLDING_HOURS = 168;
+const CARRY_EXCHANGES = new Set(["bybit", "okx"]);
+const MAX_NEAR_MISS_SAMPLES = 5;
 
 const ENTRY_COSTS_BPS = 6;
 const EXIT_COSTS_BPS = 6;
@@ -40,6 +42,15 @@ export type DetectCarryResult = {
   holding_hours: number;
   evaluated: EvaluatedRow[];
   skip_reasons: Record<string, number>;
+  near_miss_samples: Array<{
+    exchange: string;
+    symbol: string;
+    net_edge_bps: number;
+    funding_daily_bps: number;
+    entry_basis_bps: number;
+    break_even_hours: number | null;
+    decision: "watchlist" | "below_threshold";
+  }>;
 };
 
 export type DetectParams = {
@@ -71,7 +82,7 @@ export async function detectCarry(
     Date.now() - IDEMPOTENT_MINUTES * 60 * 1000
   ).toISOString();
 
-  const { data: allSnapshots, error: allError } = await adminSupabase
+  const { data: rawSnapshots, error: allError } = await adminSupabase
     .from("market_snapshots")
     .select(
       "id, ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask, funding_rate"
@@ -83,8 +94,12 @@ export async function detectCarry(
     throw new Error(allError.message);
   }
 
+  const allSnapshots = (rawSnapshots ?? []).filter((snapshot) =>
+    CARRY_EXCHANGES.has(snapshot.exchange)
+  );
+
   const marketKeysInWindow = new Set<string>();
-  for (const snapshot of allSnapshots ?? []) {
+  for (const snapshot of allSnapshots) {
     marketKeysInWindow.add(`${snapshot.exchange}:${snapshot.symbol}`);
   }
 
@@ -117,6 +132,15 @@ export async function detectCarry(
   let skipped = 0;
   const evaluated: EvaluatedRow[] = [];
   const skip_reasons: Record<string, number> = {};
+  const near_miss_candidates: Array<{
+    exchange: string;
+    symbol: string;
+    net_edge_bps: number;
+    funding_daily_bps: number;
+    entry_basis_bps: number;
+    break_even_hours: number | null;
+    decision: "watchlist" | "below_threshold";
+  }> = [];
 
   function markSkipReason(reason: string | undefined) {
     if (!reason) return;
@@ -250,10 +274,30 @@ export async function detectCarry(
       watchlist += 1;
       decision = "watchlist";
       markSkipReason("watchlist_break_even");
+      near_miss_candidates.push({
+        exchange: snapshot.exchange,
+        symbol: snapshot.symbol,
+        net_edge_bps: Number(net_edge_bps.toFixed(4)),
+        funding_daily_bps: Number(funding_daily_bps.toFixed(4)),
+        entry_basis_bps: Number(entry_basis_bps.toFixed(4)),
+        break_even_hours,
+        decision: "watchlist"
+      });
     } else {
       skipped += 1;
       reason = "below threshold";
       markSkipReason("below_threshold");
+      if (funding_daily_bps > 0) {
+        near_miss_candidates.push({
+          exchange: snapshot.exchange,
+          symbol: snapshot.symbol,
+          net_edge_bps: Number(net_edge_bps.toFixed(4)),
+          funding_daily_bps: Number(funding_daily_bps.toFixed(4)),
+          entry_basis_bps: Number(entry_basis_bps.toFixed(4)),
+          break_even_hours,
+          decision: "below_threshold"
+        });
+      }
     }
 
     evaluated.push({
@@ -277,5 +321,20 @@ export async function detectCarry(
     });
   }
 
-  return { inserted, watchlist, skipped, holding_hours, evaluated, skip_reasons };
+  const near_miss_samples = near_miss_candidates
+    .sort((a, b) => {
+      if (b.net_edge_bps !== a.net_edge_bps) return b.net_edge_bps - a.net_edge_bps;
+      return b.funding_daily_bps - a.funding_daily_bps;
+    })
+    .slice(0, MAX_NEAR_MISS_SAMPLES);
+
+  return {
+    inserted,
+    watchlist,
+    skipped,
+    holding_hours,
+    evaluated,
+    skip_reasons,
+    near_miss_samples
+  };
 }
