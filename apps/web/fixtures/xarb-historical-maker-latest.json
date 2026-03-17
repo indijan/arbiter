@@ -1,0 +1,7014 @@
+{
+  "exported_at": "2026-03-17T05:09:43.283Z",
+  "hours": 24,
+  "exchanges": [
+    "binance",
+    "bybit",
+    "okx",
+    "coinbase",
+    "kraken"
+  ],
+  "snapshot_count": 1000,
+  "snapshots": [
+    {
+      "ts": "2026-03-16T05:10:41.504+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73964.9,
+      "ask": 73965
+    },
+    {
+      "ts": "2026-03-16T05:10:41.641+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73960.2,
+      "ask": 73960.3
+    },
+    {
+      "ts": "2026-03-16T05:10:42.501+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.65,
+      "ask": 2265.66
+    },
+    {
+      "ts": "2026-03-16T05:10:42.927+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2266,
+      "ask": 2266.01
+    },
+    {
+      "ts": "2026-03-16T05:10:44.224+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.59,
+      "ask": 93.6
+    },
+    {
+      "ts": "2026-03-16T05:10:44.585+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.59,
+      "ask": 93.6
+    },
+    {
+      "ts": "2026-03-16T05:10:45.224+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.479,
+      "ask": 1.4791
+    },
+    {
+      "ts": "2026-03-16T05:10:45.514+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4789,
+      "ask": 1.479
+    },
+    {
+      "ts": "2026-03-16T05:10:46.812+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 684.3,
+      "ask": 684.4
+    },
+    {
+      "ts": "2026-03-16T05:10:46.836+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 684.4,
+      "ask": 684.5
+    },
+    {
+      "ts": "2026-03-16T05:10:47.619+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2831,
+      "ask": 0.2832
+    },
+    {
+      "ts": "2026-03-16T05:10:48.14+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.283,
+      "ask": 0.2831
+    },
+    {
+      "ts": "2026-03-16T05:10:49.262+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10092,
+      "ask": 0.10093
+    },
+    {
+      "ts": "2026-03-16T05:10:49.457+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10095,
+      "ask": 0.10096
+    },
+    {
+      "ts": "2026-03-16T05:10:50.768+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T05:10:50.92+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.412,
+      "ask": 10.413
+    },
+    {
+      "ts": "2026-03-16T05:10:51.715+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.701,
+      "ask": 9.702
+    },
+    {
+      "ts": "2026-03-16T05:10:52.04+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.69,
+      "ask": 9.7
+    },
+    {
+      "ts": "2026-03-16T05:10:53.118+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.16,
+      "ask": 57.17
+    },
+    {
+      "ts": "2026-03-16T05:10:53.355+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.16,
+      "ask": 57.17
+    },
+    {
+      "ts": "2026-03-16T05:10:54.513+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.52,
+      "ask": 1.521
+    },
+    {
+      "ts": "2026-03-16T05:10:54.674+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.52,
+      "ask": 1.521
+    },
+    {
+      "ts": "2026-03-16T05:10:55.11+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.7,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T05:10:55.977+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.7,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T05:10:56.312+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29812,
+      "ask": 0.29813
+    },
+    {
+      "ts": "2026-03-16T05:10:57.308+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2981,
+      "ask": 0.2982
+    },
+    {
+      "ts": "2026-03-16T05:10:59.709+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2266.2,
+      "ask": 2266.21
+    },
+    {
+      "ts": "2026-03-16T05:10:59.709+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2831,
+      "ask": 0.2832
+    },
+    {
+      "ts": "2026-03-16T05:10:59.712+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.64,
+      "ask": 93.65
+    },
+    {
+      "ts": "2026-03-16T05:10:59.714+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.705,
+      "ask": 9.706
+    },
+    {
+      "ts": "2026-03-16T05:10:59.735+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.52,
+      "ask": 1.521
+    },
+    {
+      "ts": "2026-03-16T05:10:59.744+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T05:10:59.744+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.15,
+      "ask": 57.16
+    },
+    {
+      "ts": "2026-03-16T05:10:59.806+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.68,
+      "ask": 471.79
+    },
+    {
+      "ts": "2026-03-16T05:10:59.825+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4789,
+      "ask": 1.479
+    },
+    {
+      "ts": "2026-03-16T05:10:59.836+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73969.84,
+      "ask": 73970
+    },
+    {
+      "ts": "2026-03-16T05:11:00.261+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.62,
+      "ask": 93.63
+    },
+    {
+      "ts": "2026-03-16T05:11:00.262+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 684.44,
+      "ask": 684.55
+    },
+    {
+      "ts": "2026-03-16T05:11:00.269+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298103,
+      "ask": 0.29814
+    },
+    {
+      "ts": "2026-03-16T05:11:00.269+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5206,
+      "ask": 1.5211
+    },
+    {
+      "ts": "2026-03-16T05:11:00.269+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.66,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T05:11:00.269+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.4789,
+      "ask": 1.47922
+    },
+    {
+      "ts": "2026-03-16T05:11:00.269+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T05:11:00.27+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.283094,
+      "ask": 0.283095
+    },
+    {
+      "ts": "2026-03-16T05:11:00.27+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73968.6,
+      "ask": 73968.7
+    },
+    {
+      "ts": "2026-03-16T05:11:00.27+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.17,
+      "ask": 57.18
+    },
+    {
+      "ts": "2026-03-16T05:11:00.27+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.6993,
+      "ask": 9.70085
+    },
+    {
+      "ts": "2026-03-16T05:11:00.271+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2266.28,
+      "ask": 2266.35
+    },
+    {
+      "ts": "2026-03-16T05:20:40.912+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73924.9,
+      "ask": 73925
+    },
+    {
+      "ts": "2026-03-16T05:20:41.603+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73925.2,
+      "ask": 73925.3
+    },
+    {
+      "ts": "2026-03-16T05:20:42.926+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2265.94,
+      "ask": 2265.95
+    },
+    {
+      "ts": "2026-03-16T05:20:42.929+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.66,
+      "ask": 2265.67
+    },
+    {
+      "ts": "2026-03-16T05:20:43.744+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.84,
+      "ask": 93.85
+    },
+    {
+      "ts": "2026-03-16T05:20:44.22+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.86,
+      "ask": 93.87
+    },
+    {
+      "ts": "2026-03-16T05:20:45.531+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4808,
+      "ask": 1.4809
+    },
+    {
+      "ts": "2026-03-16T05:20:45.79+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4808,
+      "ask": 1.4809
+    },
+    {
+      "ts": "2026-03-16T05:20:47.217+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 684.6,
+      "ask": 684.7
+    },
+    {
+      "ts": "2026-03-16T05:20:47.413+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 684.4,
+      "ask": 684.5
+    },
+    {
+      "ts": "2026-03-16T05:20:48.007+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2844,
+      "ask": 0.2845
+    },
+    {
+      "ts": "2026-03-16T05:20:48.55+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2844,
+      "ask": 0.2845
+    },
+    {
+      "ts": "2026-03-16T05:20:49.313+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10123,
+      "ask": 0.10124
+    },
+    {
+      "ts": "2026-03-16T05:20:49.844+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10124,
+      "ask": 0.10125
+    },
+    {
+      "ts": "2026-03-16T05:20:50.616+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.428,
+      "ask": 10.429
+    },
+    {
+      "ts": "2026-03-16T05:20:51.147+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T05:20:52.31+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.715,
+      "ask": 9.716
+    },
+    {
+      "ts": "2026-03-16T05:20:52.447+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.71,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T05:20:53.51+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.3,
+      "ask": 57.31
+    },
+    {
+      "ts": "2026-03-16T05:20:53.748+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.29,
+      "ask": 57.3
+    },
+    {
+      "ts": "2026-03-16T05:20:55.013+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.529,
+      "ask": 1.53
+    },
+    {
+      "ts": "2026-03-16T05:20:55.051+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.529,
+      "ask": 1.53
+    },
+    {
+      "ts": "2026-03-16T05:20:56.212+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.5,
+      "ask": 472.6
+    },
+    {
+      "ts": "2026-03-16T05:20:56.367+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.5,
+      "ask": 472.6
+    },
+    {
+      "ts": "2026-03-16T05:20:57.121+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29821,
+      "ask": 0.29822
+    },
+    {
+      "ts": "2026-03-16T05:20:57.658+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2982,
+      "ask": 0.2983
+    },
+    {
+      "ts": "2026-03-16T05:20:59.721+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.83,
+      "ask": 93.84
+    },
+    {
+      "ts": "2026-03-16T05:20:59.722+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2266.29,
+      "ask": 2266.3
+    },
+    {
+      "ts": "2026-03-16T05:20:59.725+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4806,
+      "ask": 1.4807
+    },
+    {
+      "ts": "2026-03-16T05:20:59.725+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.53,
+      "ask": 1.532
+    },
+    {
+      "ts": "2026-03-16T05:20:59.729+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.53,
+      "ask": 472.62
+    },
+    {
+      "ts": "2026-03-16T05:20:59.73+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73947.99,
+      "ask": 73948
+    },
+    {
+      "ts": "2026-03-16T05:20:59.733+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T05:20:59.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.3,
+      "ask": 57.32
+    },
+    {
+      "ts": "2026-03-16T05:20:59.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.714,
+      "ask": 9.715
+    },
+    {
+      "ts": "2026-03-16T05:20:59.754+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2843,
+      "ask": 0.2844
+    },
+    {
+      "ts": "2026-03-16T05:21:00.15+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73949.9,
+      "ask": 73950
+    },
+    {
+      "ts": "2026-03-16T05:21:00.15+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.4807,
+      "ask": 1.48091
+    },
+    {
+      "ts": "2026-03-16T05:21:00.151+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T05:21:00.151+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.284352,
+      "ask": 0.284444
+    },
+    {
+      "ts": "2026-03-16T05:21:00.151+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2266.29,
+      "ask": 2266.63
+    },
+    {
+      "ts": "2026-03-16T05:21:00.152+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 684.53,
+      "ask": 684.66
+    },
+    {
+      "ts": "2026-03-16T05:21:00.153+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5302,
+      "ask": 1.5309
+    },
+    {
+      "ts": "2026-03-16T05:21:00.156+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.83,
+      "ask": 93.84
+    },
+    {
+      "ts": "2026-03-16T05:21:00.157+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298213,
+      "ask": 0.298278
+    },
+    {
+      "ts": "2026-03-16T05:21:00.159+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.44,
+      "ask": 472.61
+    },
+    {
+      "ts": "2026-03-16T05:21:00.163+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71353,
+      "ask": 9.71457
+    },
+    {
+      "ts": "2026-03-16T05:21:00.187+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.3,
+      "ask": 57.32
+    },
+    {
+      "ts": "2026-03-16T05:30:41.686+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73832,
+      "ask": 73832.1
+    },
+    {
+      "ts": "2026-03-16T05:30:41.725+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73841.9,
+      "ask": 73842
+    },
+    {
+      "ts": "2026-03-16T05:30:42.988+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2265.85,
+      "ask": 2265.86
+    },
+    {
+      "ts": "2026-03-16T05:30:43.008+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.68,
+      "ask": 2265.69
+    },
+    {
+      "ts": "2026-03-16T05:30:44.204+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.97,
+      "ask": 93.98
+    },
+    {
+      "ts": "2026-03-16T05:30:44.305+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.99,
+      "ask": 94
+    },
+    {
+      "ts": "2026-03-16T05:30:45.27+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4774,
+      "ask": 1.4775
+    },
+    {
+      "ts": "2026-03-16T05:30:45.61+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4776,
+      "ask": 1.4777
+    },
+    {
+      "ts": "2026-03-16T05:30:46.942+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 683.6,
+      "ask": 683.7
+    },
+    {
+      "ts": "2026-03-16T05:30:47.21+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 683.5,
+      "ask": 683.6
+    },
+    {
+      "ts": "2026-03-16T05:30:47.606+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2844,
+      "ask": 0.2845
+    },
+    {
+      "ts": "2026-03-16T05:30:48.264+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2844,
+      "ask": 0.2845
+    },
+    {
+      "ts": "2026-03-16T05:30:49.206+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10085,
+      "ask": 0.10086
+    },
+    {
+      "ts": "2026-03-16T05:30:49.559+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10087,
+      "ask": 0.10088
+    },
+    {
+      "ts": "2026-03-16T05:30:50.546+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.442,
+      "ask": 10.443
+    },
+    {
+      "ts": "2026-03-16T05:30:50.834+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T05:30:52.137+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.71,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T05:30:52.52+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.72,
+      "ask": 9.721
+    },
+    {
+      "ts": "2026-03-16T05:30:52.91+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.24,
+      "ask": 57.25
+    },
+    {
+      "ts": "2026-03-16T05:30:53.417+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.24,
+      "ask": 57.25
+    },
+    {
+      "ts": "2026-03-16T05:30:54.112+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.532,
+      "ask": 1.533
+    },
+    {
+      "ts": "2026-03-16T05:30:54.721+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.531,
+      "ask": 1.532
+    },
+    {
+      "ts": "2026-03-16T05:30:55.234+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472,
+      "ask": 472.1
+    },
+    {
+      "ts": "2026-03-16T05:30:55.81+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29829,
+      "ask": 0.2983
+    },
+    {
+      "ts": "2026-03-16T05:30:56.051+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472,
+      "ask": 472.1
+    },
+    {
+      "ts": "2026-03-16T05:30:57.331+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2983,
+      "ask": 0.2984
+    },
+    {
+      "ts": "2026-03-16T05:30:59.492+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4769,
+      "ask": 1.477
+    },
+    {
+      "ts": "2026-03-16T05:30:59.497+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.93,
+      "ask": 93.94
+    },
+    {
+      "ts": "2026-03-16T05:30:59.5+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.531,
+      "ask": 1.532
+    },
+    {
+      "ts": "2026-03-16T05:30:59.501+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T05:30:59.501+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.716,
+      "ask": 9.719
+    },
+    {
+      "ts": "2026-03-16T05:30:59.501+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2266.3,
+      "ask": 2266.31
+    },
+    {
+      "ts": "2026-03-16T05:30:59.515+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2843,
+      "ask": 0.2844
+    },
+    {
+      "ts": "2026-03-16T05:30:59.586+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73842.01,
+      "ask": 73842.02
+    },
+    {
+      "ts": "2026-03-16T05:30:59.596+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.02,
+      "ask": 472.07
+    },
+    {
+      "ts": "2026-03-16T05:30:59.644+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.25,
+      "ask": 57.27
+    },
+    {
+      "ts": "2026-03-16T05:31:00.587+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2266.18,
+      "ask": 2266.55
+    },
+    {
+      "ts": "2026-03-16T05:31:00.588+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5315,
+      "ask": 1.5321
+    },
+    {
+      "ts": "2026-03-16T05:31:00.592+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T05:31:00.592+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73863.4,
+      "ask": 73863.5
+    },
+    {
+      "ts": "2026-03-16T05:31:00.596+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298211,
+      "ask": 0.298276
+    },
+    {
+      "ts": "2026-03-16T05:31:00.596+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.92,
+      "ask": 472.06
+    },
+    {
+      "ts": "2026-03-16T05:31:00.596+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.284274,
+      "ask": 0.284498
+    },
+    {
+      "ts": "2026-03-16T05:31:00.602+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.93,
+      "ask": 93.94
+    },
+    {
+      "ts": "2026-03-16T05:31:00.602+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71804,
+      "ask": 9.72108
+    },
+    {
+      "ts": "2026-03-16T05:31:00.62+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 683.34,
+      "ask": 683.47
+    },
+    {
+      "ts": "2026-03-16T05:31:00.621+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47687,
+      "ask": 1.4769
+    },
+    {
+      "ts": "2026-03-16T05:31:00.628+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.24,
+      "ask": 57.27
+    },
+    {
+      "ts": "2026-03-16T05:40:41.538+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73977,
+      "ask": 73977.1
+    },
+    {
+      "ts": "2026-03-16T05:40:41.609+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73984.3,
+      "ask": 73984.4
+    },
+    {
+      "ts": "2026-03-16T05:40:42.575+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2266.99,
+      "ask": 2267
+    },
+    {
+      "ts": "2026-03-16T05:40:42.857+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2267.35,
+      "ask": 2267.36
+    },
+    {
+      "ts": "2026-03-16T05:40:44.461+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 94.17,
+      "ask": 94.18
+    },
+    {
+      "ts": "2026-03-16T05:40:44.503+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 94.16,
+      "ask": 94.17
+    },
+    {
+      "ts": "2026-03-16T05:40:45.772+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4814,
+      "ask": 1.4815
+    },
+    {
+      "ts": "2026-03-16T05:40:45.914+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4815,
+      "ask": 1.4816
+    },
+    {
+      "ts": "2026-03-16T05:40:46.81+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 683.8,
+      "ask": 683.9
+    },
+    {
+      "ts": "2026-03-16T05:40:47.109+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 683.9,
+      "ask": 684
+    },
+    {
+      "ts": "2026-03-16T05:40:48.427+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2869,
+      "ask": 0.287
+    },
+    {
+      "ts": "2026-03-16T05:40:48.613+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2869,
+      "ask": 0.287
+    },
+    {
+      "ts": "2026-03-16T05:40:49.523+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10157,
+      "ask": 0.10158
+    },
+    {
+      "ts": "2026-03-16T05:40:49.75+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10159,
+      "ask": 0.1016
+    },
+    {
+      "ts": "2026-03-16T05:40:50.712+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.457,
+      "ask": 10.458
+    },
+    {
+      "ts": "2026-03-16T05:40:51.034+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.45,
+      "ask": 10.46
+    },
+    {
+      "ts": "2026-03-16T05:40:51.82+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.747,
+      "ask": 9.748
+    },
+    {
+      "ts": "2026-03-16T05:40:52.354+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.74,
+      "ask": 9.75
+    },
+    {
+      "ts": "2026-03-16T05:40:53.638+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.42,
+      "ask": 57.44
+    },
+    {
+      "ts": "2026-03-16T05:40:53.91+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.42,
+      "ask": 57.43
+    },
+    {
+      "ts": "2026-03-16T05:40:54.868+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.547,
+      "ask": 1.548
+    },
+    {
+      "ts": "2026-03-16T05:40:54.911+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.7,
+      "ask": 472.8
+    },
+    {
+      "ts": "2026-03-16T05:40:54.951+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.547,
+      "ask": 1.549
+    },
+    {
+      "ts": "2026-03-16T05:40:56.252+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.7,
+      "ask": 472.8
+    },
+    {
+      "ts": "2026-03-16T05:40:56.61+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.2983,
+      "ask": 0.29831
+    },
+    {
+      "ts": "2026-03-16T05:40:57.892+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2983,
+      "ask": 0.2984
+    },
+    {
+      "ts": "2026-03-16T05:41:00.282+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.744,
+      "ask": 9.745
+    },
+    {
+      "ts": "2026-03-16T05:41:00.293+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.546,
+      "ask": 1.547
+    },
+    {
+      "ts": "2026-03-16T05:41:00.297+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.44,
+      "ask": 57.45
+    },
+    {
+      "ts": "2026-03-16T05:41:00.297+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2268.69,
+      "ask": 2268.7
+    },
+    {
+      "ts": "2026-03-16T05:41:00.3+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.61,
+      "ask": 472.62
+    },
+    {
+      "ts": "2026-03-16T05:41:00.302+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 94.17,
+      "ask": 94.18
+    },
+    {
+      "ts": "2026-03-16T05:41:00.302+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2867,
+      "ask": 0.2869
+    },
+    {
+      "ts": "2026-03-16T05:41:00.35+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4824,
+      "ask": 1.4825
+    },
+    {
+      "ts": "2026-03-16T05:41:00.405+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73981.12,
+      "ask": 73981.13
+    },
+    {
+      "ts": "2026-03-16T05:41:00.428+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.45,
+      "ask": 10.46
+    },
+    {
+      "ts": "2026-03-16T05:41:00.887+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73983.3,
+      "ask": 73983.4
+    },
+    {
+      "ts": "2026-03-16T05:41:00.887+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.46,
+      "ask": 10.47
+    },
+    {
+      "ts": "2026-03-16T05:41:00.887+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2269.03,
+      "ask": 2269.15
+    },
+    {
+      "ts": "2026-03-16T05:41:00.887+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 684.08,
+      "ask": 684.25
+    },
+    {
+      "ts": "2026-03-16T05:41:00.894+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.42,
+      "ask": 57.43
+    },
+    {
+      "ts": "2026-03-16T05:41:00.894+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48247,
+      "ask": 1.48262
+    },
+    {
+      "ts": "2026-03-16T05:41:00.894+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298243,
+      "ask": 0.298282
+    },
+    {
+      "ts": "2026-03-16T05:41:00.9+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.546,
+      "ask": 1.5471
+    },
+    {
+      "ts": "2026-03-16T05:41:00.9+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 94.15,
+      "ask": 94.16
+    },
+    {
+      "ts": "2026-03-16T05:41:00.901+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.74499,
+      "ask": 9.745
+    },
+    {
+      "ts": "2026-03-16T05:41:00.903+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.56,
+      "ask": 472.74
+    },
+    {
+      "ts": "2026-03-16T05:41:00.903+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.286783,
+      "ask": 0.286989
+    },
+    {
+      "ts": "2026-03-16T05:50:41.711+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 74103.9,
+      "ask": 74104
+    },
+    {
+      "ts": "2026-03-16T05:50:42.105+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 74114.9,
+      "ask": 74115
+    },
+    {
+      "ts": "2026-03-16T05:50:42.697+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2274.41,
+      "ask": 2274.42
+    },
+    {
+      "ts": "2026-03-16T05:50:43.018+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2274.97,
+      "ask": 2274.98
+    },
+    {
+      "ts": "2026-03-16T05:50:44.625+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 94.06,
+      "ask": 94.07
+    },
+    {
+      "ts": "2026-03-16T05:50:44.663+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 94.06,
+      "ask": 94.07
+    },
+    {
+      "ts": "2026-03-16T05:50:45.955+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4814,
+      "ask": 1.4815
+    },
+    {
+      "ts": "2026-03-16T05:50:46.299+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4814,
+      "ask": 1.4815
+    },
+    {
+      "ts": "2026-03-16T05:50:47.207+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 684.9,
+      "ask": 685
+    },
+    {
+      "ts": "2026-03-16T05:50:47.622+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 685,
+      "ask": 685.1
+    },
+    {
+      "ts": "2026-03-16T05:50:48.947+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2868,
+      "ask": 0.2869
+    },
+    {
+      "ts": "2026-03-16T05:50:49.109+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2869,
+      "ask": 0.287
+    },
+    {
+      "ts": "2026-03-16T05:50:49.811+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10158,
+      "ask": 0.10159
+    },
+    {
+      "ts": "2026-03-16T05:50:50.266+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10162,
+      "ask": 0.10163
+    },
+    {
+      "ts": "2026-03-16T05:50:51.21+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.461,
+      "ask": 10.462
+    },
+    {
+      "ts": "2026-03-16T05:50:51.58+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.45,
+      "ask": 10.46
+    },
+    {
+      "ts": "2026-03-16T05:50:52.885+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.75,
+      "ask": 9.76
+    },
+    {
+      "ts": "2026-03-16T05:50:53.008+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.759,
+      "ask": 9.76
+    },
+    {
+      "ts": "2026-03-16T05:50:54.183+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.48,
+      "ask": 57.49
+    },
+    {
+      "ts": "2026-03-16T05:50:54.414+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.47,
+      "ask": 57.49
+    },
+    {
+      "ts": "2026-03-16T05:50:55.529+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.542,
+      "ask": 1.543
+    },
+    {
+      "ts": "2026-03-16T05:50:55.717+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.542,
+      "ask": 1.543
+    },
+    {
+      "ts": "2026-03-16T05:50:56.71+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.9,
+      "ask": 473
+    },
+    {
+      "ts": "2026-03-16T05:50:56.842+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.9,
+      "ask": 473
+    },
+    {
+      "ts": "2026-03-16T05:50:57.01+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29825,
+      "ask": 0.29826
+    },
+    {
+      "ts": "2026-03-16T05:50:58.149+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2982,
+      "ask": 0.2983
+    },
+    {
+      "ts": "2026-03-16T05:51:00.169+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T05:51:00.171+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.744,
+      "ask": 9.746
+    },
+    {
+      "ts": "2026-03-16T05:51:00.171+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2272.23,
+      "ask": 2272.24
+    },
+    {
+      "ts": "2026-03-16T05:51:00.176+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 74091.24,
+      "ask": 74091.25
+    },
+    {
+      "ts": "2026-03-16T05:51:00.181+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2864,
+      "ask": 0.2865
+    },
+    {
+      "ts": "2026-03-16T05:51:00.195+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.541,
+      "ask": 1.542
+    },
+    {
+      "ts": "2026-03-16T05:51:00.269+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.97,
+      "ask": 93.98
+    },
+    {
+      "ts": "2026-03-16T05:51:00.278+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 473,
+      "ask": 473.09
+    },
+    {
+      "ts": "2026-03-16T05:51:00.295+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4798,
+      "ask": 1.4799
+    },
+    {
+      "ts": "2026-03-16T05:51:00.309+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.45,
+      "ask": 57.46
+    },
+    {
+      "ts": "2026-03-16T05:51:00.686+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 684.47,
+      "ask": 684.64
+    },
+    {
+      "ts": "2026-03-16T05:51:00.686+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2272.08,
+      "ask": 2272.41
+    },
+    {
+      "ts": "2026-03-16T05:51:00.699+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.541,
+      "ask": 1.5411
+    },
+    {
+      "ts": "2026-03-16T05:51:00.699+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 74094.3,
+      "ask": 74094.4
+    },
+    {
+      "ts": "2026-03-16T05:51:00.699+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.45,
+      "ask": 57.48
+    },
+    {
+      "ts": "2026-03-16T05:51:00.699+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.74234,
+      "ask": 9.74607
+    },
+    {
+      "ts": "2026-03-16T05:51:00.699+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47978,
+      "ask": 1.47985
+    },
+    {
+      "ts": "2026-03-16T05:51:00.7+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.286428,
+      "ask": 0.286592
+    },
+    {
+      "ts": "2026-03-16T05:51:00.704+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.95,
+      "ask": 473.03
+    },
+    {
+      "ts": "2026-03-16T05:51:00.704+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.96,
+      "ask": 93.97
+    },
+    {
+      "ts": "2026-03-16T05:51:00.708+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.46
+    },
+    {
+      "ts": "2026-03-16T05:51:00.708+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298208,
+      "ask": 0.298242
+    },
+    {
+      "ts": "2026-03-16T06:00:48.469+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 74180.9,
+      "ask": 74181
+    },
+    {
+      "ts": "2026-03-16T06:00:48.784+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 74179,
+      "ask": 74179.1
+    },
+    {
+      "ts": "2026-03-16T06:00:49.797+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2280.36,
+      "ask": 2280.37
+    },
+    {
+      "ts": "2026-03-16T06:00:49.909+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2280,
+      "ask": 2280.01
+    },
+    {
+      "ts": "2026-03-16T06:00:51.11+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 94.01,
+      "ask": 94.02
+    },
+    {
+      "ts": "2026-03-16T06:00:51.179+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 94,
+      "ask": 94.01
+    },
+    {
+      "ts": "2026-03-16T06:00:52.315+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4808,
+      "ask": 1.4809
+    },
+    {
+      "ts": "2026-03-16T06:00:52.454+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4808,
+      "ask": 1.4809
+    },
+    {
+      "ts": "2026-03-16T06:00:54.068+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 685.2,
+      "ask": 685.3
+    },
+    {
+      "ts": "2026-03-16T06:00:54.21+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 685.1,
+      "ask": 685.2
+    },
+    {
+      "ts": "2026-03-16T06:00:55.372+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2884,
+      "ask": 0.2885
+    },
+    {
+      "ts": "2026-03-16T06:00:55.609+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2885,
+      "ask": 0.2886
+    },
+    {
+      "ts": "2026-03-16T06:00:56.625+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10165,
+      "ask": 0.10166
+    },
+    {
+      "ts": "2026-03-16T06:00:56.688+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10168,
+      "ask": 0.10169
+    },
+    {
+      "ts": "2026-03-16T06:00:57.607+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.494,
+      "ask": 10.495
+    },
+    {
+      "ts": "2026-03-16T06:00:57.998+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.49,
+      "ask": 10.5
+    },
+    {
+      "ts": "2026-03-16T06:00:58.81+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.76,
+      "ask": 9.761
+    },
+    {
+      "ts": "2026-03-16T06:00:59.296+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.75,
+      "ask": 9.76
+    },
+    {
+      "ts": "2026-03-16T06:01:00.617+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.45,
+      "ask": 57.46
+    },
+    {
+      "ts": "2026-03-16T06:01:00.805+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.46,
+      "ask": 57.47
+    },
+    {
+      "ts": "2026-03-16T06:01:01.824+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.54,
+      "ask": 1.542
+    },
+    {
+      "ts": "2026-03-16T06:01:01.902+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.54,
+      "ask": 1.542
+    },
+    {
+      "ts": "2026-03-16T06:01:02.704+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 473.2,
+      "ask": 473.3
+    },
+    {
+      "ts": "2026-03-16T06:01:03.204+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 473.1,
+      "ask": 473.2
+    },
+    {
+      "ts": "2026-03-16T06:01:03.91+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29847,
+      "ask": 0.29848
+    },
+    {
+      "ts": "2026-03-16T06:01:04.535+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2984,
+      "ask": 0.2985
+    },
+    {
+      "ts": "2026-03-16T06:01:06.671+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2278.34,
+      "ask": 2278.35
+    },
+    {
+      "ts": "2026-03-16T06:01:06.671+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 74150.49,
+      "ask": 74151.99
+    },
+    {
+      "ts": "2026-03-16T06:01:06.674+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.93,
+      "ask": 93.94
+    },
+    {
+      "ts": "2026-03-16T06:01:06.679+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.48,
+      "ask": 10.49
+    },
+    {
+      "ts": "2026-03-16T06:01:06.68+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4798,
+      "ask": 1.4799
+    },
+    {
+      "ts": "2026-03-16T06:01:06.687+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.541,
+      "ask": 1.542
+    },
+    {
+      "ts": "2026-03-16T06:01:06.69+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 473.19,
+      "ask": 473.27
+    },
+    {
+      "ts": "2026-03-16T06:01:06.693+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2881,
+      "ask": 0.2882
+    },
+    {
+      "ts": "2026-03-16T06:01:06.72+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.43,
+      "ask": 57.45
+    },
+    {
+      "ts": "2026-03-16T06:01:06.759+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.755,
+      "ask": 9.757
+    },
+    {
+      "ts": "2026-03-16T06:01:07.136+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.43,
+      "ask": 57.45
+    },
+    {
+      "ts": "2026-03-16T06:01:07.137+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.288082,
+      "ask": 0.288206
+    },
+    {
+      "ts": "2026-03-16T06:01:07.137+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 74165.7,
+      "ask": 74165.8
+    },
+    {
+      "ts": "2026-03-16T06:01:07.137+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 684.84,
+      "ask": 685.02
+    },
+    {
+      "ts": "2026-03-16T06:01:07.144+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2278.69,
+      "ask": 2278.79
+    },
+    {
+      "ts": "2026-03-16T06:01:07.156+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.49,
+      "ask": 10.5
+    },
+    {
+      "ts": "2026-03-16T06:01:07.161+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47986,
+      "ask": 1.48011
+    },
+    {
+      "ts": "2026-03-16T06:01:07.161+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5416,
+      "ask": 1.5422
+    },
+    {
+      "ts": "2026-03-16T06:01:07.163+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.298387,
+      "ask": 0.298481
+    },
+    {
+      "ts": "2026-03-16T06:01:07.167+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.95,
+      "ask": 93.96
+    },
+    {
+      "ts": "2026-03-16T06:01:07.167+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 473.13,
+      "ask": 473.22
+    },
+    {
+      "ts": "2026-03-16T06:01:07.176+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.75579,
+      "ask": 9.75735
+    },
+    {
+      "ts": "2026-03-16T06:10:47.754+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73732.1,
+      "ask": 73732.2
+    },
+    {
+      "ts": "2026-03-16T06:10:47.808+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73735.9,
+      "ask": 73736
+    },
+    {
+      "ts": "2026-03-16T06:10:48.634+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.07,
+      "ask": 2265.08
+    },
+    {
+      "ts": "2026-03-16T06:10:49.1+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2265.5,
+      "ask": 2265.51
+    },
+    {
+      "ts": "2026-03-16T06:10:50.01+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.41,
+      "ask": 93.42
+    },
+    {
+      "ts": "2026-03-16T06:10:50.422+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.41,
+      "ask": 93.42
+    },
+    {
+      "ts": "2026-03-16T06:10:51.112+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4758,
+      "ask": 1.4759
+    },
+    {
+      "ts": "2026-03-16T06:10:51.733+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4759,
+      "ask": 1.476
+    },
+    {
+      "ts": "2026-03-16T06:10:52.516+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 681.3,
+      "ask": 681.4
+    },
+    {
+      "ts": "2026-03-16T06:10:53.036+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 681.3,
+      "ask": 681.4
+    },
+    {
+      "ts": "2026-03-16T06:10:54.665+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2865,
+      "ask": 0.2866
+    },
+    {
+      "ts": "2026-03-16T06:10:54.814+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2866,
+      "ask": 0.2867
+    },
+    {
+      "ts": "2026-03-16T06:10:55.812+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10133,
+      "ask": 0.10134
+    },
+    {
+      "ts": "2026-03-16T06:10:56.002+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10138,
+      "ask": 0.10139
+    },
+    {
+      "ts": "2026-03-16T06:10:56.78+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.419,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T06:10:57.285+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T06:10:58.111+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.688,
+      "ask": 9.689
+    },
+    {
+      "ts": "2026-03-16T06:10:58.586+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.68,
+      "ask": 9.69
+    },
+    {
+      "ts": "2026-03-16T06:10:59.605+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.18,
+      "ask": 57.19
+    },
+    {
+      "ts": "2026-03-16T06:10:59.883+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.19,
+      "ask": 57.2
+    },
+    {
+      "ts": "2026-03-16T06:11:00.713+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.543,
+      "ask": 1.544
+    },
+    {
+      "ts": "2026-03-16T06:11:01.15+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.543,
+      "ask": 1.544
+    },
+    {
+      "ts": "2026-03-16T06:11:01.225+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29792,
+      "ask": 0.29793
+    },
+    {
+      "ts": "2026-03-16T06:11:02.463+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 470.8,
+      "ask": 470.9
+    },
+    {
+      "ts": "2026-03-16T06:11:02.904+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 470.9,
+      "ask": 471
+    },
+    {
+      "ts": "2026-03-16T06:11:03.764+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2979,
+      "ask": 0.298
+    },
+    {
+      "ts": "2026-03-16T06:11:06.454+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2265.2,
+      "ask": 2265.21
+    },
+    {
+      "ts": "2026-03-16T06:11:06.454+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.683,
+      "ask": 9.685
+    },
+    {
+      "ts": "2026-03-16T06:11:06.454+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 470.76,
+      "ask": 470.77
+    },
+    {
+      "ts": "2026-03-16T06:11:06.454+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4755,
+      "ask": 1.4757
+    },
+    {
+      "ts": "2026-03-16T06:11:06.457+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2863,
+      "ask": 0.2864
+    },
+    {
+      "ts": "2026-03-16T06:11:06.457+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.36,
+      "ask": 93.37
+    },
+    {
+      "ts": "2026-03-16T06:11:06.464+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73731.22,
+      "ask": 73732.24
+    },
+    {
+      "ts": "2026-03-16T06:11:06.467+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.18,
+      "ask": 57.2
+    },
+    {
+      "ts": "2026-03-16T06:11:06.481+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T06:11:06.488+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.542,
+      "ask": 1.544
+    },
+    {
+      "ts": "2026-03-16T06:11:06.971+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73734.9,
+      "ask": 73735
+    },
+    {
+      "ts": "2026-03-16T06:11:06.971+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.68401,
+      "ask": 9.68485
+    },
+    {
+      "ts": "2026-03-16T06:11:06.975+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T06:11:06.982+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297843,
+      "ask": 0.297907
+    },
+    {
+      "ts": "2026-03-16T06:11:06.988+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 470.72,
+      "ask": 470.85
+    },
+    {
+      "ts": "2026-03-16T06:11:06.988+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2265.22,
+      "ask": 2265.28
+    },
+    {
+      "ts": "2026-03-16T06:11:06.993+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 681.12,
+      "ask": 681.32
+    },
+    {
+      "ts": "2026-03-16T06:11:06.994+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5433,
+      "ask": 1.5439
+    },
+    {
+      "ts": "2026-03-16T06:11:06.997+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47534,
+      "ask": 1.47558
+    },
+    {
+      "ts": "2026-03-16T06:11:07.003+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.286257,
+      "ask": 0.286388
+    },
+    {
+      "ts": "2026-03-16T06:11:07.003+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.19,
+      "ask": 57.21
+    },
+    {
+      "ts": "2026-03-16T06:11:07.019+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.35,
+      "ask": 93.37
+    },
+    {
+      "ts": "2026-03-16T06:20:47.615+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73721.9,
+      "ask": 73722
+    },
+    {
+      "ts": "2026-03-16T06:20:47.741+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73723,
+      "ask": 73723.1
+    },
+    {
+      "ts": "2026-03-16T06:20:49.374+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2267.07,
+      "ask": 2267.08
+    },
+    {
+      "ts": "2026-03-16T06:20:49.53+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2266.7,
+      "ask": 2266.71
+    },
+    {
+      "ts": "2026-03-16T06:20:50.616+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.45,
+      "ask": 93.46
+    },
+    {
+      "ts": "2026-03-16T06:20:50.689+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.45,
+      "ask": 93.46
+    },
+    {
+      "ts": "2026-03-16T06:20:51.994+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4778,
+      "ask": 1.4779
+    },
+    {
+      "ts": "2026-03-16T06:20:52.014+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4777,
+      "ask": 1.4778
+    },
+    {
+      "ts": "2026-03-16T06:20:53.11+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 681.5,
+      "ask": 681.6
+    },
+    {
+      "ts": "2026-03-16T06:20:53.3+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 681.5,
+      "ask": 681.6
+    },
+    {
+      "ts": "2026-03-16T06:20:54.641+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2892,
+      "ask": 0.2893
+    },
+    {
+      "ts": "2026-03-16T06:20:54.713+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2893,
+      "ask": 0.2894
+    },
+    {
+      "ts": "2026-03-16T06:20:55.99+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10216,
+      "ask": 0.10218
+    },
+    {
+      "ts": "2026-03-16T06:20:56.113+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10217,
+      "ask": 0.10218
+    },
+    {
+      "ts": "2026-03-16T06:20:57.006+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.425,
+      "ask": 10.426
+    },
+    {
+      "ts": "2026-03-16T06:20:57.312+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:20:58.638+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.71,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T06:20:58.869+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.713,
+      "ask": 9.714
+    },
+    {
+      "ts": "2026-03-16T06:20:59.95+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.35,
+      "ask": 57.36
+    },
+    {
+      "ts": "2026-03-16T06:21:00.023+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.35,
+      "ask": 57.36
+    },
+    {
+      "ts": "2026-03-16T06:21:01.301+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.565,
+      "ask": 1.566
+    },
+    {
+      "ts": "2026-03-16T06:21:01.718+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.565,
+      "ask": 1.566
+    },
+    {
+      "ts": "2026-03-16T06:21:02.639+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.6,
+      "ask": 471.7
+    },
+    {
+      "ts": "2026-03-16T06:21:02.709+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.7,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T06:21:03.811+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29806,
+      "ask": 0.29807
+    },
+    {
+      "ts": "2026-03-16T06:21:03.99+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.298,
+      "ask": 0.2981
+    },
+    {
+      "ts": "2026-03-16T06:21:06.152+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2894,
+      "ask": 0.2895
+    },
+    {
+      "ts": "2026-03-16T06:21:06.152+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.72,
+      "ask": 471.73
+    },
+    {
+      "ts": "2026-03-16T06:21:06.152+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73735.88,
+      "ask": 73735.93
+    },
+    {
+      "ts": "2026-03-16T06:21:06.152+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4777,
+      "ask": 1.4779
+    },
+    {
+      "ts": "2026-03-16T06:21:06.152+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.715,
+      "ask": 9.716
+    },
+    {
+      "ts": "2026-03-16T06:21:06.153+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T06:21:06.155+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2267.46,
+      "ask": 2267.47
+    },
+    {
+      "ts": "2026-03-16T06:21:06.162+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.48,
+      "ask": 93.49
+    },
+    {
+      "ts": "2026-03-16T06:21:06.169+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.37,
+      "ask": 57.38
+    },
+    {
+      "ts": "2026-03-16T06:21:06.285+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.567,
+      "ask": 1.568
+    },
+    {
+      "ts": "2026-03-16T06:21:06.641+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.45,
+      "ask": 93.46
+    },
+    {
+      "ts": "2026-03-16T06:21:06.641+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2267.67,
+      "ask": 2267.78
+    },
+    {
+      "ts": "2026-03-16T06:21:06.644+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.289388,
+      "ask": 0.289523
+    },
+    {
+      "ts": "2026-03-16T06:21:06.645+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T06:21:06.645+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297961,
+      "ask": 0.298024
+    },
+    {
+      "ts": "2026-03-16T06:21:06.647+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.62,
+      "ask": 471.76
+    },
+    {
+      "ts": "2026-03-16T06:21:06.652+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73736.8,
+      "ask": 73736.9
+    },
+    {
+      "ts": "2026-03-16T06:21:06.652+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47769,
+      "ask": 1.4777
+    },
+    {
+      "ts": "2026-03-16T06:21:06.659+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 681.47,
+      "ask": 681.6
+    },
+    {
+      "ts": "2026-03-16T06:21:06.659+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71556,
+      "ask": 9.72008
+    },
+    {
+      "ts": "2026-03-16T06:21:06.671+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5679,
+      "ask": 1.568
+    },
+    {
+      "ts": "2026-03-16T06:21:06.672+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.38,
+      "ask": 57.4
+    },
+    {
+      "ts": "2026-03-16T06:30:47.581+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73735.3,
+      "ask": 73735.4
+    },
+    {
+      "ts": "2026-03-16T06:30:47.914+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73731.9,
+      "ask": 73732
+    },
+    {
+      "ts": "2026-03-16T06:30:48.896+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2266.1,
+      "ask": 2266.11
+    },
+    {
+      "ts": "2026-03-16T06:30:48.912+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.85,
+      "ask": 2265.86
+    },
+    {
+      "ts": "2026-03-16T06:30:49.818+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.43,
+      "ask": 93.44
+    },
+    {
+      "ts": "2026-03-16T06:30:50.218+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.43,
+      "ask": 93.44
+    },
+    {
+      "ts": "2026-03-16T06:30:51.014+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4773,
+      "ask": 1.4774
+    },
+    {
+      "ts": "2026-03-16T06:30:51.538+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4774,
+      "ask": 1.4775
+    },
+    {
+      "ts": "2026-03-16T06:30:52.835+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 680.7,
+      "ask": 680.8
+    },
+    {
+      "ts": "2026-03-16T06:30:52.956+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 681,
+      "ask": 681.1
+    },
+    {
+      "ts": "2026-03-16T06:30:54.111+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.289,
+      "ask": 0.2891
+    },
+    {
+      "ts": "2026-03-16T06:30:54.147+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.289,
+      "ask": 0.2891
+    },
+    {
+      "ts": "2026-03-16T06:30:55.016+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10162,
+      "ask": 0.10163
+    },
+    {
+      "ts": "2026-03-16T06:30:55.436+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10163,
+      "ask": 0.10164
+    },
+    {
+      "ts": "2026-03-16T06:30:56.386+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.403,
+      "ask": 10.404
+    },
+    {
+      "ts": "2026-03-16T06:30:56.708+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T06:30:57.413+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.706,
+      "ask": 9.707
+    },
+    {
+      "ts": "2026-03-16T06:30:57.988+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.7,
+      "ask": 9.71
+    },
+    {
+      "ts": "2026-03-16T06:30:58.707+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.22,
+      "ask": 57.23
+    },
+    {
+      "ts": "2026-03-16T06:30:59.276+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.23,
+      "ask": 57.24
+    },
+    {
+      "ts": "2026-03-16T06:31:00.179+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.564,
+      "ask": 1.565
+    },
+    {
+      "ts": "2026-03-16T06:31:00.585+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.564,
+      "ask": 1.565
+    },
+    {
+      "ts": "2026-03-16T06:31:01.212+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.2,
+      "ask": 471.3
+    },
+    {
+      "ts": "2026-03-16T06:31:01.888+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471,
+      "ask": 471.1
+    },
+    {
+      "ts": "2026-03-16T06:31:02.409+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.2979,
+      "ask": 0.29791
+    },
+    {
+      "ts": "2026-03-16T06:31:03.185+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2978,
+      "ask": 0.2979
+    },
+    {
+      "ts": "2026-03-16T06:31:05.099+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4775,
+      "ask": 1.4776
+    },
+    {
+      "ts": "2026-03-16T06:31:05.107+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.23,
+      "ask": 57.24
+    },
+    {
+      "ts": "2026-03-16T06:31:05.11+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.47,
+      "ask": 93.48
+    },
+    {
+      "ts": "2026-03-16T06:31:05.112+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2267.69,
+      "ask": 2267.7
+    },
+    {
+      "ts": "2026-03-16T06:31:05.114+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.564,
+      "ask": 1.565
+    },
+    {
+      "ts": "2026-03-16T06:31:05.114+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2891,
+      "ask": 0.2892
+    },
+    {
+      "ts": "2026-03-16T06:31:05.12+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73759.19,
+      "ask": 73759.2
+    },
+    {
+      "ts": "2026-03-16T06:31:05.197+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.06,
+      "ask": 471.1
+    },
+    {
+      "ts": "2026-03-16T06:31:05.223+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T06:31:05.229+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.708,
+      "ask": 9.71
+    },
+    {
+      "ts": "2026-03-16T06:31:05.708+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2267.03,
+      "ask": 2267.04
+    },
+    {
+      "ts": "2026-03-16T06:31:05.708+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5642,
+      "ask": 1.5651
+    },
+    {
+      "ts": "2026-03-16T06:31:05.708+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47762,
+      "ask": 1.4777
+    },
+    {
+      "ts": "2026-03-16T06:31:05.711+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73749.9,
+      "ask": 73750
+    },
+    {
+      "ts": "2026-03-16T06:31:05.713+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T06:31:05.721+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.289123,
+      "ask": 0.289236
+    },
+    {
+      "ts": "2026-03-16T06:31:05.725+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.23,
+      "ask": 57.26
+    },
+    {
+      "ts": "2026-03-16T06:31:05.726+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 680.85,
+      "ask": 680.91
+    },
+    {
+      "ts": "2026-03-16T06:31:05.728+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.70598,
+      "ask": 9.70916
+    },
+    {
+      "ts": "2026-03-16T06:31:05.74+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.46,
+      "ask": 93.47
+    },
+    {
+      "ts": "2026-03-16T06:31:05.74+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.21,
+      "ask": 471.22
+    },
+    {
+      "ts": "2026-03-16T06:31:05.751+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297861,
+      "ask": 0.297906
+    },
+    {
+      "ts": "2026-03-16T06:40:47.108+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73820.3,
+      "ask": 73820.4
+    },
+    {
+      "ts": "2026-03-16T06:40:47.54+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73823,
+      "ask": 73823.1
+    },
+    {
+      "ts": "2026-03-16T06:40:48.814+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.88,
+      "ask": 2265.89
+    },
+    {
+      "ts": "2026-03-16T06:40:48.829+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2266.22,
+      "ask": 2266.23
+    },
+    {
+      "ts": "2026-03-16T06:40:50.098+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.62,
+      "ask": 93.63
+    },
+    {
+      "ts": "2026-03-16T06:40:50.131+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.61,
+      "ask": 93.62
+    },
+    {
+      "ts": "2026-03-16T06:40:51.217+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4798,
+      "ask": 1.4799
+    },
+    {
+      "ts": "2026-03-16T06:40:51.401+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4799,
+      "ask": 1.48
+    },
+    {
+      "ts": "2026-03-16T06:40:52.606+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 681.8,
+      "ask": 681.9
+    },
+    {
+      "ts": "2026-03-16T06:40:52.709+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 681.7,
+      "ask": 681.8
+    },
+    {
+      "ts": "2026-03-16T06:40:53.912+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2904,
+      "ask": 0.2905
+    },
+    {
+      "ts": "2026-03-16T06:40:53.998+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2903,
+      "ask": 0.2904
+    },
+    {
+      "ts": "2026-03-16T06:40:55.119+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10191,
+      "ask": 0.10192
+    },
+    {
+      "ts": "2026-03-16T06:40:55.315+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10193,
+      "ask": 0.10194
+    },
+    {
+      "ts": "2026-03-16T06:40:56.215+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.428,
+      "ask": 10.429
+    },
+    {
+      "ts": "2026-03-16T06:40:56.595+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:40:57.61+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.732,
+      "ask": 9.733
+    },
+    {
+      "ts": "2026-03-16T06:40:57.807+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.38,
+      "ask": 57.39
+    },
+    {
+      "ts": "2026-03-16T06:40:57.92+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.72,
+      "ask": 9.73
+    },
+    {
+      "ts": "2026-03-16T06:40:59.23+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.39,
+      "ask": 57.4
+    },
+    {
+      "ts": "2026-03-16T06:41:00.312+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.574,
+      "ask": 1.575
+    },
+    {
+      "ts": "2026-03-16T06:41:00.522+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.575,
+      "ask": 1.576
+    },
+    {
+      "ts": "2026-03-16T06:41:00.705+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.9,
+      "ask": 472
+    },
+    {
+      "ts": "2026-03-16T06:41:01.84+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.8,
+      "ask": 472
+    },
+    {
+      "ts": "2026-03-16T06:41:03.105+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29801,
+      "ask": 0.29802
+    },
+    {
+      "ts": "2026-03-16T06:41:03.433+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.298,
+      "ask": 0.2981
+    },
+    {
+      "ts": "2026-03-16T06:41:05.719+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2267.17,
+      "ask": 2267.18
+    },
+    {
+      "ts": "2026-03-16T06:41:05.72+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.573,
+      "ask": 1.574
+    },
+    {
+      "ts": "2026-03-16T06:41:05.721+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.61,
+      "ask": 93.62
+    },
+    {
+      "ts": "2026-03-16T06:41:05.723+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73811.75,
+      "ask": 73811.76
+    },
+    {
+      "ts": "2026-03-16T06:41:05.726+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4801,
+      "ask": 1.4803
+    },
+    {
+      "ts": "2026-03-16T06:41:05.729+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T06:41:05.751+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.41,
+      "ask": 57.43
+    },
+    {
+      "ts": "2026-03-16T06:41:05.752+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2904,
+      "ask": 0.2905
+    },
+    {
+      "ts": "2026-03-16T06:41:05.757+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.73,
+      "ask": 9.731
+    },
+    {
+      "ts": "2026-03-16T06:41:05.818+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.78,
+      "ask": 472.02
+    },
+    {
+      "ts": "2026-03-16T06:41:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2266.96,
+      "ask": 2266.97
+    },
+    {
+      "ts": "2026-03-16T06:41:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48,
+      "ask": 1.48016
+    },
+    {
+      "ts": "2026-03-16T06:41:06.857+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73805.9,
+      "ask": 73806
+    },
+    {
+      "ts": "2026-03-16T06:41:06.868+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.41,
+      "ask": 57.42
+    },
+    {
+      "ts": "2026-03-16T06:41:06.872+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297963,
+      "ask": 0.298015
+    },
+    {
+      "ts": "2026-03-16T06:41:06.873+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:41:06.874+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.290243,
+      "ask": 0.290401
+    },
+    {
+      "ts": "2026-03-16T06:41:06.874+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.62,
+      "ask": 93.63
+    },
+    {
+      "ts": "2026-03-16T06:41:06.887+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5697,
+      "ask": 1.5727
+    },
+    {
+      "ts": "2026-03-16T06:41:06.887+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 681.63,
+      "ask": 681.67
+    },
+    {
+      "ts": "2026-03-16T06:41:06.887+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.89,
+      "ask": 471.93
+    },
+    {
+      "ts": "2026-03-16T06:41:06.888+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.72971,
+      "ask": 9.73429
+    },
+    {
+      "ts": "2026-03-16T06:50:47.34+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73808.2,
+      "ask": 73808.3
+    },
+    {
+      "ts": "2026-03-16T06:50:47.543+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73811.2,
+      "ask": 73811.3
+    },
+    {
+      "ts": "2026-03-16T06:50:48.67+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2264.34,
+      "ask": 2264.35
+    },
+    {
+      "ts": "2026-03-16T06:50:48.855+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2264.86,
+      "ask": 2264.87
+    },
+    {
+      "ts": "2026-03-16T06:50:49.614+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T06:50:50.149+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.53,
+      "ask": 93.54
+    },
+    {
+      "ts": "2026-03-16T06:50:51.754+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4789,
+      "ask": 1.479
+    },
+    {
+      "ts": "2026-03-16T06:50:52.006+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 680.9,
+      "ask": 681
+    },
+    {
+      "ts": "2026-03-16T06:50:52.014+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4789,
+      "ask": 1.479
+    },
+    {
+      "ts": "2026-03-16T06:50:53.062+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 680.9,
+      "ask": 681
+    },
+    {
+      "ts": "2026-03-16T06:50:54.375+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2895,
+      "ask": 0.2896
+    },
+    {
+      "ts": "2026-03-16T06:50:54.52+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2895,
+      "ask": 0.2896
+    },
+    {
+      "ts": "2026-03-16T06:50:55.598+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10164,
+      "ask": 0.10165
+    },
+    {
+      "ts": "2026-03-16T06:50:55.666+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10166,
+      "ask": 0.10168
+    },
+    {
+      "ts": "2026-03-16T06:50:56.962+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:50:57.407+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.422,
+      "ask": 10.423
+    },
+    {
+      "ts": "2026-03-16T06:50:58.287+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.71,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T06:50:58.511+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.715,
+      "ask": 9.716
+    },
+    {
+      "ts": "2026-03-16T06:50:59.116+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.24,
+      "ask": 57.25
+    },
+    {
+      "ts": "2026-03-16T06:50:59.6+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.25,
+      "ask": 57.26
+    },
+    {
+      "ts": "2026-03-16T06:51:00.564+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.573,
+      "ask": 1.574
+    },
+    {
+      "ts": "2026-03-16T06:51:00.899+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.573,
+      "ask": 1.574
+    },
+    {
+      "ts": "2026-03-16T06:51:02.194+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.5,
+      "ask": 471.6
+    },
+    {
+      "ts": "2026-03-16T06:51:02.209+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.3,
+      "ask": 471.4
+    },
+    {
+      "ts": "2026-03-16T06:51:02.804+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29797,
+      "ask": 0.29798
+    },
+    {
+      "ts": "2026-03-16T06:51:03.536+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2979,
+      "ask": 0.298
+    },
+    {
+      "ts": "2026-03-16T06:51:05.811+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2264.21,
+      "ask": 2264.22
+    },
+    {
+      "ts": "2026-03-16T06:51:05.812+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73797.16,
+      "ask": 73797.17
+    },
+    {
+      "ts": "2026-03-16T06:51:05.813+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4786,
+      "ask": 1.4787
+    },
+    {
+      "ts": "2026-03-16T06:51:05.813+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T06:51:05.817+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.31,
+      "ask": 471.36
+    },
+    {
+      "ts": "2026-03-16T06:51:05.818+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.572,
+      "ask": 1.573
+    },
+    {
+      "ts": "2026-03-16T06:51:05.85+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2894,
+      "ask": 0.2895
+    },
+    {
+      "ts": "2026-03-16T06:51:05.882+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.24,
+      "ask": 57.26
+    },
+    {
+      "ts": "2026-03-16T06:51:05.883+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:51:05.95+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.71,
+      "ask": 9.712
+    },
+    {
+      "ts": "2026-03-16T06:51:06.373+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73803.3,
+      "ask": 73803.4
+    },
+    {
+      "ts": "2026-03-16T06:51:06.373+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2264.28,
+      "ask": 2264.38
+    },
+    {
+      "ts": "2026-03-16T06:51:06.373+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T06:51:06.373+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.289374,
+      "ask": 0.289475
+    },
+    {
+      "ts": "2026-03-16T06:51:06.377+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T06:51:06.379+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5722,
+      "ask": 1.5737
+    },
+    {
+      "ts": "2026-03-16T06:51:06.379+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71292,
+      "ask": 9.71293
+    },
+    {
+      "ts": "2026-03-16T06:51:06.379+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.33,
+      "ask": 471.45
+    },
+    {
+      "ts": "2026-03-16T06:51:06.379+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.47862,
+      "ask": 1.47871
+    },
+    {
+      "ts": "2026-03-16T06:51:06.379+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.25,
+      "ask": 57.26
+    },
+    {
+      "ts": "2026-03-16T06:51:06.389+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297871,
+      "ask": 0.297907
+    },
+    {
+      "ts": "2026-03-16T06:51:06.408+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 680.96,
+      "ask": 681.1
+    },
+    {
+      "ts": "2026-03-16T07:00:47.107+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73686.1,
+      "ask": 73686.2
+    },
+    {
+      "ts": "2026-03-16T07:00:47.635+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73675.9,
+      "ask": 73676
+    },
+    {
+      "ts": "2026-03-16T07:00:48.941+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2262.08,
+      "ask": 2262.09
+    },
+    {
+      "ts": "2026-03-16T07:00:48.987+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2261.73,
+      "ask": 2261.74
+    },
+    {
+      "ts": "2026-03-16T07:00:50.111+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.38,
+      "ask": 93.39
+    },
+    {
+      "ts": "2026-03-16T07:00:50.268+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.39,
+      "ask": 93.4
+    },
+    {
+      "ts": "2026-03-16T07:00:51.576+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4768,
+      "ask": 1.4769
+    },
+    {
+      "ts": "2026-03-16T07:00:51.711+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.477,
+      "ask": 1.4771
+    },
+    {
+      "ts": "2026-03-16T07:00:52.821+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 679.4,
+      "ask": 679.5
+    },
+    {
+      "ts": "2026-03-16T07:00:52.864+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 679.3,
+      "ask": 679.4
+    },
+    {
+      "ts": "2026-03-16T07:00:53.711+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2901,
+      "ask": 0.2902
+    },
+    {
+      "ts": "2026-03-16T07:00:54.145+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2901,
+      "ask": 0.2902
+    },
+    {
+      "ts": "2026-03-16T07:00:55.203+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10167,
+      "ask": 0.10168
+    },
+    {
+      "ts": "2026-03-16T07:00:55.461+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10167,
+      "ask": 0.10168
+    },
+    {
+      "ts": "2026-03-16T07:00:56.778+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T07:00:56.906+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.406,
+      "ask": 10.407
+    },
+    {
+      "ts": "2026-03-16T07:00:57.711+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.711,
+      "ask": 9.712
+    },
+    {
+      "ts": "2026-03-16T07:00:58.096+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.7,
+      "ask": 9.71
+    },
+    {
+      "ts": "2026-03-16T07:01:00.097+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.27,
+      "ask": 57.28
+    },
+    {
+      "ts": "2026-03-16T07:01:00.212+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.25,
+      "ask": 57.26
+    },
+    {
+      "ts": "2026-03-16T07:01:01.139+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.581,
+      "ask": 1.582
+    },
+    {
+      "ts": "2026-03-16T07:01:01.421+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.582,
+      "ask": 1.583
+    },
+    {
+      "ts": "2026-03-16T07:01:02.51+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.2,
+      "ask": 471.4
+    },
+    {
+      "ts": "2026-03-16T07:01:03.065+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.1,
+      "ask": 471.2
+    },
+    {
+      "ts": "2026-03-16T07:01:04.012+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.2978,
+      "ask": 0.29781
+    },
+    {
+      "ts": "2026-03-16T07:01:04.391+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2978,
+      "ask": 0.2979
+    },
+    {
+      "ts": "2026-03-16T07:01:06.172+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:01:06.173+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.44,
+      "ask": 93.45
+    },
+    {
+      "ts": "2026-03-16T07:01:06.174+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2264.03,
+      "ask": 2264.04
+    },
+    {
+      "ts": "2026-03-16T07:01:06.174+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2905,
+      "ask": 0.2907
+    },
+    {
+      "ts": "2026-03-16T07:01:06.177+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73721.35,
+      "ask": 73721.36
+    },
+    {
+      "ts": "2026-03-16T07:01:06.183+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.713,
+      "ask": 9.715
+    },
+    {
+      "ts": "2026-03-16T07:01:06.189+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.58,
+      "ask": 1.581
+    },
+    {
+      "ts": "2026-03-16T07:01:06.193+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4774,
+      "ask": 1.4775
+    },
+    {
+      "ts": "2026-03-16T07:01:06.285+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 470.96,
+      "ask": 471.23
+    },
+    {
+      "ts": "2026-03-16T07:01:06.336+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.26,
+      "ask": 57.28
+    },
+    {
+      "ts": "2026-03-16T07:01:06.835+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73706.3,
+      "ask": 73706.4
+    },
+    {
+      "ts": "2026-03-16T07:01:06.835+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2264.22,
+      "ask": 2264.5
+    },
+    {
+      "ts": "2026-03-16T07:01:06.853+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.290543,
+      "ask": 0.290688
+    },
+    {
+      "ts": "2026-03-16T07:01:06.853+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 679.68,
+      "ask": 679.83
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.43,
+      "ask": 93.44
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.07,
+      "ask": 471.2
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.42,
+      "ask": 10.43
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.29777,
+      "ask": 0.297828
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71422,
+      "ask": 9.71691
+    },
+    {
+      "ts": "2026-03-16T07:01:06.854+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5804,
+      "ask": 1.5817
+    },
+    {
+      "ts": "2026-03-16T07:01:06.87+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.27,
+      "ask": 57.29
+    },
+    {
+      "ts": "2026-03-16T07:01:06.89+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.4773,
+      "ask": 1.47744
+    },
+    {
+      "ts": "2026-03-16T07:10:47.508+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73894.3,
+      "ask": 73894.4
+    },
+    {
+      "ts": "2026-03-16T07:10:47.528+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73905.7,
+      "ask": 73905.8
+    },
+    {
+      "ts": "2026-03-16T07:10:48.718+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2266.67,
+      "ask": 2266.68
+    },
+    {
+      "ts": "2026-03-16T07:10:48.881+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2267.1,
+      "ask": 2267.11
+    },
+    {
+      "ts": "2026-03-16T07:10:49.911+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.68,
+      "ask": 93.69
+    },
+    {
+      "ts": "2026-03-16T07:10:50.21+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.7,
+      "ask": 93.71
+    },
+    {
+      "ts": "2026-03-16T07:10:51.616+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4867,
+      "ask": 1.4868
+    },
+    {
+      "ts": "2026-03-16T07:10:51.813+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4866,
+      "ask": 1.4867
+    },
+    {
+      "ts": "2026-03-16T07:10:52.517+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 680.8,
+      "ask": 680.9
+    },
+    {
+      "ts": "2026-03-16T07:10:53.103+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 680.7,
+      "ask": 680.8
+    },
+    {
+      "ts": "2026-03-16T07:10:54.498+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.292,
+      "ask": 0.2921
+    },
+    {
+      "ts": "2026-03-16T07:10:54.515+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.292,
+      "ask": 0.2921
+    },
+    {
+      "ts": "2026-03-16T07:10:55.411+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10225,
+      "ask": 0.10226
+    },
+    {
+      "ts": "2026-03-16T07:10:55.796+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10225,
+      "ask": 0.10226
+    },
+    {
+      "ts": "2026-03-16T07:10:57.109+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T07:10:57.306+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.445,
+      "ask": 10.446
+    },
+    {
+      "ts": "2026-03-16T07:10:58.4+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.74,
+      "ask": 9.75
+    },
+    {
+      "ts": "2026-03-16T07:10:58.609+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.745,
+      "ask": 9.746
+    },
+    {
+      "ts": "2026-03-16T07:10:59.616+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.4,
+      "ask": 57.41
+    },
+    {
+      "ts": "2026-03-16T07:10:59.705+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.4,
+      "ask": 57.41
+    },
+    {
+      "ts": "2026-03-16T07:11:01.014+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.596,
+      "ask": 1.597
+    },
+    {
+      "ts": "2026-03-16T07:11:01.312+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.596,
+      "ask": 1.597
+    },
+    {
+      "ts": "2026-03-16T07:11:01.91+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.1,
+      "ask": 472.3
+    },
+    {
+      "ts": "2026-03-16T07:11:02.293+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472,
+      "ask": 472.2
+    },
+    {
+      "ts": "2026-03-16T07:11:02.911+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29774,
+      "ask": 0.29775
+    },
+    {
+      "ts": "2026-03-16T07:11:03.584+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2977,
+      "ask": 0.2978
+    },
+    {
+      "ts": "2026-03-16T07:11:05.123+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4856,
+      "ask": 1.4857
+    },
+    {
+      "ts": "2026-03-16T07:11:05.137+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T07:11:05.137+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.595,
+      "ask": 1.597
+    },
+    {
+      "ts": "2026-03-16T07:11:05.142+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.39,
+      "ask": 57.4
+    },
+    {
+      "ts": "2026-03-16T07:11:05.143+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2266.86,
+      "ask": 2266.87
+    },
+    {
+      "ts": "2026-03-16T07:11:05.143+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73911.04,
+      "ask": 73911.05
+    },
+    {
+      "ts": "2026-03-16T07:11:05.143+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.746,
+      "ask": 9.747
+    },
+    {
+      "ts": "2026-03-16T07:11:05.143+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.69,
+      "ask": 93.7
+    },
+    {
+      "ts": "2026-03-16T07:11:05.143+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2919,
+      "ask": 0.292
+    },
+    {
+      "ts": "2026-03-16T07:11:05.23+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.96,
+      "ask": 472.26
+    },
+    {
+      "ts": "2026-03-16T07:11:05.6+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73901,
+      "ask": 73901.1
+    },
+    {
+      "ts": "2026-03-16T07:11:05.6+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.67,
+      "ask": 93.68
+    },
+    {
+      "ts": "2026-03-16T07:11:05.6+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.291893,
+      "ask": 0.292015
+    },
+    {
+      "ts": "2026-03-16T07:11:05.6+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.44,
+      "ask": 10.45
+    },
+    {
+      "ts": "2026-03-16T07:11:05.602+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2266.51,
+      "ask": 2266.52
+    },
+    {
+      "ts": "2026-03-16T07:11:05.603+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.74641,
+      "ask": 9.74828
+    },
+    {
+      "ts": "2026-03-16T07:11:05.61+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472,
+      "ask": 472.14
+    },
+    {
+      "ts": "2026-03-16T07:11:05.614+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5953,
+      "ask": 1.5969
+    },
+    {
+      "ts": "2026-03-16T07:11:05.622+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 680.62,
+      "ask": 680.72
+    },
+    {
+      "ts": "2026-03-16T07:11:05.626+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297602,
+      "ask": 0.297652
+    },
+    {
+      "ts": "2026-03-16T07:11:05.626+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48551,
+      "ask": 1.4857
+    },
+    {
+      "ts": "2026-03-16T07:11:05.643+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.4,
+      "ask": 57.42
+    },
+    {
+      "ts": "2026-03-16T07:20:47.552+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73762.5,
+      "ask": 73762.6
+    },
+    {
+      "ts": "2026-03-16T07:20:47.808+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73755,
+      "ask": 73755.1
+    },
+    {
+      "ts": "2026-03-16T07:20:48.55+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2267.53,
+      "ask": 2267.54
+    },
+    {
+      "ts": "2026-03-16T07:20:48.898+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2268.03,
+      "ask": 2268.04
+    },
+    {
+      "ts": "2026-03-16T07:20:49.986+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.6,
+      "ask": 93.61
+    },
+    {
+      "ts": "2026-03-16T07:20:50.202+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.6,
+      "ask": 93.61
+    },
+    {
+      "ts": "2026-03-16T07:20:50.82+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4852,
+      "ask": 1.4853
+    },
+    {
+      "ts": "2026-03-16T07:20:51.517+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4849,
+      "ask": 1.485
+    },
+    {
+      "ts": "2026-03-16T07:20:52.521+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 679.4,
+      "ask": 679.5
+    },
+    {
+      "ts": "2026-03-16T07:20:52.846+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 679.4,
+      "ask": 679.5
+    },
+    {
+      "ts": "2026-03-16T07:20:53.613+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2913,
+      "ask": 0.2914
+    },
+    {
+      "ts": "2026-03-16T07:20:54.162+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2913,
+      "ask": 0.2915
+    },
+    {
+      "ts": "2026-03-16T07:20:55.014+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10236,
+      "ask": 0.10237
+    },
+    {
+      "ts": "2026-03-16T07:20:55.445+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10239,
+      "ask": 0.1024
+    },
+    {
+      "ts": "2026-03-16T07:20:56.758+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:20:57.103+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.419,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:20:57.618+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.739,
+      "ask": 9.74
+    },
+    {
+      "ts": "2026-03-16T07:20:58.065+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.73,
+      "ask": 9.74
+    },
+    {
+      "ts": "2026-03-16T07:20:58.811+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.41,
+      "ask": 57.42
+    },
+    {
+      "ts": "2026-03-16T07:20:59.391+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.41,
+      "ask": 57.42
+    },
+    {
+      "ts": "2026-03-16T07:21:00.223+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.587,
+      "ask": 1.588
+    },
+    {
+      "ts": "2026-03-16T07:21:00.693+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.587,
+      "ask": 1.588
+    },
+    {
+      "ts": "2026-03-16T07:21:01.956+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.5,
+      "ask": 471.6
+    },
+    {
+      "ts": "2026-03-16T07:21:02.011+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.4,
+      "ask": 471.6
+    },
+    {
+      "ts": "2026-03-16T07:21:03.112+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29762,
+      "ask": 0.29763
+    },
+    {
+      "ts": "2026-03-16T07:21:03.3+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2976,
+      "ask": 0.2977
+    },
+    {
+      "ts": "2026-03-16T07:21:05.983+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2914,
+      "ask": 0.2915
+    },
+    {
+      "ts": "2026-03-16T07:21:05.986+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.62,
+      "ask": 93.63
+    },
+    {
+      "ts": "2026-03-16T07:21:05.989+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:21:05.999+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4857,
+      "ask": 1.4858
+    },
+    {
+      "ts": "2026-03-16T07:21:06.001+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2268.21,
+      "ask": 2268.22
+    },
+    {
+      "ts": "2026-03-16T07:21:06.001+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.737,
+      "ask": 9.738
+    },
+    {
+      "ts": "2026-03-16T07:21:06.002+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.48,
+      "ask": 471.61
+    },
+    {
+      "ts": "2026-03-16T07:21:06.004+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.588,
+      "ask": 1.589
+    },
+    {
+      "ts": "2026-03-16T07:21:06.114+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73773.36,
+      "ask": 73773.37
+    },
+    {
+      "ts": "2026-03-16T07:21:06.141+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.42,
+      "ask": 57.43
+    },
+    {
+      "ts": "2026-03-16T07:21:07.175+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2268.3,
+      "ask": 2268.31
+    },
+    {
+      "ts": "2026-03-16T07:21:07.179+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48552,
+      "ask": 1.4857
+    },
+    {
+      "ts": "2026-03-16T07:21:07.18+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5884,
+      "ask": 1.5895
+    },
+    {
+      "ts": "2026-03-16T07:21:07.183+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.43,
+      "ask": 57.44
+    },
+    {
+      "ts": "2026-03-16T07:21:07.183+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 679.46,
+      "ask": 679.58
+    },
+    {
+      "ts": "2026-03-16T07:21:07.185+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.291299,
+      "ask": 0.2913
+    },
+    {
+      "ts": "2026-03-16T07:21:07.186+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.62,
+      "ask": 93.63
+    },
+    {
+      "ts": "2026-03-16T07:21:07.188+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73769.4,
+      "ask": 73769.5
+    },
+    {
+      "ts": "2026-03-16T07:21:07.19+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.7382,
+      "ask": 9.7396
+    },
+    {
+      "ts": "2026-03-16T07:21:07.191+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.44,
+      "ask": 471.53
+    },
+    {
+      "ts": "2026-03-16T07:21:07.191+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297584,
+      "ask": 0.297674
+    },
+    {
+      "ts": "2026-03-16T07:21:07.198+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:30:47.214+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73781.1,
+      "ask": 73781.2
+    },
+    {
+      "ts": "2026-03-16T07:30:47.745+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73788.2,
+      "ask": 73788.3
+    },
+    {
+      "ts": "2026-03-16T07:30:48.913+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2265.25,
+      "ask": 2265.26
+    },
+    {
+      "ts": "2026-03-16T07:30:49.076+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2265.6,
+      "ask": 2265.61
+    },
+    {
+      "ts": "2026-03-16T07:30:50.223+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.64,
+      "ask": 93.65
+    },
+    {
+      "ts": "2026-03-16T07:30:50.675+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.65,
+      "ask": 93.66
+    },
+    {
+      "ts": "2026-03-16T07:30:51.912+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4832,
+      "ask": 1.4833
+    },
+    {
+      "ts": "2026-03-16T07:30:52.007+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4831,
+      "ask": 1.4832
+    },
+    {
+      "ts": "2026-03-16T07:30:52.91+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 679.9,
+      "ask": 680
+    },
+    {
+      "ts": "2026-03-16T07:30:53.311+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 679.9,
+      "ask": 680
+    },
+    {
+      "ts": "2026-03-16T07:30:54.113+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2903,
+      "ask": 0.2904
+    },
+    {
+      "ts": "2026-03-16T07:30:54.629+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2903,
+      "ask": 0.2904
+    },
+    {
+      "ts": "2026-03-16T07:30:55.521+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10217,
+      "ask": 0.10218
+    },
+    {
+      "ts": "2026-03-16T07:30:55.956+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.1022,
+      "ask": 0.10221
+    },
+    {
+      "ts": "2026-03-16T07:30:56.617+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.416,
+      "ask": 10.417
+    },
+    {
+      "ts": "2026-03-16T07:30:57.275+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:30:58.012+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.736,
+      "ask": 9.737
+    },
+    {
+      "ts": "2026-03-16T07:30:58.57+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.73,
+      "ask": 9.74
+    },
+    {
+      "ts": "2026-03-16T07:30:59.881+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.48,
+      "ask": 57.49
+    },
+    {
+      "ts": "2026-03-16T07:31:00.022+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.49,
+      "ask": 57.5
+    },
+    {
+      "ts": "2026-03-16T07:31:01.108+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.586,
+      "ask": 1.587
+    },
+    {
+      "ts": "2026-03-16T07:31:01.203+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.585,
+      "ask": 1.587
+    },
+    {
+      "ts": "2026-03-16T07:31:02.555+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.4,
+      "ask": 472.5
+    },
+    {
+      "ts": "2026-03-16T07:31:02.829+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.3,
+      "ask": 472.4
+    },
+    {
+      "ts": "2026-03-16T07:31:03.869+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29713,
+      "ask": 0.29714
+    },
+    {
+      "ts": "2026-03-16T07:31:04.451+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2971,
+      "ask": 0.2972
+    },
+    {
+      "ts": "2026-03-16T07:31:07+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2264.9,
+      "ask": 2264.91
+    },
+    {
+      "ts": "2026-03-16T07:31:07.001+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:31:07.009+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2902,
+      "ask": 0.2903
+    },
+    {
+      "ts": "2026-03-16T07:31:07.009+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.483,
+      "ask": 1.4831
+    },
+    {
+      "ts": "2026-03-16T07:31:07.013+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73805.92,
+      "ask": 73805.93
+    },
+    {
+      "ts": "2026-03-16T07:31:07.013+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.65,
+      "ask": 93.66
+    },
+    {
+      "ts": "2026-03-16T07:31:07.015+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.32,
+      "ask": 472.5
+    },
+    {
+      "ts": "2026-03-16T07:31:07.018+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.731,
+      "ask": 9.732
+    },
+    {
+      "ts": "2026-03-16T07:31:07.046+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.51,
+      "ask": 57.52
+    },
+    {
+      "ts": "2026-03-16T07:31:07.157+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.586,
+      "ask": 1.588
+    },
+    {
+      "ts": "2026-03-16T07:31:07.698+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.290331,
+      "ask": 0.290373
+    },
+    {
+      "ts": "2026-03-16T07:31:07.699+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T07:31:07.7+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.73573,
+      "ask": 9.73622
+    },
+    {
+      "ts": "2026-03-16T07:31:07.7+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 679.83,
+      "ask": 680
+    },
+    {
+      "ts": "2026-03-16T07:31:07.702+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48299,
+      "ask": 1.48319
+    },
+    {
+      "ts": "2026-03-16T07:31:07.713+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.65,
+      "ask": 93.66
+    },
+    {
+      "ts": "2026-03-16T07:31:07.722+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2265.19,
+      "ask": 2265.2
+    },
+    {
+      "ts": "2026-03-16T07:31:07.726+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.297195,
+      "ask": 0.297196
+    },
+    {
+      "ts": "2026-03-16T07:31:07.739+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.51,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T07:31:07.739+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73803.8,
+      "ask": 73803.9
+    },
+    {
+      "ts": "2026-03-16T07:31:07.739+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.24,
+      "ask": 472.39
+    },
+    {
+      "ts": "2026-03-16T07:31:07.739+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5864,
+      "ask": 1.5873
+    },
+    {
+      "ts": "2026-03-16T07:40:47.592+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73529.5,
+      "ask": 73529.6
+    },
+    {
+      "ts": "2026-03-16T07:40:47.919+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73519.2,
+      "ask": 73519.3
+    },
+    {
+      "ts": "2026-03-16T07:40:48.747+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2253.83,
+      "ask": 2253.84
+    },
+    {
+      "ts": "2026-03-16T07:40:48.89+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2254.25,
+      "ask": 2254.26
+    },
+    {
+      "ts": "2026-03-16T07:40:50.095+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T07:40:50.251+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.52,
+      "ask": 93.53
+    },
+    {
+      "ts": "2026-03-16T07:40:51.107+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4813,
+      "ask": 1.4814
+    },
+    {
+      "ts": "2026-03-16T07:40:51.592+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4813,
+      "ask": 1.4814
+    },
+    {
+      "ts": "2026-03-16T07:40:52.896+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 678.1,
+      "ask": 678.2
+    },
+    {
+      "ts": "2026-03-16T07:40:53.115+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 678.3,
+      "ask": 678.4
+    },
+    {
+      "ts": "2026-03-16T07:40:54.206+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2903,
+      "ask": 0.2904
+    },
+    {
+      "ts": "2026-03-16T07:40:54.611+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2904,
+      "ask": 0.2905
+    },
+    {
+      "ts": "2026-03-16T07:40:54.994+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10226,
+      "ask": 0.10227
+    },
+    {
+      "ts": "2026-03-16T07:40:55.516+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.1023,
+      "ask": 0.10231
+    },
+    {
+      "ts": "2026-03-16T07:40:56.824+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.39,
+      "ask": 10.4
+    },
+    {
+      "ts": "2026-03-16T07:40:57.04+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.396,
+      "ask": 10.397
+    },
+    {
+      "ts": "2026-03-16T07:40:57.61+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.701,
+      "ask": 9.702
+    },
+    {
+      "ts": "2026-03-16T07:40:58.14+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.7,
+      "ask": 9.71
+    },
+    {
+      "ts": "2026-03-16T07:40:59.212+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.49,
+      "ask": 57.5
+    },
+    {
+      "ts": "2026-03-16T07:40:59.455+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.49,
+      "ask": 57.5
+    },
+    {
+      "ts": "2026-03-16T07:41:00.722+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.585,
+      "ask": 1.587
+    },
+    {
+      "ts": "2026-03-16T07:41:00.738+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.584,
+      "ask": 1.585
+    },
+    {
+      "ts": "2026-03-16T07:41:02.386+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.9,
+      "ask": 473
+    },
+    {
+      "ts": "2026-03-16T07:41:02.618+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.9,
+      "ask": 473
+    },
+    {
+      "ts": "2026-03-16T07:41:02.912+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29691,
+      "ask": 0.29692
+    },
+    {
+      "ts": "2026-03-16T07:41:03.718+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2968,
+      "ask": 0.2969
+    },
+    {
+      "ts": "2026-03-16T07:41:05.944+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.53,
+      "ask": 93.54
+    },
+    {
+      "ts": "2026-03-16T07:41:05.951+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73543.13,
+      "ask": 73543.14
+    },
+    {
+      "ts": "2026-03-16T07:41:05.957+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T07:41:05.96+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2254.29,
+      "ask": 2254.3
+    },
+    {
+      "ts": "2026-03-16T07:41:05.96+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2905,
+      "ask": 0.2906
+    },
+    {
+      "ts": "2026-03-16T07:41:05.965+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.586,
+      "ask": 1.588
+    },
+    {
+      "ts": "2026-03-16T07:41:06+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4823,
+      "ask": 1.4824
+    },
+    {
+      "ts": "2026-03-16T07:41:06.047+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.97,
+      "ask": 472.98
+    },
+    {
+      "ts": "2026-03-16T07:41:06.095+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.51,
+      "ask": 57.52
+    },
+    {
+      "ts": "2026-03-16T07:41:06.095+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.703,
+      "ask": 9.704
+    },
+    {
+      "ts": "2026-03-16T07:41:07.062+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T07:41:07.068+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73530.3,
+      "ask": 73530.4
+    },
+    {
+      "ts": "2026-03-16T07:41:07.068+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2254.06,
+      "ask": 2254.07
+    },
+    {
+      "ts": "2026-03-16T07:41:07.068+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.52,
+      "ask": 93.53
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 678.19,
+      "ask": 678.34
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.290445,
+      "ask": 0.290584
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.296877,
+      "ask": 0.296913
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.70196,
+      "ask": 9.70605
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48223,
+      "ask": 1.48228
+    },
+    {
+      "ts": "2026-03-16T07:41:07.07+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5864,
+      "ask": 1.5867
+    },
+    {
+      "ts": "2026-03-16T07:41:07.071+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.95,
+      "ask": 472.96
+    },
+    {
+      "ts": "2026-03-16T07:41:07.103+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.5,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T07:50:47.713+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73463,
+      "ask": 73463.1
+    },
+    {
+      "ts": "2026-03-16T07:50:47.852+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73464.9,
+      "ask": 73465
+    },
+    {
+      "ts": "2026-03-16T07:50:48.969+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2250.98,
+      "ask": 2250.99
+    },
+    {
+      "ts": "2026-03-16T07:50:49.148+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2251.42,
+      "ask": 2251.43
+    },
+    {
+      "ts": "2026-03-16T07:50:50.206+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T07:50:50.502+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.49,
+      "ask": 93.5
+    },
+    {
+      "ts": "2026-03-16T07:50:52.064+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4825,
+      "ask": 1.4826
+    },
+    {
+      "ts": "2026-03-16T07:50:52.15+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4825,
+      "ask": 1.4826
+    },
+    {
+      "ts": "2026-03-16T07:50:53.313+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 678.3,
+      "ask": 678.4
+    },
+    {
+      "ts": "2026-03-16T07:50:53.444+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 678.1,
+      "ask": 678.2
+    },
+    {
+      "ts": "2026-03-16T07:50:54.812+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2892,
+      "ask": 0.2893
+    },
+    {
+      "ts": "2026-03-16T07:50:55.058+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2891,
+      "ask": 0.2892
+    },
+    {
+      "ts": "2026-03-16T07:50:55.764+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.1021,
+      "ask": 0.10211
+    },
+    {
+      "ts": "2026-03-16T07:50:56.412+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10212,
+      "ask": 0.10214
+    },
+    {
+      "ts": "2026-03-16T07:50:56.616+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.348,
+      "ask": 10.349
+    },
+    {
+      "ts": "2026-03-16T07:50:57.773+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.34,
+      "ask": 10.35
+    },
+    {
+      "ts": "2026-03-16T07:50:59.087+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.69,
+      "ask": 9.7
+    },
+    {
+      "ts": "2026-03-16T07:50:59.287+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.693,
+      "ask": 9.694
+    },
+    {
+      "ts": "2026-03-16T07:51:00.398+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.43,
+      "ask": 57.44
+    },
+    {
+      "ts": "2026-03-16T07:51:00.418+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.43,
+      "ask": 57.44
+    },
+    {
+      "ts": "2026-03-16T07:51:01.41+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.584,
+      "ask": 1.585
+    },
+    {
+      "ts": "2026-03-16T07:51:01.706+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.584,
+      "ask": 1.585
+    },
+    {
+      "ts": "2026-03-16T07:51:02.515+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.7,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T07:51:03.044+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.5,
+      "ask": 471.6
+    },
+    {
+      "ts": "2026-03-16T07:51:03.213+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29694,
+      "ask": 0.29695
+    },
+    {
+      "ts": "2026-03-16T07:51:04.349+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2969,
+      "ask": 0.297
+    },
+    {
+      "ts": "2026-03-16T07:51:06.525+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2251.32,
+      "ask": 2251.33
+    },
+    {
+      "ts": "2026-03-16T07:51:06.526+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.52,
+      "ask": 93.53
+    },
+    {
+      "ts": "2026-03-16T07:51:06.528+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.35,
+      "ask": 10.36
+    },
+    {
+      "ts": "2026-03-16T07:51:06.528+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.44,
+      "ask": 57.45
+    },
+    {
+      "ts": "2026-03-16T07:51:06.528+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73462.09,
+      "ask": 73462.1
+    },
+    {
+      "ts": "2026-03-16T07:51:06.554+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.586,
+      "ask": 1.587
+    },
+    {
+      "ts": "2026-03-16T07:51:06.622+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.67,
+      "ask": 471.74
+    },
+    {
+      "ts": "2026-03-16T07:51:06.631+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4826,
+      "ask": 1.4828
+    },
+    {
+      "ts": "2026-03-16T07:51:06.646+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2892,
+      "ask": 0.2893
+    },
+    {
+      "ts": "2026-03-16T07:51:06.651+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.691,
+      "ask": 9.694
+    },
+    {
+      "ts": "2026-03-16T07:51:07.019+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48259,
+      "ask": 1.48268
+    },
+    {
+      "ts": "2026-03-16T07:51:07.019+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73470,
+      "ask": 73470.1
+    },
+    {
+      "ts": "2026-03-16T07:51:07.019+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.296925,
+      "ask": 0.297023
+    },
+    {
+      "ts": "2026-03-16T07:51:07.02+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.35,
+      "ask": 10.36
+    },
+    {
+      "ts": "2026-03-16T07:51:07.032+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5862,
+      "ask": 1.5864
+    },
+    {
+      "ts": "2026-03-16T07:51:07.032+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 678.2,
+      "ask": 678.3
+    },
+    {
+      "ts": "2026-03-16T07:51:07.032+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.289208,
+      "ask": 0.289336
+    },
+    {
+      "ts": "2026-03-16T07:51:07.034+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2251.37,
+      "ask": 2251.54
+    },
+    {
+      "ts": "2026-03-16T07:51:07.034+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T07:51:07.052+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.44,
+      "ask": 57.46
+    },
+    {
+      "ts": "2026-03-16T07:51:07.062+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.53,
+      "ask": 471.69
+    },
+    {
+      "ts": "2026-03-16T07:51:07.111+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.69299,
+      "ask": 9.69524
+    },
+    {
+      "ts": "2026-03-16T08:00:47.516+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73522,
+      "ask": 73522.1
+    },
+    {
+      "ts": "2026-03-16T08:00:47.673+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73526.9,
+      "ask": 73527
+    },
+    {
+      "ts": "2026-03-16T08:00:49.006+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2252.53,
+      "ask": 2252.54
+    },
+    {
+      "ts": "2026-03-16T08:00:49.206+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2252.17,
+      "ask": 2252.18
+    },
+    {
+      "ts": "2026-03-16T08:00:50.616+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.7,
+      "ask": 93.71
+    },
+    {
+      "ts": "2026-03-16T08:00:50.645+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.7,
+      "ask": 93.71
+    },
+    {
+      "ts": "2026-03-16T08:00:52.218+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4867,
+      "ask": 1.4868
+    },
+    {
+      "ts": "2026-03-16T08:00:52.241+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4867,
+      "ask": 1.4868
+    },
+    {
+      "ts": "2026-03-16T08:00:53.512+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 679,
+      "ask": 679.1
+    },
+    {
+      "ts": "2026-03-16T08:00:53.526+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 678.9,
+      "ask": 679
+    },
+    {
+      "ts": "2026-03-16T08:00:54.805+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2908,
+      "ask": 0.2909
+    },
+    {
+      "ts": "2026-03-16T08:00:54.821+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2908,
+      "ask": 0.2909
+    },
+    {
+      "ts": "2026-03-16T08:00:56.055+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10214,
+      "ask": 0.10215
+    },
+    {
+      "ts": "2026-03-16T08:00:56.151+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10216,
+      "ask": 0.10217
+    },
+    {
+      "ts": "2026-03-16T08:00:56.919+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.389,
+      "ask": 10.392
+    },
+    {
+      "ts": "2026-03-16T08:00:57.459+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.38,
+      "ask": 10.39
+    },
+    {
+      "ts": "2026-03-16T08:00:58.768+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.71,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T08:00:59.11+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.719,
+      "ask": 9.72
+    },
+    {
+      "ts": "2026-03-16T08:00:59.319+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.52,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:01:00.064+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.52,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:01:01.375+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.591,
+      "ask": 1.592
+    },
+    {
+      "ts": "2026-03-16T08:01:01.509+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.591,
+      "ask": 1.592
+    },
+    {
+      "ts": "2026-03-16T08:01:02.209+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 472.7,
+      "ask": 472.8
+    },
+    {
+      "ts": "2026-03-16T08:01:02.659+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 472.6,
+      "ask": 472.7
+    },
+    {
+      "ts": "2026-03-16T08:01:04.265+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2966,
+      "ask": 0.2967
+    },
+    {
+      "ts": "2026-03-16T08:01:05.009+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29663,
+      "ask": 0.29664
+    },
+    {
+      "ts": "2026-03-16T08:01:07.356+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.82,
+      "ask": 93.83
+    },
+    {
+      "ts": "2026-03-16T08:01:07.367+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2253.9,
+      "ask": 2253.91
+    },
+    {
+      "ts": "2026-03-16T08:01:07.371+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4874,
+      "ask": 1.4875
+    },
+    {
+      "ts": "2026-03-16T08:01:07.371+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.591,
+      "ask": 1.592
+    },
+    {
+      "ts": "2026-03-16T08:01:07.372+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.711,
+      "ask": 9.712
+    },
+    {
+      "ts": "2026-03-16T08:01:07.381+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73631.1,
+      "ask": 73631.11
+    },
+    {
+      "ts": "2026-03-16T08:01:07.474+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.68,
+      "ask": 472.74
+    },
+    {
+      "ts": "2026-03-16T08:01:07.484+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.291,
+      "ask": 0.2911
+    },
+    {
+      "ts": "2026-03-16T08:01:07.488+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.39,
+      "ask": 10.4
+    },
+    {
+      "ts": "2026-03-16T08:01:07.512+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.52,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:01:08.519+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2254.37,
+      "ask": 2254.38
+    },
+    {
+      "ts": "2026-03-16T08:01:08.519+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73628.4,
+      "ask": 73628.5
+    },
+    {
+      "ts": "2026-03-16T08:01:08.519+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.81,
+      "ask": 93.82
+    },
+    {
+      "ts": "2026-03-16T08:01:08.52+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.39,
+      "ask": 10.4
+    },
+    {
+      "ts": "2026-03-16T08:01:08.524+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.296598,
+      "ask": 0.296663
+    },
+    {
+      "ts": "2026-03-16T08:01:08.526+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 679.42,
+      "ask": 679.55
+    },
+    {
+      "ts": "2026-03-16T08:01:08.53+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.291018,
+      "ask": 0.29111
+    },
+    {
+      "ts": "2026-03-16T08:01:08.534+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.51,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:01:08.536+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.71144,
+      "ask": 9.7155
+    },
+    {
+      "ts": "2026-03-16T08:01:08.54+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.4874,
+      "ask": 1.48745
+    },
+    {
+      "ts": "2026-03-16T08:01:08.549+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.5916,
+      "ask": 1.5925
+    },
+    {
+      "ts": "2026-03-16T08:01:08.56+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 472.63,
+      "ask": 472.91
+    },
+    {
+      "ts": "2026-03-16T08:10:47.555+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73677.3,
+      "ask": 73677.4
+    },
+    {
+      "ts": "2026-03-16T08:10:47.842+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73676.9,
+      "ask": 73677
+    },
+    {
+      "ts": "2026-03-16T08:10:48.875+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2257.24,
+      "ask": 2257.25
+    },
+    {
+      "ts": "2026-03-16T08:10:49.165+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2257.17,
+      "ask": 2257.18
+    },
+    {
+      "ts": "2026-03-16T08:10:50.17+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.87,
+      "ask": 93.88
+    },
+    {
+      "ts": "2026-03-16T08:10:50.217+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.87,
+      "ask": 93.88
+    },
+    {
+      "ts": "2026-03-16T08:10:51.465+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4886,
+      "ask": 1.4887
+    },
+    {
+      "ts": "2026-03-16T08:10:51.515+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4887,
+      "ask": 1.4888
+    },
+    {
+      "ts": "2026-03-16T08:10:52.8+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 680.8,
+      "ask": 680.9
+    },
+    {
+      "ts": "2026-03-16T08:10:53.113+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 680.8,
+      "ask": 680.9
+    },
+    {
+      "ts": "2026-03-16T08:10:53.907+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2929,
+      "ask": 0.293
+    },
+    {
+      "ts": "2026-03-16T08:10:54.44+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2928,
+      "ask": 0.293
+    },
+    {
+      "ts": "2026-03-16T08:10:55.113+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10286,
+      "ask": 0.10287
+    },
+    {
+      "ts": "2026-03-16T08:10:55.763+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10288,
+      "ask": 0.10289
+    },
+    {
+      "ts": "2026-03-16T08:10:57.018+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.434,
+      "ask": 10.435
+    },
+    {
+      "ts": "2026-03-16T08:10:57.103+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T08:10:58.122+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.727,
+      "ask": 9.728
+    },
+    {
+      "ts": "2026-03-16T08:10:58.73+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.72,
+      "ask": 9.73
+    },
+    {
+      "ts": "2026-03-16T08:11:00.338+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.74,
+      "ask": 57.75
+    },
+    {
+      "ts": "2026-03-16T08:11:00.513+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.74,
+      "ask": 57.75
+    },
+    {
+      "ts": "2026-03-16T08:11:01.582+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.605,
+      "ask": 1.606
+    },
+    {
+      "ts": "2026-03-16T08:11:01.639+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.604,
+      "ask": 1.606
+    },
+    {
+      "ts": "2026-03-16T08:11:02.941+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 473,
+      "ask": 473.2
+    },
+    {
+      "ts": "2026-03-16T08:11:03.107+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 473.1,
+      "ask": 473.2
+    },
+    {
+      "ts": "2026-03-16T08:11:04.016+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29673,
+      "ask": 0.29674
+    },
+    {
+      "ts": "2026-03-16T08:11:04.231+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2967,
+      "ask": 0.2968
+    },
+    {
+      "ts": "2026-03-16T08:11:06.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4883,
+      "ask": 1.4884
+    },
+    {
+      "ts": "2026-03-16T08:11:06.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 472.98,
+      "ask": 473.16
+    },
+    {
+      "ts": "2026-03-16T08:11:06.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2257.49,
+      "ask": 2257.5
+    },
+    {
+      "ts": "2026-03-16T08:11:06.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T08:11:06.737+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73691.68,
+      "ask": 73691.69
+    },
+    {
+      "ts": "2026-03-16T08:11:06.751+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.89,
+      "ask": 93.9
+    },
+    {
+      "ts": "2026-03-16T08:11:06.761+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.75,
+      "ask": 57.76
+    },
+    {
+      "ts": "2026-03-16T08:11:06.775+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.604,
+      "ask": 1.605
+    },
+    {
+      "ts": "2026-03-16T08:11:06.859+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2927,
+      "ask": 0.2928
+    },
+    {
+      "ts": "2026-03-16T08:11:06.898+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.723,
+      "ask": 9.724
+    },
+    {
+      "ts": "2026-03-16T08:11:07.388+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2257.54,
+      "ask": 2257.55
+    },
+    {
+      "ts": "2026-03-16T08:11:07.388+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.89,
+      "ask": 93.9
+    },
+    {
+      "ts": "2026-03-16T08:11:07.388+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.43,
+      "ask": 10.44
+    },
+    {
+      "ts": "2026-03-16T08:11:07.404+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.6036,
+      "ask": 1.6054
+    },
+    {
+      "ts": "2026-03-16T08:11:07.404+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.72093,
+      "ask": 9.72599
+    },
+    {
+      "ts": "2026-03-16T08:11:07.405+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.292733,
+      "ask": 0.292879
+    },
+    {
+      "ts": "2026-03-16T08:11:07.405+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73700,
+      "ask": 73700.1
+    },
+    {
+      "ts": "2026-03-16T08:11:07.409+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 680.79,
+      "ask": 680.8
+    },
+    {
+      "ts": "2026-03-16T08:11:07.41+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.296709,
+      "ask": 0.296769
+    },
+    {
+      "ts": "2026-03-16T08:11:07.415+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.4883,
+      "ask": 1.48839
+    },
+    {
+      "ts": "2026-03-16T08:11:07.415+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.75,
+      "ask": 57.77
+    },
+    {
+      "ts": "2026-03-16T08:11:07.479+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 473.06,
+      "ask": 473.24
+    },
+    {
+      "ts": "2026-03-16T08:20:47.522+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73448.9,
+      "ask": 73449
+    },
+    {
+      "ts": "2026-03-16T08:20:47.604+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73450.9,
+      "ask": 73451
+    },
+    {
+      "ts": "2026-03-16T08:20:48.916+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2252.72,
+      "ask": 2252.73
+    },
+    {
+      "ts": "2026-03-16T08:20:49.306+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2252.59,
+      "ask": 2252.6
+    },
+    {
+      "ts": "2026-03-16T08:20:50.216+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.52,
+      "ask": 93.53
+    },
+    {
+      "ts": "2026-03-16T08:20:50.306+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.51,
+      "ask": 93.52
+    },
+    {
+      "ts": "2026-03-16T08:20:51.527+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4822,
+      "ask": 1.4823
+    },
+    {
+      "ts": "2026-03-16T08:20:51.829+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4821,
+      "ask": 1.4822
+    },
+    {
+      "ts": "2026-03-16T08:20:52.154+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 678.9,
+      "ask": 679
+    },
+    {
+      "ts": "2026-03-16T08:20:52.829+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 678.8,
+      "ask": 678.9
+    },
+    {
+      "ts": "2026-03-16T08:20:53.607+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2897,
+      "ask": 0.2898
+    },
+    {
+      "ts": "2026-03-16T08:20:54.133+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2897,
+      "ask": 0.2898
+    },
+    {
+      "ts": "2026-03-16T08:20:55.431+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10168,
+      "ask": 0.10169
+    },
+    {
+      "ts": "2026-03-16T08:20:55.521+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10169,
+      "ask": 0.1017
+    },
+    {
+      "ts": "2026-03-16T08:20:56.317+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.414,
+      "ask": 10.415
+    },
+    {
+      "ts": "2026-03-16T08:20:56.723+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T08:20:57.709+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.655,
+      "ask": 9.656
+    },
+    {
+      "ts": "2026-03-16T08:20:58.031+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.65,
+      "ask": 9.66
+    },
+    {
+      "ts": "2026-03-16T08:20:58.821+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.52,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:20:59.324+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.52,
+      "ask": 57.53
+    },
+    {
+      "ts": "2026-03-16T08:21:00.524+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.62,
+      "ask": 1.621
+    },
+    {
+      "ts": "2026-03-16T08:21:00.616+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.62,
+      "ask": 1.621
+    },
+    {
+      "ts": "2026-03-16T08:21:01.513+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 471.7,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T08:21:01.886+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 471.6,
+      "ask": 471.8
+    },
+    {
+      "ts": "2026-03-16T08:21:03.21+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29675,
+      "ask": 0.29676
+    },
+    {
+      "ts": "2026-03-16T08:21:03.519+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2967,
+      "ask": 0.2968
+    },
+    {
+      "ts": "2026-03-16T08:21:04.984+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2252.29,
+      "ask": 2252.3
+    },
+    {
+      "ts": "2026-03-16T08:21:04.984+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.48,
+      "ask": 93.49
+    },
+    {
+      "ts": "2026-03-16T08:21:04.99+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 471.66,
+      "ask": 471.7
+    },
+    {
+      "ts": "2026-03-16T08:21:04.99+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73420.48,
+      "ask": 73420.49
+    },
+    {
+      "ts": "2026-03-16T08:21:04.997+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.649,
+      "ask": 9.651
+    },
+    {
+      "ts": "2026-03-16T08:21:05.004+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4816,
+      "ask": 1.4817
+    },
+    {
+      "ts": "2026-03-16T08:21:05.022+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.4,
+      "ask": 10.41
+    },
+    {
+      "ts": "2026-03-16T08:21:05.13+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.616,
+      "ask": 1.618
+    },
+    {
+      "ts": "2026-03-16T08:21:05.139+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2894,
+      "ask": 0.2895
+    },
+    {
+      "ts": "2026-03-16T08:21:05.293+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.49,
+      "ask": 57.5
+    },
+    {
+      "ts": "2026-03-16T08:21:05.677+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73416.4,
+      "ask": 73416.5
+    },
+    {
+      "ts": "2026-03-16T08:21:05.687+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 678.63,
+      "ask": 678.73
+    },
+    {
+      "ts": "2026-03-16T08:21:05.687+00:00",
+      "exchange": "kraken",
+      "symbol": "SOLUSD",
+      "bid": 93.52,
+      "ask": 93.53
+    },
+    {
+      "ts": "2026-03-16T08:21:05.692+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.41,
+      "ask": 10.42
+    },
+    {
+      "ts": "2026-03-16T08:21:05.693+00:00",
+      "exchange": "kraken",
+      "symbol": "TRXUSD",
+      "bid": 0.296754,
+      "ask": 0.296755
+    },
+    {
+      "ts": "2026-03-16T08:21:05.694+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2251.99,
+      "ask": 2252.22
+    },
+    {
+      "ts": "2026-03-16T08:21:05.694+00:00",
+      "exchange": "kraken",
+      "symbol": "BCHUSD",
+      "bid": 471.67,
+      "ask": 471.82
+    },
+    {
+      "ts": "2026-03-16T08:21:05.705+00:00",
+      "exchange": "kraken",
+      "symbol": "ADAUSD",
+      "bid": 0.2894,
+      "ask": 0.289475
+    },
+    {
+      "ts": "2026-03-16T08:21:05.705+00:00",
+      "exchange": "kraken",
+      "symbol": "DOTUSD",
+      "bid": 1.6168,
+      "ask": 1.6183
+    },
+    {
+      "ts": "2026-03-16T08:21:05.707+00:00",
+      "exchange": "kraken",
+      "symbol": "XRPUSD",
+      "bid": 1.48144,
+      "ask": 1.48156
+    },
+    {
+      "ts": "2026-03-16T08:21:05.709+00:00",
+      "exchange": "kraken",
+      "symbol": "LINKUSD",
+      "bid": 9.64917,
+      "ask": 9.65096
+    },
+    {
+      "ts": "2026-03-16T08:21:05.714+00:00",
+      "exchange": "kraken",
+      "symbol": "LTCUSD",
+      "bid": 57.48,
+      "ask": 57.5
+    },
+    {
+      "ts": "2026-03-16T08:30:47.564+00:00",
+      "exchange": "okx",
+      "symbol": "BTCUSDT",
+      "bid": 73298,
+      "ask": 73298.1
+    },
+    {
+      "ts": "2026-03-16T08:30:47.64+00:00",
+      "exchange": "bybit",
+      "symbol": "BTCUSDT",
+      "bid": 73300.5,
+      "ask": 73300.6
+    },
+    {
+      "ts": "2026-03-16T08:30:48.927+00:00",
+      "exchange": "bybit",
+      "symbol": "ETHUSDT",
+      "bid": 2249.91,
+      "ask": 2249.92
+    },
+    {
+      "ts": "2026-03-16T08:30:49.144+00:00",
+      "exchange": "okx",
+      "symbol": "ETHUSDT",
+      "bid": 2249.79,
+      "ask": 2249.8
+    },
+    {
+      "ts": "2026-03-16T08:30:50.106+00:00",
+      "exchange": "okx",
+      "symbol": "SOLUSDT",
+      "bid": 93.21,
+      "ask": 93.22
+    },
+    {
+      "ts": "2026-03-16T08:30:50.19+00:00",
+      "exchange": "bybit",
+      "symbol": "SOLUSDT",
+      "bid": 93.21,
+      "ask": 93.22
+    },
+    {
+      "ts": "2026-03-16T08:30:50.816+00:00",
+      "exchange": "okx",
+      "symbol": "XRPUSDT",
+      "bid": 1.4761,
+      "ask": 1.4762
+    },
+    {
+      "ts": "2026-03-16T08:30:51.495+00:00",
+      "exchange": "bybit",
+      "symbol": "XRPUSDT",
+      "bid": 1.4763,
+      "ask": 1.4764
+    },
+    {
+      "ts": "2026-03-16T08:30:52.808+00:00",
+      "exchange": "bybit",
+      "symbol": "BNBUSDT",
+      "bid": 676.8,
+      "ask": 676.9
+    },
+    {
+      "ts": "2026-03-16T08:30:53.113+00:00",
+      "exchange": "okx",
+      "symbol": "BNBUSDT",
+      "bid": 676.8,
+      "ask": 676.9
+    },
+    {
+      "ts": "2026-03-16T08:30:53.909+00:00",
+      "exchange": "okx",
+      "symbol": "ADAUSDT",
+      "bid": 0.2868,
+      "ask": 0.2869
+    },
+    {
+      "ts": "2026-03-16T08:30:54.131+00:00",
+      "exchange": "bybit",
+      "symbol": "ADAUSDT",
+      "bid": 0.2867,
+      "ask": 0.2868
+    },
+    {
+      "ts": "2026-03-16T08:30:55.442+00:00",
+      "exchange": "bybit",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10116,
+      "ask": 0.10117
+    },
+    {
+      "ts": "2026-03-16T08:30:55.613+00:00",
+      "exchange": "okx",
+      "symbol": "DOGEUSDT",
+      "bid": 0.10116,
+      "ask": 0.10117
+    },
+    {
+      "ts": "2026-03-16T08:30:56.213+00:00",
+      "exchange": "okx",
+      "symbol": "AVAXUSDT",
+      "bid": 10.324,
+      "ask": 10.325
+    },
+    {
+      "ts": "2026-03-16T08:30:56.761+00:00",
+      "exchange": "bybit",
+      "symbol": "AVAXUSDT",
+      "bid": 10.32,
+      "ask": 10.33
+    },
+    {
+      "ts": "2026-03-16T08:30:57.919+00:00",
+      "exchange": "okx",
+      "symbol": "LINKUSDT",
+      "bid": 9.632,
+      "ask": 9.633
+    },
+    {
+      "ts": "2026-03-16T08:30:58.075+00:00",
+      "exchange": "bybit",
+      "symbol": "LINKUSDT",
+      "bid": 9.63,
+      "ask": 9.64
+    },
+    {
+      "ts": "2026-03-16T08:30:59.107+00:00",
+      "exchange": "okx",
+      "symbol": "LTCUSDT",
+      "bid": 57.26,
+      "ask": 57.27
+    },
+    {
+      "ts": "2026-03-16T08:30:59.341+00:00",
+      "exchange": "bybit",
+      "symbol": "LTCUSDT",
+      "bid": 57.27,
+      "ask": 57.29
+    },
+    {
+      "ts": "2026-03-16T08:31:00.184+00:00",
+      "exchange": "okx",
+      "symbol": "DOTUSDT",
+      "bid": 1.595,
+      "ask": 1.596
+    },
+    {
+      "ts": "2026-03-16T08:31:00.633+00:00",
+      "exchange": "bybit",
+      "symbol": "DOTUSDT",
+      "bid": 1.595,
+      "ask": 1.596
+    },
+    {
+      "ts": "2026-03-16T08:31:01.928+00:00",
+      "exchange": "bybit",
+      "symbol": "BCHUSDT",
+      "bid": 470.8,
+      "ask": 470.9
+    },
+    {
+      "ts": "2026-03-16T08:31:02.212+00:00",
+      "exchange": "okx",
+      "symbol": "BCHUSDT",
+      "bid": 470.9,
+      "ask": 471
+    },
+    {
+      "ts": "2026-03-16T08:31:03.124+00:00",
+      "exchange": "okx",
+      "symbol": "TRXUSDT",
+      "bid": 0.29659,
+      "ask": 0.2966
+    },
+    {
+      "ts": "2026-03-16T08:31:03.208+00:00",
+      "exchange": "bybit",
+      "symbol": "TRXUSDT",
+      "bid": 0.2966,
+      "ask": 0.2967
+    },
+    {
+      "ts": "2026-03-16T08:31:05.224+00:00",
+      "exchange": "coinbase",
+      "symbol": "ADAUSD",
+      "bid": 0.2866,
+      "ask": 0.2867
+    },
+    {
+      "ts": "2026-03-16T08:31:05.224+00:00",
+      "exchange": "coinbase",
+      "symbol": "ETHUSD",
+      "bid": 2248.9,
+      "ask": 2248.91
+    },
+    {
+      "ts": "2026-03-16T08:31:05.224+00:00",
+      "exchange": "coinbase",
+      "symbol": "SOLUSD",
+      "bid": 93.18,
+      "ask": 93.19
+    },
+    {
+      "ts": "2026-03-16T08:31:05.225+00:00",
+      "exchange": "coinbase",
+      "symbol": "XRPUSD",
+      "bid": 1.4762,
+      "ask": 1.4763
+    },
+    {
+      "ts": "2026-03-16T08:31:05.235+00:00",
+      "exchange": "coinbase",
+      "symbol": "BCHUSD",
+      "bid": 470.75,
+      "ask": 470.9
+    },
+    {
+      "ts": "2026-03-16T08:31:05.246+00:00",
+      "exchange": "coinbase",
+      "symbol": "LTCUSD",
+      "bid": 57.29,
+      "ask": 57.3
+    },
+    {
+      "ts": "2026-03-16T08:31:05.249+00:00",
+      "exchange": "coinbase",
+      "symbol": "AVAXUSD",
+      "bid": 10.31,
+      "ask": 10.32
+    },
+    {
+      "ts": "2026-03-16T08:31:05.295+00:00",
+      "exchange": "coinbase",
+      "symbol": "DOTUSD",
+      "bid": 1.593,
+      "ask": 1.595
+    },
+    {
+      "ts": "2026-03-16T08:31:05.344+00:00",
+      "exchange": "coinbase",
+      "symbol": "BTCUSD",
+      "bid": 73286.61,
+      "ask": 73286.62
+    },
+    {
+      "ts": "2026-03-16T08:31:05.357+00:00",
+      "exchange": "coinbase",
+      "symbol": "LINKUSD",
+      "bid": 9.623,
+      "ask": 9.624
+    },
+    {
+      "ts": "2026-03-16T08:31:05.752+00:00",
+      "exchange": "kraken",
+      "symbol": "BNBUSD",
+      "bid": 676.62,
+      "ask": 676.78
+    },
+    {
+      "ts": "2026-03-16T08:31:05.752+00:00",
+      "exchange": "kraken",
+      "symbol": "AVAXUSD",
+      "bid": 10.32,
+      "ask": 10.33
+    },
+    {
+      "ts": "2026-03-16T08:31:05.76+00:00",
+      "exchange": "kraken",
+      "symbol": "BTCUSD",
+      "bid": 73297.4,
+      "ask": 73297.5
+    },
+    {
+      "ts": "2026-03-16T08:31:05.762+00:00",
+      "exchange": "kraken",
+      "symbol": "ETHUSD",
+      "bid": 2248.84,
+      "ask": 2249.04
+    }
+  ]
+}

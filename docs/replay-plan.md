@@ -59,3 +59,13 @@ pnpm -C apps/web replay:carry -- --fixture fixtures/carry-synthetic-bad.json
 pnpm -C apps/web export:carry -- --hours 24 --output fixtures/carry-historical-export.json
 pnpm -C apps/web replay:carry -- --fixture fixtures/carry-historical-export.json --windows 6,12,24
 ```
+
+## Maker-Assisted Xarb
+
+- Strategy: `xarb_spot` with one passive leg and one active hedge leg
+- Goal: reduce execution costs enough that historical edge survives replay
+
+```bash
+pnpm -C apps/web replay:xarb-maker -- --fixture fixtures/xarb-synthetic-good.json
+pnpm -C apps/web replay:xarb-maker -- --fixture fixtures/xarb-historical-export.json --windows 1,3,6,12
+```
