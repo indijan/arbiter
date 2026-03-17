@@ -40,3 +40,22 @@ Replay the exported historical fixture locally and compare:
 - symbol/exchange distribution
 - pair ranking
 - go-live score by time window
+
+## Carry scope
+
+- Strategy: `spot_perp_carry`
+- Inputs: same-exchange spot/perp/funding snapshots
+- Outputs:
+  - carry opens
+  - carry closes
+  - realized replay pnl
+  - pair ranking by exchange/symbol
+
+## Carry command
+
+```bash
+pnpm -C apps/web replay:carry -- --fixture fixtures/carry-synthetic-good.json
+pnpm -C apps/web replay:carry -- --fixture fixtures/carry-synthetic-bad.json
+pnpm -C apps/web export:carry -- --hours 24 --output fixtures/carry-historical-export.json
+pnpm -C apps/web replay:carry -- --fixture fixtures/carry-historical-export.json --windows 6,12,24
+```

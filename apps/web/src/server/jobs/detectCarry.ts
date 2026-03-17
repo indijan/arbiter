@@ -39,6 +39,7 @@ export type DetectCarryResult = {
   skipped: number;
   holding_hours: number;
   evaluated: EvaluatedRow[];
+  skip_reasons: Record<string, number>;
 };
 
 export type DetectParams = {
@@ -82,9 +83,9 @@ export async function detectCarry(
     throw new Error(allError.message);
   }
 
-  const symbolsInWindow = new Set<string>();
+  const marketKeysInWindow = new Set<string>();
   for (const snapshot of allSnapshots ?? []) {
-    symbolsInWindow.add(snapshot.symbol);
+    marketKeysInWindow.add(`${snapshot.exchange}:${snapshot.symbol}`);
   }
 
   const validSnapshots = (allSnapshots ?? []).filter((snapshot) => {
@@ -103,10 +104,11 @@ export async function detectCarry(
     );
   });
 
-  const latestBySymbol = new Map<string, (typeof validSnapshots)[number]>();
+  const latestByMarket = new Map<string, (typeof validSnapshots)[number]>();
   for (const snapshot of validSnapshots) {
-    if (!latestBySymbol.has(snapshot.symbol)) {
-      latestBySymbol.set(snapshot.symbol, snapshot);
+    const key = `${snapshot.exchange}:${snapshot.symbol}`;
+    if (!latestByMarket.has(key)) {
+      latestByMarket.set(key, snapshot);
     }
   }
 
@@ -114,14 +116,21 @@ export async function detectCarry(
   let watchlist = 0;
   let skipped = 0;
   const evaluated: EvaluatedRow[] = [];
+  const skip_reasons: Record<string, number> = {};
 
-  for (const symbol of symbolsInWindow.values()) {
-    const snapshot = latestBySymbol.get(symbol);
+  function markSkipReason(reason: string | undefined) {
+    if (!reason) return;
+    skip_reasons[reason] = (skip_reasons[reason] ?? 0) + 1;
+  }
+
+  for (const marketKey of marketKeysInWindow.values()) {
+    const [exchange, symbol] = marketKey.split(":");
+    const snapshot = latestByMarket.get(marketKey);
 
     if (!snapshot) {
       skipped += 1;
       evaluated.push({
-        exchange: "binance",
+        exchange,
         symbol,
         entry_basis_bps: 0,
         expected_holding_bps: 0,
@@ -139,6 +148,7 @@ export async function detectCarry(
         spot_mid: null,
         perp_mid: null
       });
+      markSkipReason("no_valid_snapshot");
       continue;
     }
 
@@ -176,6 +186,7 @@ export async function detectCarry(
     if (funding_daily_bps <= 0) {
       skipped += 1;
       reason = "non-positive funding";
+      markSkipReason("non_positive_funding");
     } else if (
       break_even_hours !== null &&
       break_even_hours <= 72 &&
@@ -205,6 +216,7 @@ export async function detectCarry(
         if (existing) {
           skipped += 1;
           reason = "recent opportunity exists";
+          markSkipReason("recent_opportunity_exists");
         } else {
           const { error: insertError } = await adminSupabase
             .from("opportunities")
@@ -237,9 +249,11 @@ export async function detectCarry(
     } else if (break_even_hours !== null && break_even_hours <= 96) {
       watchlist += 1;
       decision = "watchlist";
+      markSkipReason("watchlist_break_even");
     } else {
       skipped += 1;
       reason = "below threshold";
+      markSkipReason("below_threshold");
     }
 
     evaluated.push({
@@ -263,5 +277,5 @@ export async function detectCarry(
     });
   }
 
-  return { inserted, watchlist, skipped, holding_hours, evaluated };
+  return { inserted, watchlist, skipped, holding_hours, evaluated, skip_reasons };
 }

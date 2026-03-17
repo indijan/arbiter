@@ -216,7 +216,8 @@ async function handleTick(request: Request) {
           ? {
               inserted: carryResult.data.inserted,
               watchlist: carryResult.data.watchlist,
-              skipped: carryResult.data.skipped
+              skipped: carryResult.data.skipped,
+              skip_reasons: carryResult.data.skip_reasons
             }
           : { inserted: 0, watchlist: 0, skipped: 0 },
         xarb_spot: crossResult.ok
@@ -302,7 +303,8 @@ async function handleTick(request: Request) {
         ? {
             inserted: carryResult.data.inserted,
             watchlist: carryResult.data.watchlist,
-            skipped: carryResult.data.skipped
+            skipped: carryResult.data.skipped,
+            skip_reasons: carryResult.data.skip_reasons
           }
         : { inserted: 0, watchlist: 0, skipped: 0, error: carryResult.error },
       xarb_spot: crossResult.ok

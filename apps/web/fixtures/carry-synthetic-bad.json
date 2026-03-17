@@ -1,0 +1,14 @@
+{
+  "exported_at": "2026-03-17T00:00:00.000Z",
+  "hours": 6,
+  "exchanges": ["bybit", "okx"],
+  "snapshot_count": 6,
+  "snapshots": [
+    { "ts": "2026-03-17T00:00:00.000Z", "exchange": "bybit", "symbol": "BTCUSDT", "spot_bid": 100.0, "spot_ask": 100.1, "perp_bid": 100.11, "perp_ask": 100.18, "funding_rate": 0.00002 },
+    { "ts": "2026-03-17T02:00:00.000Z", "exchange": "bybit", "symbol": "BTCUSDT", "spot_bid": 100.03, "spot_ask": 100.12, "perp_bid": 100.1, "perp_ask": 100.17, "funding_rate": 0.00001 },
+    { "ts": "2026-03-17T04:00:00.000Z", "exchange": "bybit", "symbol": "BTCUSDT", "spot_bid": 100.06, "spot_ask": 100.15, "perp_bid": 100.09, "perp_ask": 100.16, "funding_rate": -0.00001 },
+    { "ts": "2026-03-17T00:00:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "spot_bid": 50.0, "spot_ask": 50.05, "perp_bid": 50.05, "perp_ask": 50.11, "funding_rate": 0.00001 },
+    { "ts": "2026-03-17T02:00:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "spot_bid": 50.01, "spot_ask": 50.06, "perp_bid": 50.04, "perp_ask": 50.1, "funding_rate": 0.00001 },
+    { "ts": "2026-03-17T04:00:00.000Z", "exchange": "okx", "symbol": "ETHUSDT", "spot_bid": 50.03, "spot_ask": 50.08, "perp_bid": 50.03, "perp_ask": 50.09, "funding_rate": 0 }
+  ]
+}
