@@ -90,21 +90,12 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
 };
 
 const CORE_XARB_SYMBOLS = new Set(["BTCUSD", "ETHUSD"]);
-const REPLAY_VALIDATED_XARB_PAIRS = new Set([
-  "LINKUSD:coinbase_okx",
-  "ADAUSD:bybit_coinbase",
-  "ETHUSD:bybit_kraken",
-  "ETHUSD:bybit_coinbase",
-  "AVAXUSD:coinbase_okx",
-  "BTCUSD:kraken_okx",
-  "SOLUSD:bybit_coinbase",
-  "BTCUSD:coinbase_okx"
-]);
-const MAKER_ASSISTED_XARB_PAIRS = new Set(["DOTUSD:bybit_kraken"]);
 const MAKER_ASSISTED_XARB_MAKER_FEE_BPS = 1;
 const MAKER_ASSISTED_XARB_TAKER_FEE_BPS = 4;
 const MAKER_ASSISTED_XARB_TAKER_SLIPPAGE_BPS = 1;
 const MAKER_ASSISTED_XARB_INVENTORY_BUFFER_BPS = 1.5;
+const ONLINE_MAKER_XARB_LOOKBACK_MINUTES = 30;
+const ONLINE_MAKER_XARB_MIN_HITS = 2;
 
 const CANONICAL_MAP: Record<
   string,
@@ -1670,7 +1661,37 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const liveGrossEdgeBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
       const opportunityAgeMinutes = (Date.now() - Date.parse(opp.ts)) / (60 * 1000);
       const exchangePairKey = sortedExchangePairKey(opp.symbol, buyExchange, sellExchange);
-      const isMakerAssistedXarbPair = MAKER_ASSISTED_XARB_PAIRS.has(exchangePairKey);
+      const isCoreXarbSymbol = CORE_XARB_SYMBOLS.has(opp.symbol);
+      const recentMakerXarbSince = new Date(
+        Date.now() - ONLINE_MAKER_XARB_LOOKBACK_MINUTES * 60 * 1000
+      ).toISOString();
+      const recentMakerThresholdNet = isCoreXarbSymbol ? 2.5 : 1.5;
+      const { data: recentMakerRows, error: recentMakerRowsError } = await adminSupabase
+        .from("opportunities")
+        .select("net_edge_bps, ts")
+        .eq("type", "xarb_spot")
+        .eq("symbol", opp.symbol)
+        .eq("exchange", opp.exchange)
+        .gte("ts", recentMakerXarbSince)
+        .order("ts", { ascending: false })
+        .limit(6);
+
+      if (recentMakerRowsError) {
+        throw new Error(recentMakerRowsError.message);
+      }
+
+      const recentMakerHits = (recentMakerRows ?? []).length;
+      const recentMakerAvgNetBps =
+        recentMakerHits > 0
+          ? (recentMakerRows ?? []).reduce(
+              (sum, row) => sum + Number(row.net_edge_bps ?? 0),
+              0
+            ) / recentMakerHits
+          : 0;
+      const isMakerAssistedXarbPair =
+        opp.type === "xarb_spot" &&
+        recentMakerHits >= ONLINE_MAKER_XARB_MIN_HITS &&
+        recentMakerAvgNetBps >= recentMakerThresholdNet;
       const makerAssistedTotalCostsBps =
         MAKER_ASSISTED_XARB_MAKER_FEE_BPS +
         MAKER_ASSISTED_XARB_TAKER_FEE_BPS +
@@ -1686,7 +1707,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const symbolClosedCount = symbolTradeCount[opp.symbol] ?? 0;
       const unfavorableSymbol = unfavorableSymbolSet.has(opp.symbol);
       const favorableSymbol = symbolClosedCount >= 2 && symbolBias > 0.02;
-      const isCoreXarbSymbol = CORE_XARB_SYMBOLS.has(opp.symbol);
       const xarbQualityNetFloor =
         opp.type === "xarb_spot"
           ? favorableSymbol
@@ -1733,16 +1753,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         opportunityAgeMinutes <= 10 &&
         !losingRecently &&
         !severeLosing &&
-        (
-          (MAKER_ASSISTED_XARB_PAIRS.has(exchangePairKey) &&
-            detectorNetEdgeBps >= (isCoreXarbSymbol ? 3 : 2) &&
-            liveGrossEdgeBps >= (isCoreXarbSymbol ? 10 : 8) &&
-            liveNetEdgeBps >= (isCoreXarbSymbol ? 2 : 1.25)) ||
-          (REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) &&
-            detectorNetEdgeBps >= (isCoreXarbSymbol ? 6 : 3) &&
-            liveGrossEdgeBps >= (isCoreXarbSymbol ? 14 : 11) &&
-            liveNetEdgeBps >= (isCoreXarbSymbol ? 4 : 2))
-        );
+        isMakerAssistedXarbPair &&
+        detectorNetEdgeBps >= (isCoreXarbSymbol ? 3 : 2) &&
+        liveGrossEdgeBps >= (isCoreXarbSymbol ? 10 : 8) &&
+        liveNetEdgeBps >= (isCoreXarbSymbol ? 2 : 1.25);
       const canPilotOpen =
         isTypeEnabled("pilot") &&
         pilotModeActive &&
@@ -1823,9 +1837,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             live_gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
             live_net_bps: Number(liveNetEdgeBps.toFixed(4)),
             threshold_bps: Number(effectiveLiveThresholdBps.toFixed(4)),
-            replay_validated_pair:
-              REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) ||
-              MAKER_ASSISTED_XARB_PAIRS.has(exchangePairKey),
+            replay_validated_pair: isMakerAssistedXarbPair,
             reason: "live_edge_below_threshold"
           });
           }
@@ -1845,9 +1857,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             live_gross_bps: Number(liveGrossEdgeBps.toFixed(4)),
             live_net_bps: Number(liveNetEdgeBps.toFixed(4)),
             threshold_bps: Number(effectiveXarbQualityNetFloor.toFixed(4)),
-            replay_validated_pair:
-              REPLAY_VALIDATED_XARB_PAIRS.has(exchangePairKey) ||
-              MAKER_ASSISTED_XARB_PAIRS.has(exchangePairKey),
+            replay_validated_pair: isMakerAssistedXarbPair,
             reason: "quality_floor_not_met"
           });
         }
