@@ -9,6 +9,12 @@ const COSTS_BPS = {
   slippage_bps_total: 2,
   transfer_buffer_bps: 3
 };
+const MAKER_ASSISTED_COSTS_BPS = {
+  maker_fee_bps: 1,
+  taker_fee_bps: 4,
+  taker_slippage_bps: 1,
+  inventory_buffer_bps: 1.5
+};
 
 const MIN_NET_EDGE_BPS = 0;
 // Snapshot ingestion can drift well beyond a single 10-minute cycle in production.
@@ -315,13 +321,20 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
     }
 
     const gross_edge_bps = ((sell.bid! - buy.ask!) / buy.ask!) * 10000;
-    const costs_bps =
+    const takerCostsBps =
       COSTS_BPS.fee_bps_total +
       COSTS_BPS.slippage_bps_total +
       COSTS_BPS.transfer_buffer_bps;
-    const net_edge_bps = gross_edge_bps - costs_bps;
+    const makerAssistedCostsBps =
+      MAKER_ASSISTED_COSTS_BPS.maker_fee_bps +
+      MAKER_ASSISTED_COSTS_BPS.taker_fee_bps +
+      MAKER_ASSISTED_COSTS_BPS.taker_slippage_bps +
+      MAKER_ASSISTED_COSTS_BPS.inventory_buffer_bps;
+    const taker_net_edge_bps = gross_edge_bps - takerCostsBps;
+    const maker_assisted_net_edge_bps = gross_edge_bps - makerAssistedCostsBps;
+    const effective_net_edge_bps = Math.max(taker_net_edge_bps, maker_assisted_net_edge_bps);
 
-    if (net_edge_bps < MIN_NET_EDGE_BPS) {
+    if (effective_net_edge_bps < MIN_NET_EDGE_BPS) {
       markSkipped({
         canonical_symbol: mapping.canonical,
         buy_exchange: buy.exchange,
@@ -329,7 +342,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         buy_ask: buy.ask as number,
         sell_bid: sell.bid as number,
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
-        net_edge_bps: Number(net_edge_bps.toFixed(4)),
+        net_edge_bps: Number(effective_net_edge_bps.toFixed(4)),
         decision: "skipped"
       }, "below_min_net_edge");
       continue;
@@ -359,7 +372,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         buy_ask: buy.ask as number,
         sell_bid: sell.bid as number,
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
-        net_edge_bps: Number(net_edge_bps.toFixed(4)),
+        net_edge_bps: Number(effective_net_edge_bps.toFixed(4)),
         decision: "skipped"
       }, "recent_opportunity_exists");
       continue;
@@ -370,9 +383,9 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       exchange: exchangeKey,
       symbol: mapping.canonical,
       type: "xarb_spot",
-      net_edge_bps: Number(net_edge_bps.toFixed(4)),
+      net_edge_bps: Number(effective_net_edge_bps.toFixed(4)),
       expected_daily_bps: null,
-      confidence: confidenceForXarb(net_edge_bps),
+      confidence: confidenceForXarb(effective_net_edge_bps),
       status: "new",
       details: {
         buy_exchange: buy.exchange,
@@ -380,9 +393,14 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
         buy_ask: buy.ask,
         sell_bid: sell.bid,
         gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
+        taker_net_edge_bps: Number(taker_net_edge_bps.toFixed(4)),
+        maker_assisted_net_edge_bps: Number(maker_assisted_net_edge_bps.toFixed(4)),
         costs_bps_breakdown: COSTS_BPS,
+        maker_assisted_costs_bps_breakdown: MAKER_ASSISTED_COSTS_BPS,
         canonical_symbol: mapping.canonical,
-        usdt_proxy: buy.exchange !== "kraken" || sell.exchange !== "kraken"
+        usdt_proxy: buy.exchange !== "kraken" || sell.exchange !== "kraken",
+        preferred_execution_model:
+          maker_assisted_net_edge_bps > taker_net_edge_bps ? "maker_assisted" : "taker"
       }
     });
 
@@ -398,7 +416,7 @@ export async function detectCrossExchangeSpot(): Promise<DetectCrossExchangeResu
       buy_ask: buy.ask as number,
       sell_bid: sell.bid as number,
       gross_edge_bps: Number(gross_edge_bps.toFixed(4)),
-      net_edge_bps: Number(net_edge_bps.toFixed(4)),
+      net_edge_bps: Number(effective_net_edge_bps.toFixed(4)),
       decision: "inserted"
     });
   }
