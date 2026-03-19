@@ -6,6 +6,7 @@ import { ingestKraken } from "@/server/jobs/ingestKraken";
 import { detectCarry } from "@/server/jobs/detectCarry";
 import { detectCrossExchangeSpot } from "@/server/jobs/detectCrossExchangeSpot";
 import { detectSpreadReversion } from "@/server/jobs/detectSpreadReversion";
+import { detectRelativeStrength } from "@/server/jobs/detectRelativeStrength";
 import { detectTriangular } from "@/server/jobs/detectTriangular";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { computeDailyPnl } from "@/server/jobs/computeDailyPnl";
@@ -152,6 +153,7 @@ async function handleTick(request: Request) {
   );
   const crossResult = await runJob(() => detectCrossExchangeSpot());
   const spreadReversionResult = await runJob(() => detectSpreadReversion());
+  const relativeStrengthResult = await runJob(() => detectRelativeStrength());
   const triResult = await runJob(() => detectTriangular());
   const autoResult = await runJob(() => autoExecutePaper());
   const closeResult = await runJob(() => autoClosePaper());
@@ -192,6 +194,7 @@ async function handleTick(request: Request) {
   if (!carryResult.ok) jobErrors.push(`detect_carry_failed: ${carryResult.error}`);
   if (!crossResult.ok) jobErrors.push(`detect_xarb_failed: ${crossResult.error}`);
   if (!spreadReversionResult.ok) jobErrors.push(`detect_spread_reversion_failed: ${spreadReversionResult.error}`);
+  if (!relativeStrengthResult.ok) jobErrors.push(`detect_relative_strength_failed: ${relativeStrengthResult.error}`);
   if (!triResult.ok) jobErrors.push(`detect_tri_failed: ${triResult.error}`);
   if (!autoResult.ok) jobErrors.push(`auto_execute_failed: ${autoResult.error}`);
   if (!closeResult.ok) jobErrors.push(`auto_close_failed: ${closeResult.error}`);
@@ -237,6 +240,14 @@ async function handleTick(request: Request) {
               skipped: spreadReversionResult.data.skipped,
               skip_reasons: spreadReversionResult.data.skip_reasons,
               near_miss_samples: spreadReversionResult.data.near_miss_samples
+            }
+          : { inserted: 0, skipped: 0, near_miss_samples: [] },
+        relative_strength: relativeStrengthResult.ok
+          ? {
+              inserted: relativeStrengthResult.data.inserted,
+              skipped: relativeStrengthResult.data.skipped,
+              skip_reasons: relativeStrengthResult.data.skip_reasons,
+              near_miss_samples: relativeStrengthResult.data.near_miss_samples
             }
           : { inserted: 0, skipped: 0, near_miss_samples: [] },
         tri_arb: triResult.ok
@@ -335,6 +346,14 @@ async function handleTick(request: Request) {
             near_miss_samples: spreadReversionResult.data.near_miss_samples
           }
         : { inserted: 0, skipped: 0, near_miss_samples: [], error: spreadReversionResult.error },
+      relative_strength: relativeStrengthResult.ok
+        ? {
+            inserted: relativeStrengthResult.data.inserted,
+            skipped: relativeStrengthResult.data.skipped,
+            skip_reasons: relativeStrengthResult.data.skip_reasons,
+            near_miss_samples: relativeStrengthResult.data.near_miss_samples
+          }
+        : { inserted: 0, skipped: 0, near_miss_samples: [], error: relativeStrengthResult.error },
       tri_arb: triResult.ok
         ? {
             inserted: triResult.data.inserted,

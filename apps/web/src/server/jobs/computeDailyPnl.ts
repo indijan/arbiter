@@ -12,6 +12,7 @@ const STRATEGY_MAP: Record<string, string> = {
   spot_perp_carry: "carry_spot_perp",
   xarb_spot: "xarb_spot",
   spread_reversion: "spread_reversion",
+  relative_strength: "relative_strength",
   tri_arb: "tri_arb"
 };
 
@@ -223,6 +224,20 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
       const sellPnl = sellQty * (sellEntry - sellPrices.spot_mid);
       const fee_total = feeMap.get(position.id) ?? 0;
       total_pnl = buyPnl + sellPnl - fee_total;
+    } else if (position.status === "open" && opp.type === "relative_strength") {
+      const prices = snapshotsMap.get(`${opp.exchange}:${opp.symbol}`);
+      const meta = (position.meta ?? {}) as Record<string, unknown>;
+      const direction = String(meta.direction ?? "");
+      const entryPrice = Number(position.entry_spot_price ?? 0);
+      const qty = Math.abs(Number(position.spot_qty ?? 0));
+      if (!prices?.spot_mid || !direction) {
+        continue;
+      }
+      const fee_total = feeMap.get(position.id) ?? 0;
+      total_pnl =
+        direction === "long"
+          ? qty * (prices.spot_mid - entryPrice) - fee_total
+          : qty * (entryPrice - prices.spot_mid) - fee_total;
     } else {
       continue;
     }

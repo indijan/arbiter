@@ -31,26 +31,38 @@ async function fetchRows(hours, exchanges) {
   }
 
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const url = new URL(`${SUPABASE_URL}/rest/v1/market_snapshots`);
-  url.searchParams.set("select", "ts,exchange,symbol,spot_bid,spot_ask");
-  url.searchParams.set("ts", `gte.${since}`);
-  url.searchParams.set("exchange", `in.(${exchanges.join(",")})`);
-  url.searchParams.set("order", "ts.asc");
-  url.searchParams.set("limit", "5000");
+  const rows = [];
+  const pageSize = 1000;
+  let from = 0;
 
-  const response = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      accept: "application/json"
+  while (true) {
+    const to = from + pageSize - 1;
+    const url = new URL(`${SUPABASE_URL}/rest/v1/market_snapshots`);
+    url.searchParams.set("select", "ts,exchange,symbol,spot_bid,spot_ask");
+    url.searchParams.set("ts", `gte.${since}`);
+    url.searchParams.set("exchange", `in.(${exchanges.join(",")})`);
+    url.searchParams.set("order", "ts.asc");
+
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        accept: "application/json",
+        Range: `${from}-${to}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase export failed: HTTP ${response.status}`);
     }
-  });
 
-  if (!response.ok) {
-    throw new Error(`Supabase export failed: HTTP ${response.status}`);
+    const page = await response.json();
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
   }
 
-  return await response.json();
+  return rows;
 }
 
 async function main() {

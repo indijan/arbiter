@@ -13,6 +13,7 @@ const STRATEGIES = [
   { key: "carry_spot_perp", label: "Carry (spot-perp)" },
   { key: "xarb_spot", label: "Cross-exchange spot" },
   { key: "spread_reversion", label: "Spread mean reversion" },
+  { key: "relative_strength", label: "Relative strength" },
   { key: "tri_arb", label: "Triangular arb" }
 ];
 

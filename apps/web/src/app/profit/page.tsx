@@ -6,6 +6,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   carry_spot_perp: "Carry (spot-perp)",
   xarb_spot: "Cross-exchange spot",
   spread_reversion: "Spread mean reversion",
+  relative_strength: "Relative strength",
   tri_arb: "Triangular arb"
 };
 

@@ -87,6 +87,7 @@ const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
   xarb_spot: 1,
   spread_reversion: 1,
+  relative_strength: 1,
   tri_arb: 2
 };
 
@@ -101,6 +102,7 @@ const SPREAD_REVERSION_TOTAL_COSTS_BPS = 11;
 const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 0.1;
 const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
+const RELATIVE_STRENGTH_ALLOWLIST = new Set(["BCHUSD", "ETHUSD", "XRPUSD"]);
 
 const CANONICAL_MAP: Record<
   string,
@@ -1186,6 +1188,14 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         markPrefilter("tri_arb_disabled");
         return false;
       }
+      if (typed.type === "spot_perp_carry") {
+        markPrefilter("carry_auto_open_disabled");
+        return false;
+      }
+      if (typed.type === "spread_reversion") {
+        markPrefilter("spread_reversion_auto_open_disabled");
+        return false;
+      }
       if (typed.type === "xarb_spot") {
         markPrefilter("xarb_auto_open_disabled");
         return false;
@@ -1218,6 +1228,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             : Math.max(0.54, minConfidence - 0.08)
           : typed.type === "spread_reversion"
             ? SPREAD_REVERSION_MIN_CONFIDENCE
+          : typed.type === "relative_strength"
+            ? 0.58
           : typed.type === "tri_arb"
             ? Math.max(0.54, minConfidence - 0.08)
             : minConfidence;
@@ -1253,6 +1265,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
         if (!Number.isFinite(ageHours) || ageHours > SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS) {
           markPrefilter("stale_spread_reversion_signal");
+          return false;
+        }
+      }
+      if (typed.type === "relative_strength") {
+        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
+        if (!Number.isFinite(ageHours) || ageHours > 2.5) {
+          markPrefilter("stale_relative_strength_signal");
+          return false;
+        }
+        if (!RELATIVE_STRENGTH_ALLOWLIST.has(typed.symbol)) {
+          markPrefilter("relative_strength_symbol_blocked");
           return false;
         }
       }
@@ -1766,6 +1789,131 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const { error: executionError } = await adminSupabase
         .from("executions")
         .insert(executionsPayload);
+
+      if (executionError) {
+        throw new Error(executionError.message);
+      }
+
+      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
+      const { error: reserveError } = await adminSupabase
+        .from("paper_accounts")
+        .update({
+          reserved_usd: reservedCurrent,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", account.id);
+
+      if (reserveError) {
+        throw new Error(reserveError.message);
+      }
+
+      available = Number((available - notional_usd).toFixed(2));
+      created += 1;
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: true, position_id: position.id })
+          .eq("id", decisionRow.id);
+      }
+      continue;
+    }
+
+    if (opp.type === "relative_strength") {
+      const details = opp.details ?? {};
+      const symbol = opp.symbol;
+      const venueSymbol = symbol.endsWith("USD") ? symbol : `${symbol}`;
+      const direction = String((details as Record<string, unknown>).direction ?? "");
+      if (!symbol || !direction) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "missing_relative_strength_details" });
+        continue;
+      }
+      if (!RELATIVE_STRENGTH_ALLOWLIST.has(symbol)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_symbol_blocked" });
+        continue;
+      }
+
+      let quote: { bid: number; ask: number };
+      try {
+        quote = await fetchSpotTicker("coinbase", venueSymbol);
+      } catch {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_price_error" });
+        continue;
+      }
+
+      if (notional_usd > available) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "insufficient_balance" });
+        continue;
+      }
+
+      const side = direction === "long" ? "buy" : "sell";
+      const fill = paperFill({
+        side,
+        price: direction === "long" ? quote.ask : quote.bid,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const { data: position, error: positionError } = await adminSupabase
+        .from("positions")
+        .insert({
+          user_id: userId,
+          opportunity_id: opp.id,
+          symbol: opp.symbol,
+          mode: "paper",
+          status: "open",
+          entry_spot_price: fill.fill_price,
+          entry_perp_price: null,
+          spot_qty: direction === "long" ? fill.qty : -fill.qty,
+          perp_qty: 0,
+          meta: {
+            opportunity_id: opp.id,
+            type: "relative_strength",
+            exchange: "coinbase",
+            symbol: opp.symbol,
+            direction,
+            entry_price: fill.fill_price,
+            qty: fill.qty,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            notional_usd,
+            notional_reason: derived.reason,
+            auto_execute: true,
+            relative_strength_open: true,
+            momentum_6h_bps: details.momentum_6h_bps,
+            spread_bps: details.spread_bps,
+            exit_threshold_bps: details.exit_threshold_bps
+          }
+        })
+        .select("id")
+        .single();
+
+      if (positionError || !position) {
+        throw new Error(positionError?.message ?? "Failed to create relative strength position");
+      }
+
+      const { error: executionError } = await adminSupabase
+        .from("executions")
+        .insert({
+          position_id: position.id,
+          leg: direction === "long" ? "spot_buy" : "spot_sell",
+          requested_qty: fill.qty,
+          filled_qty: fill.qty,
+          avg_price: fill.fill_price,
+          fee: fill.fee_usd,
+          raw: {
+            side,
+            price: direction === "long" ? quote.ask : quote.bid,
+            fill_price: fill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        });
 
       if (executionError) {
         throw new Error(executionError.message);

@@ -13,11 +13,15 @@ const TP_PCT_XARB = 0.007;
 const SL_PCT_XARB = 0.005;
 const TP_PCT_SPREAD_REVERSION = 0.006;
 const SL_PCT_SPREAD_REVERSION = 0.005;
+const TP_PCT_RELATIVE_STRENGTH = 0.012;
+const SL_PCT_RELATIVE_STRENGTH = 0.008;
 
 const MIN_HOLD_SECONDS_CARRY = 4 * 60 * 60;
 const MIN_HOLD_SECONDS_XARB = 45 * 60;
 const MIN_HOLD_SECONDS_SPREAD_REVERSION = 30 * 60;
 const MAX_HOLD_SECONDS_SPREAD_REVERSION = 6 * 60 * 60;
+const MIN_HOLD_SECONDS_RELATIVE_STRENGTH = 2 * 60 * 60;
+const MAX_HOLD_SECONDS_RELATIVE_STRENGTH = 6 * 60 * 60;
 
 const HOLDING_HOURS = 24;
 
@@ -542,6 +546,96 @@ export async function autoClosePaper(): Promise<CloseResult> {
       if (execError) {
         throw new Error(execError.message);
       }
+
+      reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+      await adminSupabase
+        .from("paper_accounts")
+        .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+        .eq("id", account.id);
+
+      closed += 1;
+      continue;
+    }
+
+    if (opp.type === "relative_strength") {
+      const direction = String(meta.direction ?? "");
+      if (!direction) {
+        skipped += 1;
+        reasons.push({ position_id: position.id, reason: "missing_meta" });
+        continue;
+      }
+
+      let quote: { bid: number; ask: number };
+      try {
+        quote = await fetchSpotTicker("coinbase", opp.symbol);
+      } catch {
+        skipped += 1;
+        reasons.push({ position_id: position.id, reason: "live_price_error" });
+        continue;
+      }
+
+      const qty = Math.abs(Number(position.spot_qty ?? 0));
+      const entryPrice = Number(position.entry_spot_price ?? 0);
+      const mark = direction === "long" ? quote.bid : quote.ask;
+      const unrealized =
+        direction === "long" ? qty * (mark - entryPrice) : qty * (entryPrice - mark);
+      const ageSec = secondsSince(position.entry_ts ?? null);
+      const shouldClose =
+        ageSec !== null &&
+        ageSec >= MIN_HOLD_SECONDS_RELATIVE_STRENGTH &&
+        (shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_RELATIVE_STRENGTH, SL_PCT_RELATIVE_STRENGTH) ||
+          ageSec >= MAX_HOLD_SECONDS_RELATIVE_STRENGTH);
+
+      if (!shouldClose) {
+        skipped += 1;
+        reasons.push({ position_id: position.id, reason: "hold" });
+        continue;
+      }
+
+      const closeSide = direction === "long" ? "sell" : "buy";
+      const closeFill = paperFill({
+        side: closeSide,
+        price: direction === "long" ? quote.bid : quote.ask,
+        notional_usd: qty * mark,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+      const realized =
+        direction === "long"
+          ? qty * (closeFill.fill_price - entryPrice) - closeFill.fee_usd
+          : qty * (entryPrice - closeFill.fill_price) - closeFill.fee_usd;
+
+      const { error: closeError } = await adminSupabase
+        .from("positions")
+        .update({
+          status: "closed",
+          exit_ts: new Date().toISOString(),
+          exit_spot_price: closeFill.fill_price,
+          realized_pnl_usd: Number(realized.toFixed(4))
+        })
+        .eq("id", position.id)
+        .eq("status", "open");
+
+      if (closeError) throw new Error(closeError.message);
+
+      const { error: execError } = await adminSupabase.from("executions").insert({
+        position_id: position.id,
+        leg: closeSide === "sell" ? "spot_sell" : "spot_buy",
+        requested_qty: qty,
+        filled_qty: qty,
+        avg_price: closeFill.fill_price,
+        fee: closeFill.fee_usd,
+        raw: {
+          side: closeSide,
+          price: direction === "long" ? quote.bid : quote.ask,
+          fill_price: closeFill.fill_price,
+          slippage_bps: SLIPPAGE_BPS,
+          fee_bps: FEE_BPS,
+          notional_usd: notionalUsd
+        }
+      });
+
+      if (execError) throw new Error(execError.message);
 
       reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
       await adminSupabase

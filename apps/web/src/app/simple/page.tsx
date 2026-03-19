@@ -99,6 +99,10 @@ export default async function SimpleDashboardPage() {
                   const buy = details.buy_exchange as string | undefined;
                   const sell = details.sell_exchange as string | undefined;
                   subtitle = `${signal.symbol} (${buy ?? "?"} → ${sell ?? "?"})`;
+                } else if (type === "relative_strength") {
+                  title = "Relative strength";
+                  const direction = details.direction as string | undefined;
+                  subtitle = `${signal.symbol} (${direction ?? "?"})`;
                 } else if (type === "tri_arb") {
                   title = "Háromszög arbitrázs jel";
                   const path = (details.path as string) ?? signal.symbol;
