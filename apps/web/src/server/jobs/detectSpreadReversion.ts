@@ -212,14 +212,12 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
     );
     const [latestBucketIso, latestQuotesMap] = bucketEntries[bucketEntries.length - 1];
     const latestQuotes = Array.from(latestQuotesMap.values());
-    const latestAges = latestQuotes.map((quote) => (Date.now() - Date.parse(quote.ts)) / 1000);
-    const latestTimes = latestQuotes.map((quote) => Date.parse(quote.ts) / 1000);
+    const freshLatestQuotes = latestQuotes.filter((quote) => {
+      const ageSeconds = (Date.now() - Date.parse(quote.ts)) / 1000;
+      return Number.isFinite(ageSeconds) && ageSeconds <= MAX_SNAPSHOT_AGE_SECONDS;
+    });
 
-    if (
-      latestQuotes.length < 2 ||
-      latestAges.some((age) => !Number.isFinite(age)) ||
-      Math.max(...latestAges) > MAX_SNAPSHOT_AGE_SECONDS
-    ) {
+    if (freshLatestQuotes.length < 2) {
       markSkip({
         canonical_symbol: mapping.canonical,
         exchange: "-",
@@ -235,27 +233,28 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
       continue;
     }
 
-    if (Math.max(...latestTimes) - Math.min(...latestTimes) > MAX_SNAPSHOT_SKEW_SECONDS) {
-      markSkip({
-        canonical_symbol: mapping.canonical,
-        exchange: "-",
-        buy_exchange: "-",
-        sell_exchange: "-",
-        current_gross_bps: 0,
-        rolling_mean_bps: 0,
-        rolling_std_bps: 0,
-        z_score: 0,
-        expected_net_bps: 0,
-        decision: "skipped"
-      }, "snapshot_skew");
-      continue;
-    }
-
     let insertedForSymbol = false;
 
-    for (const buy of latestQuotes) {
-      for (const sell of latestQuotes) {
+    for (const buy of freshLatestQuotes) {
+      for (const sell of freshLatestQuotes) {
         if (buy.exchange === sell.exchange) continue;
+
+        const pairTimes = [Date.parse(buy.ts) / 1000, Date.parse(sell.ts) / 1000];
+        if (Math.max(...pairTimes) - Math.min(...pairTimes) > MAX_SNAPSHOT_SKEW_SECONDS) {
+          markSkip({
+            canonical_symbol: mapping.canonical,
+            exchange: `${buy.exchange}_${sell.exchange}`,
+            buy_exchange: buy.exchange,
+            sell_exchange: sell.exchange,
+            current_gross_bps: 0,
+            rolling_mean_bps: 0,
+            rolling_std_bps: 0,
+            z_score: 0,
+            expected_net_bps: 0,
+            decision: "skipped"
+          }, "snapshot_skew");
+          continue;
+        }
 
         const currentGrossBps = ((sell.bid - buy.ask) / buy.ask) * 10000;
         const exchangeKey = `${buy.exchange}_${sell.exchange}`;
