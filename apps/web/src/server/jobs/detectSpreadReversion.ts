@@ -128,19 +128,35 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
     if (mapping.kraken) rawToCanonical.set(`kraken:${mapping.kraken}`, mapping.canonical);
   }
 
-  const { data, error } = await adminSupabase
-    .from("market_snapshots")
-    .select("ts, exchange, symbol, spot_bid, spot_ask")
-    .gte("ts", since)
-    .in("exchange", exchangeUniverse)
-    .order("ts", { ascending: true });
+  const data: SnapshotRow[] = [];
+  const pageSize = 1000;
+  let from = 0;
 
-  if (error) {
-    throw new Error(error.message);
+  while (true) {
+    const { data: page, error } = await adminSupabase
+      .from("market_snapshots")
+      .select("ts, exchange, symbol, spot_bid, spot_ask")
+      .gte("ts", since)
+      .in("exchange", exchangeUniverse)
+      .order("ts", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const rows = (page ?? []) as SnapshotRow[];
+    data.push(...rows);
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
   }
 
   const bucketsBySymbol = new Map<string, Map<string, Map<string, Quote>>>();
-  for (const row of (data ?? []) as SnapshotRow[]) {
+  for (const row of data) {
     const canonical = rawToCanonical.get(`${row.exchange}:${row.symbol}`);
     if (!canonical) continue;
     if (
