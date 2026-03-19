@@ -9,8 +9,8 @@ const MAX_SNAPSHOT_AGE_SECONDS = 40 * 60;
 const MAX_SNAPSHOT_SKEW_SECONDS = 20;
 const MIN_HISTORY_POINTS = 8;
 const MIN_CURRENT_GROSS_BPS = 6;
-const MIN_Z_SCORE = 1.25;
-const MIN_EXPECTED_NET_BPS = 1.5;
+const MIN_Z_SCORE = 1.5;
+const MIN_EXPECTED_NET_BPS = 0.1;
 const ROUNDTRIP_COSTS_BPS = 11;
 const MAX_NEAR_MISS_SAMPLES = 5;
 
@@ -387,6 +387,7 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
             target_exit_gross_bps: Number(targetExitGrossBps.toFixed(4)),
             stop_loss_gross_bps: Number(stopLossGrossBps.toFixed(4)),
             expected_net_bps: Number(expectedNetBps.toFixed(4)),
+            entry_net_threshold_bps: MIN_EXPECTED_NET_BPS,
             roundtrip_costs_bps: ROUNDTRIP_COSTS_BPS,
             history_points: history.length,
             strategy_family: "snapshot_mean_reversion"
