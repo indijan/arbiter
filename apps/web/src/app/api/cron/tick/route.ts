@@ -5,6 +5,7 @@ import { ingestCoinbase } from "@/server/jobs/ingestCoinbase";
 import { ingestKraken } from "@/server/jobs/ingestKraken";
 import { detectCarry } from "@/server/jobs/detectCarry";
 import { detectCrossExchangeSpot } from "@/server/jobs/detectCrossExchangeSpot";
+import { detectSpreadReversion } from "@/server/jobs/detectSpreadReversion";
 import { detectTriangular } from "@/server/jobs/detectTriangular";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { computeDailyPnl } from "@/server/jobs/computeDailyPnl";
@@ -150,6 +151,7 @@ async function handleTick(request: Request) {
     detectCarry({ holding_hours: body?.holding_hours })
   );
   const crossResult = await runJob(() => detectCrossExchangeSpot());
+  const spreadReversionResult = await runJob(() => detectSpreadReversion());
   const triResult = await runJob(() => detectTriangular());
   const autoResult = await runJob(() => autoExecutePaper());
   const closeResult = await runJob(() => autoClosePaper());
@@ -189,6 +191,7 @@ async function handleTick(request: Request) {
   const jobErrors: string[] = [];
   if (!carryResult.ok) jobErrors.push(`detect_carry_failed: ${carryResult.error}`);
   if (!crossResult.ok) jobErrors.push(`detect_xarb_failed: ${crossResult.error}`);
+  if (!spreadReversionResult.ok) jobErrors.push(`detect_spread_reversion_failed: ${spreadReversionResult.error}`);
   if (!triResult.ok) jobErrors.push(`detect_tri_failed: ${triResult.error}`);
   if (!autoResult.ok) jobErrors.push(`auto_execute_failed: ${autoResult.error}`);
   if (!closeResult.ok) jobErrors.push(`auto_close_failed: ${closeResult.error}`);
@@ -228,6 +231,14 @@ async function handleTick(request: Request) {
               skip_reasons: crossResult.data.skip_reasons
             }
           : { inserted: 0, skipped: 0 },
+        spread_reversion: spreadReversionResult.ok
+          ? {
+              inserted: spreadReversionResult.data.inserted,
+              skipped: spreadReversionResult.data.skipped,
+              skip_reasons: spreadReversionResult.data.skip_reasons,
+              near_miss_samples: spreadReversionResult.data.near_miss_samples
+            }
+          : { inserted: 0, skipped: 0, near_miss_samples: [] },
         tri_arb: triResult.ok
           ? {
               inserted: triResult.data.inserted,
@@ -316,6 +327,14 @@ async function handleTick(request: Request) {
             skip_reasons: crossResult.data.skip_reasons
           }
         : { inserted: 0, skipped: 0, error: crossResult.error },
+      spread_reversion: spreadReversionResult.ok
+        ? {
+            inserted: spreadReversionResult.data.inserted,
+            skipped: spreadReversionResult.data.skipped,
+            skip_reasons: spreadReversionResult.data.skip_reasons,
+            near_miss_samples: spreadReversionResult.data.near_miss_samples
+          }
+        : { inserted: 0, skipped: 0, near_miss_samples: [], error: spreadReversionResult.error },
       tri_arb: triResult.ok
         ? {
             inserted: triResult.data.inserted,

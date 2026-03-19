@@ -11,6 +11,7 @@ type PnlRow = {
 const STRATEGY_MAP: Record<string, string> = {
   spot_perp_carry: "carry_spot_perp",
   xarb_spot: "xarb_spot",
+  spread_reversion: "spread_reversion",
   tri_arb: "tri_arb"
 };
 
@@ -94,7 +95,7 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
   const xarbPairs = new Map<string, { exchange: string; symbol: string }>();
   for (const position of positions ?? []) {
     const meta = (position.meta ?? {}) as Record<string, unknown>;
-    if (meta.type === "xarb_spot") {
+    if (meta.type === "xarb_spot" || meta.type === "spread_reversion") {
       const buyExchange = String(meta.buy_exchange ?? "");
       const sellExchange = String(meta.sell_exchange ?? "");
       const buySymbol = String(meta.buy_symbol ?? "");
@@ -198,7 +199,10 @@ export async function computeDailyPnl(): Promise<PnlRow[]> {
       const perp_pnl = perp_qty * (perp_mid - entry_perp_price);
       const fee_total = feeMap.get(position.id) ?? 0;
       total_pnl = spot_pnl + perp_pnl - fee_total;
-    } else if (position.status === "open" && opp.type === "xarb_spot") {
+    } else if (
+      position.status === "open" &&
+      (opp.type === "xarb_spot" || opp.type === "spread_reversion")
+    ) {
       const meta = (position.meta ?? {}) as Record<string, unknown>;
       const buyExchange = String(meta.buy_exchange ?? "");
       const sellExchange = String(meta.sell_exchange ?? "");

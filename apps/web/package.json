@@ -10,7 +10,9 @@
     "lint": "next lint",
     "replay:xarb": "node ./scripts/replay-xarb.mjs",
     "replay:xarb-maker": "node ./scripts/replay-xarb-maker.mjs",
+    "replay:spread-reversion": "node ./scripts/replay-spread-reversion.mjs",
     "export:xarb": "node ./scripts/export-xarb-snapshots.mjs",
+    "export:spread-reversion": "node ./scripts/export-xarb-snapshots.mjs",
     "replay:carry": "node ./scripts/replay-carry.mjs",
     "export:carry": "node ./scripts/export-carry-snapshots.mjs"
   },

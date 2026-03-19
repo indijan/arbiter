@@ -86,6 +86,7 @@ const SEVERE_LOSS_BLOCK_USD = -10;
 const STRATEGY_RISK_WEIGHT: Record<string, number> = {
   spot_perp_carry: 0,
   xarb_spot: 1,
+  spread_reversion: 1,
   tri_arb: 2
 };
 
@@ -96,6 +97,10 @@ const MAKER_ASSISTED_XARB_TAKER_SLIPPAGE_BPS = 1;
 const MAKER_ASSISTED_XARB_INVENTORY_BUFFER_BPS = 1.5;
 const ONLINE_MAKER_XARB_LOOKBACK_MINUTES = 30;
 const ONLINE_MAKER_XARB_MIN_HITS = 2;
+const SPREAD_REVERSION_TOTAL_COSTS_BPS = 11;
+const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 1.5;
+const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
+const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
 
 const CANONICAL_MAP: Record<
   string,
@@ -1181,6 +1186,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         markPrefilter("tri_arb_disabled");
         return false;
       }
+      if (typed.type === "xarb_spot") {
+        markPrefilter("xarb_auto_open_disabled");
+        return false;
+      }
       if (typed.type === "xarb_spot" && blockedSymbolSet.has(typed.symbol)) {
         markPrefilter("blocked_symbol");
         return false;
@@ -1194,7 +1203,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         ? Math.max(24, xarbMaxSignalAgeHours)
         : Math.min(xarbMaxSignalAgeHours, 2);
 
-      if (netEdge < effectiveMinNetEdgeBps) {
+      const typeMinNetEdge =
+        typed.type === "spread_reversion"
+          ? SPREAD_REVERSION_MIN_NET_EDGE_BPS
+          : effectiveMinNetEdgeBps;
+      if (netEdge < typeMinNetEdge) {
         markPrefilter("below_min_net_edge");
         return false;
       }
@@ -1203,6 +1216,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           ? relaxedXarbPrefilter
             ? 0.42
             : Math.max(0.54, minConfidence - 0.08)
+          : typed.type === "spread_reversion"
+            ? SPREAD_REVERSION_MIN_CONFIDENCE
           : typed.type === "tri_arb"
             ? Math.max(0.54, minConfidence - 0.08)
             : minConfidence;
@@ -1231,6 +1246,13 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
         if (!Number.isFinite(ageHours) || ageHours > effectiveXarbMaxSignalAgeHours) {
           markPrefilter("stale_xarb_signal");
+          return false;
+        }
+      }
+      if (typed.type === "spread_reversion") {
+        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
+        if (!Number.isFinite(ageHours) || ageHours > SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS) {
+          markPrefilter("stale_spread_reversion_signal");
           return false;
         }
       }
@@ -1549,6 +1571,191 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             side: "sell",
             price: snapshot.perp_bid,
             fill_price: perpFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        }
+      ];
+
+      const { error: executionError } = await adminSupabase
+        .from("executions")
+        .insert(executionsPayload);
+
+      if (executionError) {
+        throw new Error(executionError.message);
+      }
+
+      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
+      const { error: reserveError } = await adminSupabase
+        .from("paper_accounts")
+        .update({
+          reserved_usd: reservedCurrent,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", account.id);
+
+      if (reserveError) {
+        throw new Error(reserveError.message);
+      }
+
+      available = Number((available - notional_usd).toFixed(2));
+      created += 1;
+      if (decisionRow?.id) {
+        await adminSupabase
+          .from("opportunity_decisions")
+          .update({ chosen: true, position_id: position.id })
+          .eq("id", decisionRow.id);
+      }
+      continue;
+    }
+
+    if (opp.type === "spread_reversion") {
+      const details = opp.details ?? {};
+      const buyExchange = String((details as Record<string, unknown>).buy_exchange ?? "");
+      const sellExchange = String((details as Record<string, unknown>).sell_exchange ?? "");
+      const buySymbol = String((details as Record<string, unknown>).buy_symbol ?? "");
+      const sellSymbol = String((details as Record<string, unknown>).sell_symbol ?? "");
+      const targetExitGrossBps = Number(
+        (details as Record<string, unknown>).target_exit_gross_bps ?? NaN
+      );
+      const stopLossGrossBps = Number(
+        (details as Record<string, unknown>).stop_loss_gross_bps ?? NaN
+      );
+      const entryThresholdBps = Math.max(
+        SPREAD_REVERSION_MIN_NET_EDGE_BPS,
+        Number((details as Record<string, unknown>).entry_net_threshold_bps ?? SPREAD_REVERSION_MIN_NET_EDGE_BPS)
+      );
+
+      if (
+        !buyExchange ||
+        !sellExchange ||
+        !buySymbol ||
+        !sellSymbol ||
+        !Number.isFinite(targetExitGrossBps)
+      ) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "missing_reversion_details" });
+        continue;
+      }
+
+      let buyQuote: { bid: number; ask: number };
+      let sellQuote: { bid: number; ask: number };
+
+      try {
+        [buyQuote, sellQuote] = await Promise.all([
+          fetchSpotTicker(buyExchange, buySymbol),
+          fetchSpotTicker(sellExchange, sellSymbol)
+        ]);
+      } catch (err) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_price_error" });
+        continue;
+      }
+
+      const liveGrossSpreadBps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
+      const liveExpectedNetBps =
+        liveGrossSpreadBps - targetExitGrossBps - SPREAD_REVERSION_TOTAL_COSTS_BPS;
+
+      if (liveExpectedNetBps < entryThresholdBps) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "live_reversion_edge_below_threshold" });
+        continue;
+      }
+
+      if (notional_usd > available) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "insufficient_balance" });
+        continue;
+      }
+
+      const buyFill = paperFill({
+        side: "buy",
+        price: buyQuote.ask,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const sellFill = paperFill({
+        side: "sell",
+        price: sellQuote.bid,
+        notional_usd,
+        slippage_bps: SLIPPAGE_BPS,
+        fee_bps: FEE_BPS
+      });
+
+      const { data: position, error: positionError } = await adminSupabase
+        .from("positions")
+        .insert({
+          user_id: userId,
+          opportunity_id: opp.id,
+          symbol: opp.symbol,
+          mode: "paper",
+          status: "open",
+          entry_spot_price: buyFill.fill_price,
+          entry_perp_price: sellFill.fill_price,
+          spot_qty: buyFill.qty,
+          perp_qty: -sellFill.qty,
+          meta: {
+            opportunity_id: opp.id,
+            type: "spread_reversion",
+            buy_exchange: buyExchange,
+            sell_exchange: sellExchange,
+            buy_symbol: buySymbol,
+            sell_symbol: sellSymbol,
+            buy_entry_price: buyFill.fill_price,
+            sell_entry_price: sellFill.fill_price,
+            buy_qty: buyFill.qty,
+            sell_qty: sellFill.qty,
+            fee_bps: FEE_BPS,
+            slippage_bps: SLIPPAGE_BPS,
+            roundtrip_costs_bps: SPREAD_REVERSION_TOTAL_COSTS_BPS,
+            target_exit_gross_bps: Number(targetExitGrossBps.toFixed(4)),
+            stop_loss_gross_bps: Number(stopLossGrossBps.toFixed(4)),
+            entry_gross_spread_bps: Number(liveGrossSpreadBps.toFixed(4)),
+            entry_expected_net_bps: Number(liveExpectedNetBps.toFixed(4)),
+            notional_usd,
+            notional_reason: derived.reason,
+            auto_execute: true,
+            spread_reversion_open: true
+          }
+        })
+        .select("id")
+        .single();
+
+      if (positionError || !position) {
+        throw new Error(positionError?.message ?? "Failed to create paper position");
+      }
+
+      const executionsPayload = [
+        {
+          position_id: position.id,
+          leg: "spot_buy",
+          requested_qty: buyFill.qty,
+          filled_qty: buyFill.qty,
+          avg_price: buyFill.fill_price,
+          fee: buyFill.fee_usd,
+          raw: {
+            side: "buy",
+            price: buyQuote.ask,
+            fill_price: buyFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd
+          }
+        },
+        {
+          position_id: position.id,
+          leg: "spot_sell",
+          requested_qty: sellFill.qty,
+          filled_qty: sellFill.qty,
+          avg_price: sellFill.fill_price,
+          fee: sellFill.fee_usd,
+          raw: {
+            side: "sell",
+            price: sellQuote.bid,
+            fill_price: sellFill.fill_price,
             slippage_bps: SLIPPAGE_BPS,
             fee_bps: FEE_BPS,
             notional_usd

@@ -5,6 +5,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 const STRATEGY_LABELS: Record<string, string> = {
   carry_spot_perp: "Carry (spot-perp)",
   xarb_spot: "Cross-exchange spot",
+  spread_reversion: "Spread mean reversion",
   tri_arb: "Triangular arb"
 };
 

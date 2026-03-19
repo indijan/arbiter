@@ -94,6 +94,11 @@ export default async function SimpleDashboardPage() {
                   const buy = details.buy_exchange as string | undefined;
                   const sell = details.sell_exchange as string | undefined;
                   subtitle = `${signal.symbol} (${buy ?? "?"} → ${sell ?? "?"})`;
+                } else if (type === "spread_reversion") {
+                  title = "Spread mean reversion";
+                  const buy = details.buy_exchange as string | undefined;
+                  const sell = details.sell_exchange as string | undefined;
+                  subtitle = `${signal.symbol} (${buy ?? "?"} → ${sell ?? "?"})`;
                 } else if (type === "tri_arb") {
                   title = "Háromszög arbitrázs jel";
                   const path = (details.path as string) ?? signal.symbol;

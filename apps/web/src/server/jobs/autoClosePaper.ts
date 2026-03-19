@@ -11,9 +11,13 @@ const TP_PCT_CARRY = 0.008;
 const SL_PCT_CARRY = 0.006;
 const TP_PCT_XARB = 0.007;
 const SL_PCT_XARB = 0.005;
+const TP_PCT_SPREAD_REVERSION = 0.006;
+const SL_PCT_SPREAD_REVERSION = 0.005;
 
 const MIN_HOLD_SECONDS_CARRY = 4 * 60 * 60;
 const MIN_HOLD_SECONDS_XARB = 45 * 60;
+const MIN_HOLD_SECONDS_SPREAD_REVERSION = 30 * 60;
+const MAX_HOLD_SECONDS_SPREAD_REVERSION = 6 * 60 * 60;
 
 const HOLDING_HOURS = 24;
 
@@ -23,6 +27,7 @@ const COSTS_BPS_XARB = {
   transfer_buffer_bps: 0
 };
 const XARB_EDGE_FORCE_CLOSE_BPS = -1.2;
+const SPREAD_REVERSION_DEFAULT_COSTS_BPS = 11;
 
 const KRAKEN_PAIR_MAP: Record<string, string> = {
   BTCUSD: "XXBTZUSD",
@@ -548,7 +553,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
       continue;
     }
 
-    if (opp.type === "xarb_spot") {
+    if (opp.type === "xarb_spot" || opp.type === "spread_reversion") {
       const buyExchange = String(meta.buy_exchange ?? "");
       const sellExchange = String(meta.sell_exchange ?? "");
       const buySymbol = String(meta.buy_symbol ?? "");
@@ -584,18 +589,37 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const unrealized = buyPnl + sellPnl;
 
       const gross_edge_bps = ((sellQuote.bid - buyQuote.ask) / buyQuote.ask) * 10000;
-      const costs_bps =
-        COSTS_BPS_XARB.fee_bps_total +
-        COSTS_BPS_XARB.slippage_bps_total +
-        COSTS_BPS_XARB.transfer_buffer_bps;
+      const isSpreadReversion = opp.type === "spread_reversion";
+      const costs_bps = isSpreadReversion
+        ? Number(meta.roundtrip_costs_bps ?? SPREAD_REVERSION_DEFAULT_COSTS_BPS)
+        : COSTS_BPS_XARB.fee_bps_total +
+          COSTS_BPS_XARB.slippage_bps_total +
+          COSTS_BPS_XARB.transfer_buffer_bps;
       const net_edge_bps = gross_edge_bps - costs_bps;
 
-      const agedEnough = xarbAgeSec !== null && xarbAgeSec >= MIN_HOLD_SECONDS_XARB;
+      const agedEnough =
+        xarbAgeSec !== null &&
+        xarbAgeSec >= (isSpreadReversion ? MIN_HOLD_SECONDS_SPREAD_REVERSION : MIN_HOLD_SECONDS_XARB);
+      const targetExitGrossBps = Number(meta.target_exit_gross_bps ?? NaN);
+      const stopLossGrossBps = Number(meta.stop_loss_gross_bps ?? NaN);
+      const timedOut =
+        isSpreadReversion &&
+        xarbAgeSec !== null &&
+        xarbAgeSec >= MAX_HOLD_SECONDS_SPREAD_REVERSION;
       const shouldClose =
         agedEnough &&
         (
-          shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_XARB, SL_PCT_XARB) ||
-          net_edge_bps < XARB_EDGE_FORCE_CLOSE_BPS
+          shouldCloseByPnlWithThresholds(
+            unrealized,
+            notionalUsd,
+            isSpreadReversion ? TP_PCT_SPREAD_REVERSION : TP_PCT_XARB,
+            isSpreadReversion ? SL_PCT_SPREAD_REVERSION : SL_PCT_XARB
+          ) ||
+          (isSpreadReversion &&
+            ((Number.isFinite(targetExitGrossBps) && gross_edge_bps <= targetExitGrossBps) ||
+              (Number.isFinite(stopLossGrossBps) && gross_edge_bps >= stopLossGrossBps) ||
+              timedOut)) ||
+          (!isSpreadReversion && net_edge_bps < XARB_EDGE_FORCE_CLOSE_BPS)
         );
 
       if (!shouldClose) {
