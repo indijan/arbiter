@@ -13,15 +13,11 @@ const TP_PCT_XARB = 0.007;
 const SL_PCT_XARB = 0.005;
 const TP_PCT_SPREAD_REVERSION = 0.006;
 const SL_PCT_SPREAD_REVERSION = 0.005;
-const TP_PCT_RELATIVE_STRENGTH = 0.012;
-const SL_PCT_RELATIVE_STRENGTH = 0.008;
-
 const MIN_HOLD_SECONDS_CARRY = 4 * 60 * 60;
 const MIN_HOLD_SECONDS_XARB = 45 * 60;
 const MIN_HOLD_SECONDS_SPREAD_REVERSION = 30 * 60;
 const MAX_HOLD_SECONDS_SPREAD_REVERSION = 6 * 60 * 60;
-const MIN_HOLD_SECONDS_RELATIVE_STRENGTH = 2 * 60 * 60;
-const MAX_HOLD_SECONDS_RELATIVE_STRENGTH = 6 * 60 * 60;
+const FIXED_HOLD_SECONDS_RELATIVE_STRENGTH = 4 * 60 * 60;
 
 const HOLDING_HOURS = 24;
 
@@ -580,11 +576,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const unrealized =
         direction === "long" ? qty * (mark - entryPrice) : qty * (entryPrice - mark);
       const ageSec = secondsSince(position.entry_ts ?? null);
-      const shouldClose =
-        ageSec !== null &&
-        ageSec >= MIN_HOLD_SECONDS_RELATIVE_STRENGTH &&
-        (shouldCloseByPnlWithThresholds(unrealized, notionalUsd, TP_PCT_RELATIVE_STRENGTH, SL_PCT_RELATIVE_STRENGTH) ||
-          ageSec >= MAX_HOLD_SECONDS_RELATIVE_STRENGTH);
+      const shouldClose = ageSec !== null && ageSec >= FIXED_HOLD_SECONDS_RELATIVE_STRENGTH;
 
       if (!shouldClose) {
         skipped += 1;
