@@ -103,6 +103,11 @@ const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 0.1;
 const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["BCHUSD", "ETHUSD", "XRPUSD"]);
+const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
+  ETHUSD: "long",
+  BCHUSD: "short",
+  XRPUSD: "short"
+};
 
 const CANONICAL_MAP: Record<
   string,
@@ -1831,6 +1836,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (!RELATIVE_STRENGTH_ALLOWLIST.has(symbol)) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_symbol_blocked" });
+        continue;
+      }
+      if (RELATIVE_STRENGTH_DIRECTION_RULES[symbol] && RELATIVE_STRENGTH_DIRECTION_RULES[symbol] !== direction) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_direction_blocked" });
         continue;
       }
 

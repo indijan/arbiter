@@ -8,6 +8,11 @@ const EXCHANGE = "coinbase";
 const SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD", "LINKUSD", "AVAXUSD", "LTCUSD", "DOTUSD", "BCHUSD"];
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["BCHUSD", "ETHUSD", "XRPUSD"]);
 const RELATIVE_STRENGTH_DENYLIST = new Set(["LTCUSD", "DOTUSD"]);
+const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
+  ETHUSD: "long",
+  BCHUSD: "short",
+  XRPUSD: "short"
+};
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
 const MIN_ENTRY_SPREAD_BPS = 80;
@@ -149,7 +154,14 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const candidates = [...ranked.slice(0, 1), ...ranked.slice(-1)].slice(0, MAX_SIGNALS);
   for (const row of candidates) {
     const absSpread = Math.abs(row.spreadBps);
+    const direction = row.spreadBps > 0 ? "short" : "long";
+    const requiredDirection = RELATIVE_STRENGTH_DIRECTION_RULES[row.symbol];
     const meanRevertingNow = Math.abs(row.momentum2hBps) <= MAX_EXIT_SPREAD_BPS;
+    if (requiredDirection && direction !== requiredDirection) {
+      skipped += 1;
+      skip_reasons.direction_blocked = (skip_reasons.direction_blocked ?? 0) + 1;
+      continue;
+    }
     if (absSpread < MIN_ENTRY_SPREAD_BPS) {
       skipped += 1;
       skip_reasons.below_threshold = (skip_reasons.below_threshold ?? 0) + 1;
@@ -184,7 +196,6 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
       continue;
     }
 
-    const direction = row.spreadBps > 0 ? "short" : "long";
     const { error: insertError } = await adminSupabase.from("opportunities").insert({
       ts: latestHour,
       exchange: EXCHANGE,

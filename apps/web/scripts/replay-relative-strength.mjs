@@ -9,7 +9,12 @@ const CONFIG = {
   exitThresholdBps: 25,
   notionalUsd: 100,
   allowlist: new Set(["BCHUSD", "ETHUSD", "XRPUSD"]),
-  denylist: new Set(["LTCUSD", "DOTUSD"])
+  denylist: new Set(["LTCUSD", "DOTUSD"]),
+  directionRules: {
+    ETHUSD: "long",
+    BCHUSD: "short",
+    XRPUSD: "short"
+  }
 };
 
 function parseArgs(argv) {
@@ -80,20 +85,22 @@ function simulate(snapshots) {
       .sort((a, b) => Math.abs(b.spread) - Math.abs(a.spread));
     const candidate = ranked[0];
     if (!candidate || Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
+    const direction = candidate.spread > 0 ? "short" : "long";
+    if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
     const exitHour = byHour.get(hours[i + CONFIG.holdHours]);
     if (!exitHour) continue;
     const exitPrice = exitHour.get(candidate.symbol);
     if (!exitPrice) continue;
     const qty = CONFIG.notionalUsd / candidate.current;
     const pnl =
-      candidate.spread > 0
+      direction === "short"
         ? qty * (candidate.current - exitPrice)
         : qty * (exitPrice - candidate.current);
     opens.push({
       opened_at: hours[i],
       closed_at: hours[i + CONFIG.holdHours],
       symbol: candidate.symbol,
-      direction: candidate.spread > 0 ? "short" : "long",
+      direction,
       spread_bps: Number(candidate.spread.toFixed(4)),
       pnl_usd: Number(pnl.toFixed(4))
     });
