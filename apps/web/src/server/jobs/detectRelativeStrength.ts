@@ -15,7 +15,7 @@ const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
 };
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
-const MIN_ENTRY_SPREAD_BPS = 80;
+const MIN_ENTRY_SPREAD_BPS = 50;
 const MAX_EXIT_SPREAD_BPS = 25;
 const MIN_CONFIDENCE = 0.58;
 const MAX_SIGNALS = 2;

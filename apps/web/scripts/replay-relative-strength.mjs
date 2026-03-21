@@ -5,7 +5,7 @@ const CONFIG = {
   exchange: "coinbase",
   entryLookbackHours: 6,
   holdHours: 4,
-  entryThresholdBps: 80,
+  entryThresholdBps: 50,
   exitThresholdBps: 25,
   notionalUsd: 100,
   allowlist: new Set(["BCHUSD", "ETHUSD", "XRPUSD"]),
