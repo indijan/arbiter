@@ -8,12 +8,14 @@ const CONFIG = {
   entryThresholdBps: 50,
   exitThresholdBps: 25,
   notionalUsd: 100,
-  allowlist: new Set(["BCHUSD", "ETHUSD", "XRPUSD"]),
-  denylist: new Set(["LTCUSD", "DOTUSD"]),
+  allowlist: new Set(["ETHUSD", "XRPUSD"]),
+  denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
   directionRules: {
     ETHUSD: "long",
-    BCHUSD: "short",
     XRPUSD: "short"
+  },
+  btcFilters: {
+    XRPUSD: "btc_neg"
   }
 };
 
@@ -80,6 +82,7 @@ function simulate(snapshots) {
     const tradableRows = allRows.filter((row) => CONFIG.allowlist.has(row.symbol) && !CONFIG.denylist.has(row.symbol));
     if (tradableRows.length === 0) continue;
     const basketMean = median(allRows.map((r) => r.momentum));
+    const btcRow = allRows.find((r) => r.symbol === "BTCUSD");
     const ranked = tradableRows
       .map((r) => ({ ...r, spread: r.momentum - basketMean }))
       .sort((a, b) => Math.abs(b.spread) - Math.abs(a.spread));
@@ -87,6 +90,8 @@ function simulate(snapshots) {
     if (!candidate || Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
     const direction = candidate.spread > 0 ? "short" : "long";
     if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
+    if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
+    if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
     const exitHour = byHour.get(hours[i + CONFIG.holdHours]);
     if (!exitHour) continue;
     const exitPrice = exitHour.get(candidate.symbol);

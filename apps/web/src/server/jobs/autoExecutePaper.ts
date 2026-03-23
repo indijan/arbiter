@@ -102,11 +102,13 @@ const SPREAD_REVERSION_TOTAL_COSTS_BPS = 11;
 const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 0.1;
 const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
-const RELATIVE_STRENGTH_ALLOWLIST = new Set(["BCHUSD", "ETHUSD", "XRPUSD"]);
+const RELATIVE_STRENGTH_ALLOWLIST = new Set(["ETHUSD", "XRPUSD"]);
 const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
   ETHUSD: "long",
-  BCHUSD: "short",
   XRPUSD: "short"
+};
+const RELATIVE_STRENGTH_BTC_FILTERS: Partial<Record<keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES, "btc_pos" | "btc_neg">> = {
+  XRPUSD: "btc_neg"
 };
 
 const CANONICAL_MAP: Record<
@@ -1841,6 +1843,18 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (RELATIVE_STRENGTH_DIRECTION_RULES[symbol] && RELATIVE_STRENGTH_DIRECTION_RULES[symbol] !== direction) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_direction_blocked" });
+        continue;
+      }
+      const btcMomentum6hBps = Number((details as Record<string, unknown>).btc_momentum_6h_bps ?? NaN);
+      const btcFilter = RELATIVE_STRENGTH_BTC_FILTERS[symbol as keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES];
+      if (btcFilter === "btc_neg" && !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps < 0)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_btc_filter_blocked" });
+        continue;
+      }
+      if (btcFilter === "btc_pos" && !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps > 0)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_btc_filter_blocked" });
         continue;
       }
 

@@ -6,12 +6,14 @@ const LOOKBACK_HOURS = 24;
 const IDEMPOTENT_MINUTES = 10;
 const EXCHANGE = "coinbase";
 const SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD", "LINKUSD", "AVAXUSD", "LTCUSD", "DOTUSD", "BCHUSD"];
-const RELATIVE_STRENGTH_ALLOWLIST = new Set(["BCHUSD", "ETHUSD", "XRPUSD"]);
-const RELATIVE_STRENGTH_DENYLIST = new Set(["LTCUSD", "DOTUSD"]);
+const RELATIVE_STRENGTH_ALLOWLIST = new Set(["ETHUSD", "XRPUSD"]);
+const RELATIVE_STRENGTH_DENYLIST = new Set(["LTCUSD", "DOTUSD", "BCHUSD"]);
 const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
   ETHUSD: "long",
-  BCHUSD: "short",
   XRPUSD: "short"
+};
+const RELATIVE_STRENGTH_BTC_FILTERS: Partial<Record<keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES, "btc_pos" | "btc_neg">> = {
+  XRPUSD: "btc_neg"
 };
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
@@ -133,6 +135,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const tradableRows = momentumRows.filter(
     (row) => RELATIVE_STRENGTH_ALLOWLIST.has(row.symbol) && !RELATIVE_STRENGTH_DENYLIST.has(row.symbol)
   );
+  const btcRow = momentumRows.find((row) => row.symbol === "BTCUSD");
   const basketMean = momentumRows.length > 0 ? median(momentumRows.map((row) => row.momentum6hBps)) : 0;
   if (tradableRows.length === 0) {
     return {
@@ -156,10 +159,27 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     const absSpread = Math.abs(row.spreadBps);
     const direction = row.spreadBps > 0 ? "short" : "long";
     const requiredDirection = RELATIVE_STRENGTH_DIRECTION_RULES[row.symbol];
+    const btcFilter = RELATIVE_STRENGTH_BTC_FILTERS[row.symbol as keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES];
     const meanRevertingNow = Math.abs(row.momentum2hBps) <= MAX_EXIT_SPREAD_BPS;
     if (requiredDirection && direction !== requiredDirection) {
       skipped += 1;
       skip_reasons.direction_blocked = (skip_reasons.direction_blocked ?? 0) + 1;
+      continue;
+    }
+    if (
+      btcFilter === "btc_neg" &&
+      !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps < 0)
+    ) {
+      skipped += 1;
+      skip_reasons.btc_filter_blocked = (skip_reasons.btc_filter_blocked ?? 0) + 1;
+      continue;
+    }
+    if (
+      btcFilter === "btc_pos" &&
+      !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps > 0)
+    ) {
+      skipped += 1;
+      skip_reasons.btc_filter_blocked = (skip_reasons.btc_filter_blocked ?? 0) + 1;
       continue;
     }
     if (absSpread < MIN_ENTRY_SPREAD_BPS) {
@@ -210,6 +230,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         direction,
         momentum_6h_bps: Number(row.momentum6hBps.toFixed(4)),
         momentum_2h_bps: Number(row.momentum2hBps.toFixed(4)),
+        btc_momentum_6h_bps: btcRow ? Number(btcRow.momentum6hBps.toFixed(4)) : null,
         basket_mean_bps: Number(basketMean.toFixed(4)),
         spread_bps: Number(row.spreadBps.toFixed(4)),
         entry_threshold_bps: MIN_ENTRY_SPREAD_BPS,
