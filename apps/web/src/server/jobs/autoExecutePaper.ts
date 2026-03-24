@@ -1909,6 +1909,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             auto_execute: true,
             relative_strength_open: true,
             momentum_6h_bps: details.momentum_6h_bps,
+            btc_momentum_6h_bps: details.btc_momentum_6h_bps,
             spread_bps: details.spread_bps,
             exit_threshold_bps: details.exit_threshold_bps
           }
