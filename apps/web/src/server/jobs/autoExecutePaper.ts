@@ -110,6 +110,8 @@ const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
 const RELATIVE_STRENGTH_BTC_FILTERS: Partial<Record<keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES, "btc_pos" | "btc_neg">> = {
   XRPUSD: "btc_neg"
 };
+const ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS = -100;
+const ETH_LONG_MIN_SPREAD_BPS = -80;
 
 const CANONICAL_MAP: Record<
   string,
@@ -1857,6 +1859,19 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_btc_filter_blocked" });
         continue;
       }
+      const spreadBps = Number((details as Record<string, unknown>).spread_bps ?? NaN);
+      if (
+        symbol === "ETHUSD" &&
+        direction === "long" &&
+        (
+          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps < ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS) ||
+          !(Number.isFinite(spreadBps) && spreadBps >= ETH_LONG_MIN_SPREAD_BPS)
+        )
+      ) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_eth_long_filter_blocked" });
+        continue;
+      }
 
       let quote: { bid: number; ask: number };
       try {
@@ -1911,6 +1926,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             momentum_6h_bps: details.momentum_6h_bps,
             btc_momentum_6h_bps: details.btc_momentum_6h_bps,
             spread_bps: details.spread_bps,
+            eth_long_min_btc_momentum_6h_bps: symbol === "ETHUSD" ? ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS : null,
+            eth_long_min_spread_bps: symbol === "ETHUSD" ? ETH_LONG_MIN_SPREAD_BPS : null,
             exit_threshold_bps: details.exit_threshold_bps
           }
         })

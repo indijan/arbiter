@@ -16,7 +16,9 @@ const CONFIG = {
   },
   btcFilters: {
     XRPUSD: "btc_neg"
-  }
+  },
+  ethLongMinBtcMomentum6hBps: -100,
+  ethLongMinSpreadBps: -80
 };
 
 function parseArgs(argv) {
@@ -92,6 +94,16 @@ function simulate(snapshots) {
     if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
     if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
     if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
+    if (
+      candidate.symbol === "ETHUSD" &&
+      direction === "long" &&
+      (
+        !(btcRow && btcRow.momentum < CONFIG.ethLongMinBtcMomentum6hBps) ||
+        candidate.spread < CONFIG.ethLongMinSpreadBps
+      )
+    ) {
+      continue;
+    }
     const exitHour = byHour.get(hours[i + CONFIG.holdHours]);
     if (!exitHour) continue;
     const exitPrice = exitHour.get(candidate.symbol);

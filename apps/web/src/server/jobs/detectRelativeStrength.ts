@@ -15,6 +15,8 @@ const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
 const RELATIVE_STRENGTH_BTC_FILTERS: Partial<Record<keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES, "btc_pos" | "btc_neg">> = {
   XRPUSD: "btc_neg"
 };
+const ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS = -100;
+const ETH_LONG_MIN_SPREAD_BPS = -80;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
 const MIN_ENTRY_SPREAD_BPS = 50;
@@ -182,6 +184,18 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
       skip_reasons.btc_filter_blocked = (skip_reasons.btc_filter_blocked ?? 0) + 1;
       continue;
     }
+    if (
+      row.symbol === "ETHUSD" &&
+      direction === "long" &&
+      (
+        !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps < ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS) ||
+        row.spreadBps < ETH_LONG_MIN_SPREAD_BPS
+      )
+    ) {
+      skipped += 1;
+      skip_reasons.eth_long_filter_blocked = (skip_reasons.eth_long_filter_blocked ?? 0) + 1;
+      continue;
+    }
     if (absSpread < MIN_ENTRY_SPREAD_BPS) {
       skipped += 1;
       skip_reasons.below_threshold = (skip_reasons.below_threshold ?? 0) + 1;
@@ -235,6 +249,8 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         spread_bps: Number(row.spreadBps.toFixed(4)),
         entry_threshold_bps: MIN_ENTRY_SPREAD_BPS,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
+        eth_long_min_btc_momentum_6h_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS : null,
+        eth_long_min_spread_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_SPREAD_BPS : null,
         strategy_family: "snapshot_relative_strength"
       }
     });
