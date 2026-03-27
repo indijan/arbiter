@@ -12,6 +12,7 @@ import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { computeDailyPnl } from "@/server/jobs/computeDailyPnl";
 import { autoExecutePaper } from "@/server/jobs/autoExecutePaper";
 import { autoClosePaper } from "@/server/jobs/autoClosePaper";
+import { ingestCryptoNews, recordNewsReactions } from "@/server/jobs/newsShadow";
 
 type JobSuccess<T> = { ok: true; data: T };
 type JobFailure = { ok: false; error: string };
@@ -155,6 +156,8 @@ async function handleTick(request: Request) {
   const spreadReversionResult = await runJob(() => detectSpreadReversion());
   const relativeStrengthResult = await runJob(() => detectRelativeStrength());
   const triResult = await runJob(() => detectTriangular());
+  const newsIngestResult = await runJob(() => ingestCryptoNews());
+  const newsReactionResult = await runJob(() => recordNewsReactions());
   const autoResult = await runJob(() => autoExecutePaper());
   const closeResult = await runJob(() => autoClosePaper());
   const pnlRows = await runJob(() => computeDailyPnl());
@@ -196,6 +199,8 @@ async function handleTick(request: Request) {
   if (!spreadReversionResult.ok) jobErrors.push(`detect_spread_reversion_failed: ${spreadReversionResult.error}`);
   if (!relativeStrengthResult.ok) jobErrors.push(`detect_relative_strength_failed: ${relativeStrengthResult.error}`);
   if (!triResult.ok) jobErrors.push(`detect_tri_failed: ${triResult.error}`);
+  if (!newsIngestResult.ok) jobErrors.push(`news_ingest_failed: ${newsIngestResult.error}`);
+  if (!newsReactionResult.ok) jobErrors.push(`news_reactions_failed: ${newsReactionResult.error}`);
   if (!autoResult.ok) jobErrors.push(`auto_execute_failed: ${autoResult.error}`);
   if (!closeResult.ok) jobErrors.push(`auto_close_failed: ${closeResult.error}`);
   if (!pnlRows.ok) jobErrors.push(`compute_pnl_failed: ${pnlRows.error}`);
@@ -256,6 +261,14 @@ async function handleTick(request: Request) {
               skipped: triResult.data.skipped
             }
           : { inserted: 0, skipped: 0 },
+        news_shadow: {
+          ingest: newsIngestResult.ok
+            ? newsIngestResult.data
+            : { feeds_checked: 0, fetched_items: 0, inserted: 0, classified: 0, gated: 0, skipped_existing: 0, error: newsIngestResult.error },
+          reactions: newsReactionResult.ok
+            ? newsReactionResult.data
+            : { events_considered: 0, inserted: 0, skipped: 0, error: newsReactionResult.error }
+        },
         auto_execute: autoResult.ok
           ? {
               attempted: autoResult.data.attempted,
@@ -360,6 +373,14 @@ async function handleTick(request: Request) {
             skipped: triResult.data.skipped
           }
         : { inserted: 0, skipped: 0, error: triResult.error },
+      news_shadow: {
+        ingest: newsIngestResult.ok
+          ? newsIngestResult.data
+          : { feeds_checked: 0, fetched_items: 0, inserted: 0, classified: 0, gated: 0, skipped_existing: 0, error: newsIngestResult.error },
+        reactions: newsReactionResult.ok
+          ? newsReactionResult.data
+          : { events_considered: 0, inserted: 0, skipped: 0, error: newsReactionResult.error }
+      },
       auto_execute: autoResult.ok
         ? {
             attempted: autoResult.data.attempted,
