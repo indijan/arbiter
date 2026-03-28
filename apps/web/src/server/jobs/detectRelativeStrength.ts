@@ -6,17 +6,27 @@ const LOOKBACK_HOURS = 24;
 const IDEMPOTENT_MINUTES = 10;
 const EXCHANGE = "coinbase";
 const SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD", "LINKUSD", "AVAXUSD", "LTCUSD", "DOTUSD", "BCHUSD"];
-const RELATIVE_STRENGTH_ALLOWLIST = new Set(["ETHUSD", "XRPUSD"]);
+const RELATIVE_STRENGTH_ALLOWLIST = new Set(["ETHUSD", "XRPUSD", "AVAXUSD", "SOLUSD"]);
 const RELATIVE_STRENGTH_DENYLIST = new Set(["LTCUSD", "DOTUSD", "BCHUSD"]);
 const RELATIVE_STRENGTH_DIRECTION_RULES: Record<string, "long" | "short"> = {
   ETHUSD: "long",
-  XRPUSD: "short"
+  XRPUSD: "short",
+  AVAXUSD: "short",
+  SOLUSD: "long"
 };
 const RELATIVE_STRENGTH_BTC_FILTERS: Partial<Record<keyof typeof RELATIVE_STRENGTH_DIRECTION_RULES, "btc_pos" | "btc_neg">> = {
-  XRPUSD: "btc_neg"
+  XRPUSD: "btc_neg",
+  AVAXUSD: "btc_pos",
+  SOLUSD: "btc_neg"
 };
+const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -150;
 const ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS = -100;
 const ETH_LONG_MIN_SPREAD_BPS = -80;
+const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 150;
+const AVAX_SHORT_MIN_SPREAD_BPS = 60;
+const SOL_LONG_MAX_BTC_MOMENTUM_6H_BPS = -50;
+const SOL_LONG_MAX_SPREAD_BPS = -80;
+const SOL_LONG_MIN_ALT_MOMENTUM_6H_BPS = -150;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
 const MIN_ENTRY_SPREAD_BPS = 50;
@@ -185,6 +195,27 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
       continue;
     }
     if (
+      row.symbol === "XRPUSD" &&
+      direction === "short" &&
+      !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps < XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS)
+    ) {
+      skipped += 1;
+      skip_reasons.xrp_short_filter_blocked = (skip_reasons.xrp_short_filter_blocked ?? 0) + 1;
+      continue;
+    }
+    if (
+      row.symbol === "AVAXUSD" &&
+      direction === "short" &&
+      (
+        !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps >= AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS) ||
+        row.spreadBps < AVAX_SHORT_MIN_SPREAD_BPS
+      )
+    ) {
+      skipped += 1;
+      skip_reasons.avax_short_filter_blocked = (skip_reasons.avax_short_filter_blocked ?? 0) + 1;
+      continue;
+    }
+    if (
       row.symbol === "ETHUSD" &&
       direction === "long" &&
       (
@@ -194,6 +225,19 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     ) {
       skipped += 1;
       skip_reasons.eth_long_filter_blocked = (skip_reasons.eth_long_filter_blocked ?? 0) + 1;
+      continue;
+    }
+    if (
+      row.symbol === "SOLUSD" &&
+      direction === "long" &&
+      (
+        !(btcRow && Number.isFinite(btcRow.momentum6hBps) && btcRow.momentum6hBps <= SOL_LONG_MAX_BTC_MOMENTUM_6H_BPS) ||
+        !(Number.isFinite(row.spreadBps) && row.spreadBps <= SOL_LONG_MAX_SPREAD_BPS) ||
+        !(Number.isFinite(row.momentum6hBps) && row.momentum6hBps > SOL_LONG_MIN_ALT_MOMENTUM_6H_BPS)
+      )
+    ) {
+      skipped += 1;
+      skip_reasons.sol_long_filter_blocked = (skip_reasons.sol_long_filter_blocked ?? 0) + 1;
       continue;
     }
     if (absSpread < MIN_ENTRY_SPREAD_BPS) {
@@ -249,8 +293,24 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         spread_bps: Number(row.spreadBps.toFixed(4)),
         entry_threshold_bps: MIN_ENTRY_SPREAD_BPS,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
+        strategy_variant:
+          row.symbol === "XRPUSD"
+            ? "xrp_shadow_short_core"
+            : row.symbol === "AVAXUSD"
+              ? "avax_shadow_short_canary"
+              : row.symbol === "SOLUSD"
+                ? "sol_shadow_long_canary"
+              : row.symbol === "ETHUSD"
+                ? "eth_shadow_long"
+                : "relative_strength",
+        xrp_short_min_btc_momentum_6h_bps: row.symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
         eth_long_min_btc_momentum_6h_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS : null,
         eth_long_min_spread_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_SPREAD_BPS : null,
+        avax_short_min_btc_momentum_6h_bps: row.symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
+        avax_short_min_spread_bps: row.symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
+        sol_long_max_btc_momentum_6h_bps: row.symbol === "SOLUSD" ? SOL_LONG_MAX_BTC_MOMENTUM_6H_BPS : null,
+        sol_long_max_spread_bps: row.symbol === "SOLUSD" ? SOL_LONG_MAX_SPREAD_BPS : null,
+        sol_long_min_alt_momentum_6h_bps: row.symbol === "SOLUSD" ? SOL_LONG_MIN_ALT_MOMENTUM_6H_BPS : null,
         strategy_family: "snapshot_relative_strength"
       }
     });

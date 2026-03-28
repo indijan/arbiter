@@ -8,17 +8,27 @@ const CONFIG = {
   entryThresholdBps: 50,
   exitThresholdBps: 25,
   notionalUsd: 100,
-  allowlist: new Set(["ETHUSD", "XRPUSD"]),
+  allowlist: new Set(["ETHUSD", "XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
   directionRules: {
     ETHUSD: "long",
-    XRPUSD: "short"
+    XRPUSD: "short",
+    AVAXUSD: "short",
+    SOLUSD: "long"
   },
   btcFilters: {
-    XRPUSD: "btc_neg"
+    XRPUSD: "btc_neg",
+    AVAXUSD: "btc_pos",
+    SOLUSD: "btc_neg"
   },
+  xrpShortMinBtcMomentum6hBps: -150,
   ethLongMinBtcMomentum6hBps: -100,
-  ethLongMinSpreadBps: -80
+  ethLongMinSpreadBps: -80,
+  avaxShortMinBtcMomentum6hBps: 150,
+  avaxShortMinSpreadBps: 60,
+  solLongMaxBtcMomentum6hBps: -50,
+  solLongMaxSpreadBps: -80,
+  solLongMinAltMomentum6hBps: -150
 };
 
 function parseArgs(argv) {
@@ -95,11 +105,39 @@ function simulate(snapshots) {
     if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
     if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
     if (
+      candidate.symbol === "XRPUSD" &&
+      direction === "short" &&
+      !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps)
+    ) {
+      continue;
+    }
+    if (
       candidate.symbol === "ETHUSD" &&
       direction === "long" &&
       (
         !(btcRow && btcRow.momentum < CONFIG.ethLongMinBtcMomentum6hBps) ||
         candidate.spread < CONFIG.ethLongMinSpreadBps
+      )
+    ) {
+      continue;
+    }
+    if (
+      candidate.symbol === "AVAXUSD" &&
+      direction === "short" &&
+      (
+        !(btcRow && btcRow.momentum >= CONFIG.avaxShortMinBtcMomentum6hBps) ||
+        candidate.spread < CONFIG.avaxShortMinSpreadBps
+      )
+    ) {
+      continue;
+    }
+    if (
+      candidate.symbol === "SOLUSD" &&
+      direction === "long" &&
+      (
+        !(btcRow && btcRow.momentum <= CONFIG.solLongMaxBtcMomentum6hBps) ||
+        !(candidate.spread <= CONFIG.solLongMaxSpreadBps) ||
+        !(candidate.momentum > CONFIG.solLongMinAltMomentum6hBps)
       )
     ) {
       continue;
