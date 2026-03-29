@@ -32,7 +32,7 @@ const EXIT_LOOKBACK_HOURS = 2;
 const MIN_ENTRY_SPREAD_BPS = 50;
 const MAX_EXIT_SPREAD_BPS = 25;
 const MIN_CONFIDENCE = 0.58;
-const MAX_SIGNALS = 2;
+const MAX_SIGNALS = RELATIVE_STRENGTH_ALLOWLIST.size;
 
 type SnapshotRow = {
   ts: string;
@@ -94,6 +94,22 @@ function median(values: number[]) {
 
 function bucketHour(ts: string) {
   return new Date(Math.floor(Date.parse(ts) / (60 * 60 * 1000)) * 60 * 60 * 1000).toISOString();
+}
+
+function strategyVariantForSymbol(symbol: string) {
+  if (symbol === "XRPUSD") return "xrp_shadow_short_core";
+  if (symbol === "AVAXUSD") return "avax_shadow_short_canary";
+  if (symbol === "SOLUSD") return "sol_shadow_long_canary";
+  if (symbol === "ETHUSD") return "eth_shadow_long";
+  return "relative_strength";
+}
+
+function relativeStrengthHoldSecondsForSymbol(symbol: string) {
+  if (symbol === "XRPUSD") return 4 * 60 * 60;
+  if (symbol === "AVAXUSD") return 4 * 60 * 60;
+  if (symbol === "SOLUSD") return 4 * 60 * 60;
+  if (symbol === "ETHUSD") return 4 * 60 * 60;
+  return 4 * 60 * 60;
 }
 
 export async function detectRelativeStrength(): Promise<DetectRelativeStrengthResult> {
@@ -159,14 +175,14 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   }
   const ranked = tradableRows
     .map((row) => ({ ...row, spreadBps: row.momentum6hBps - basketMean }))
-    .sort((a, b) => b.spreadBps - a.spreadBps);
+    .sort((a, b) => Math.abs(b.spreadBps) - Math.abs(a.spreadBps));
 
   let inserted = 0;
   let skipped = 0;
   const skip_reasons: Record<string, number> = {};
   const near_miss_samples: DetectRelativeStrengthResult["near_miss_samples"] = [];
 
-  const candidates = [...ranked.slice(0, 1), ...ranked.slice(-1)].slice(0, MAX_SIGNALS);
+  const candidates = ranked;
   for (const row of candidates) {
     const absSpread = Math.abs(row.spreadBps);
     const direction = row.spreadBps > 0 ? "short" : "long";
@@ -257,6 +273,11 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
       skip_reasons.already_reverted = (skip_reasons.already_reverted ?? 0) + 1;
       continue;
     }
+    if (inserted >= MAX_SIGNALS) {
+      skipped += 1;
+      skip_reasons.max_signals_reached = (skip_reasons.max_signals_reached ?? 0) + 1;
+      continue;
+    }
 
     const { data: existing, error: existingError } = await adminSupabase
       .from("opportunities")
@@ -293,16 +314,8 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         spread_bps: Number(row.spreadBps.toFixed(4)),
         entry_threshold_bps: MIN_ENTRY_SPREAD_BPS,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
-        strategy_variant:
-          row.symbol === "XRPUSD"
-            ? "xrp_shadow_short_core"
-            : row.symbol === "AVAXUSD"
-              ? "avax_shadow_short_canary"
-              : row.symbol === "SOLUSD"
-                ? "sol_shadow_long_canary"
-              : row.symbol === "ETHUSD"
-                ? "eth_shadow_long"
-                : "relative_strength",
+        hold_seconds: relativeStrengthHoldSecondsForSymbol(row.symbol),
+        strategy_variant: strategyVariantForSymbol(row.symbol),
         xrp_short_min_btc_momentum_6h_bps: row.symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
         eth_long_min_btc_momentum_6h_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_BTC_MOMENTUM_6H_BPS : null,
         eth_long_min_spread_bps: row.symbol === "ETHUSD" ? ETH_LONG_MIN_SPREAD_BPS : null,

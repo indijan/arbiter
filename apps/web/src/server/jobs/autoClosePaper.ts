@@ -50,6 +50,14 @@ const BINANCE_BASE_URLS = [
   "https://api-gcp.binance.com"
 ];
 
+function relativeStrengthHoldSecondsForVariant(strategyVariant: string, symbol: string) {
+  if (strategyVariant === "xrp_shadow_short_core" || symbol === "XRPUSD") return 4 * 60 * 60;
+  if (strategyVariant === "eth_shadow_long" || symbol === "ETHUSD") return 4 * 60 * 60;
+  if (strategyVariant === "avax_shadow_short_canary" || symbol === "AVAXUSD") return 4 * 60 * 60;
+  if (strategyVariant === "sol_shadow_long_canary" || symbol === "SOLUSD") return 4 * 60 * 60;
+  return FIXED_HOLD_SECONDS_RELATIVE_STRENGTH;
+}
+
 type BybitTicker = {
   bid1Price: string;
   ask1Price: string;
@@ -555,6 +563,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
     if (opp.type === "relative_strength") {
       const direction = String(meta.direction ?? "");
+      const strategyVariant = String(meta.strategy_variant ?? "");
       if (!direction) {
         skipped += 1;
         reasons.push({ position_id: position.id, reason: "missing_meta" });
@@ -576,7 +585,8 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const unrealized =
         direction === "long" ? qty * (mark - entryPrice) : qty * (entryPrice - mark);
       const ageSec = secondsSince(position.entry_ts ?? null);
-      const shouldClose = ageSec !== null && ageSec >= FIXED_HOLD_SECONDS_RELATIVE_STRENGTH;
+      const holdSeconds = Number(meta.hold_seconds ?? relativeStrengthHoldSecondsForVariant(strategyVariant, opp.symbol));
+      const shouldClose = ageSec !== null && ageSec >= holdSeconds;
 
       if (!shouldClose) {
         skipped += 1;

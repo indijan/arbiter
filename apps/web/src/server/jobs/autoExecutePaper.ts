@@ -123,6 +123,22 @@ const SOL_LONG_MAX_BTC_MOMENTUM_6H_BPS = -50;
 const SOL_LONG_MAX_SPREAD_BPS = -80;
 const SOL_LONG_MIN_ALT_MOMENTUM_6H_BPS = -150;
 
+function strategyVariantForRelativeStrengthSymbol(symbol: string) {
+  if (symbol === "XRPUSD") return "xrp_shadow_short_core";
+  if (symbol === "AVAXUSD") return "avax_shadow_short_canary";
+  if (symbol === "SOLUSD") return "sol_shadow_long_canary";
+  if (symbol === "ETHUSD") return "eth_shadow_long";
+  return "relative_strength";
+}
+
+function relativeStrengthHoldSecondsForSymbol(symbol: string) {
+  if (symbol === "XRPUSD") return 4 * 60 * 60;
+  if (symbol === "AVAXUSD") return 4 * 60 * 60;
+  if (symbol === "SOLUSD") return 4 * 60 * 60;
+  if (symbol === "ETHUSD") return 4 * 60 * 60;
+  return 4 * 60 * 60;
+}
+
 const CANONICAL_MAP: Record<
   string,
   { binance?: string; bybit: string; okx: string; coinbase?: string; kraken?: string }
@@ -1968,16 +1984,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             notional_reason: derived.reason,
             auto_execute: true,
             relative_strength_open: true,
-            strategy_variant:
-              symbol === "XRPUSD"
-                ? "xrp_shadow_short_core"
-                : symbol === "AVAXUSD"
-                ? "avax_shadow_short_canary"
-                : symbol === "SOLUSD"
-                  ? "sol_shadow_long_canary"
-                : symbol === "ETHUSD"
-                  ? "eth_shadow_long"
-                  : "relative_strength",
+            strategy_variant: String(details.strategy_variant ?? strategyVariantForRelativeStrengthSymbol(symbol)),
+            hold_seconds: Number(details.hold_seconds ?? relativeStrengthHoldSecondsForSymbol(symbol)),
             momentum_6h_bps: details.momentum_6h_bps,
             btc_momentum_6h_bps: details.btc_momentum_6h_bps,
             spread_bps: details.spread_bps,

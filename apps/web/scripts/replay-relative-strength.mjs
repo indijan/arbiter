@@ -31,6 +31,14 @@ const CONFIG = {
   solLongMinAltMomentum6hBps: -150
 };
 
+function strategyVariantForSymbol(symbol) {
+  if (symbol === "XRPUSD") return "xrp_shadow_short_core";
+  if (symbol === "AVAXUSD") return "avax_shadow_short_canary";
+  if (symbol === "SOLUSD") return "sol_shadow_long_canary";
+  if (symbol === "ETHUSD") return "eth_shadow_long";
+  return "relative_strength";
+}
+
 function parseArgs(argv) {
   const args = { fixture: "fixtures/xarb-historical-export.json", windows: [] };
   for (let i = 2; i < argv.length; i += 1) {
@@ -98,67 +106,72 @@ function simulate(snapshots) {
     const ranked = tradableRows
       .map((r) => ({ ...r, spread: r.momentum - basketMean }))
       .sort((a, b) => Math.abs(b.spread) - Math.abs(a.spread));
-    const candidate = ranked[0];
-    if (!candidate || Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
-    const direction = candidate.spread > 0 ? "short" : "long";
-    if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
-    if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
-    if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
-    if (
-      candidate.symbol === "XRPUSD" &&
-      direction === "short" &&
-      !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps)
-    ) {
-      continue;
-    }
-    if (
-      candidate.symbol === "ETHUSD" &&
-      direction === "long" &&
-      (
-        !(btcRow && btcRow.momentum < CONFIG.ethLongMinBtcMomentum6hBps) ||
-        candidate.spread < CONFIG.ethLongMinSpreadBps
-      )
-    ) {
-      continue;
-    }
-    if (
-      candidate.symbol === "AVAXUSD" &&
-      direction === "short" &&
-      (
-        !(btcRow && btcRow.momentum >= CONFIG.avaxShortMinBtcMomentum6hBps) ||
-        candidate.spread < CONFIG.avaxShortMinSpreadBps
-      )
-    ) {
-      continue;
-    }
-    if (
-      candidate.symbol === "SOLUSD" &&
-      direction === "long" &&
-      (
-        !(btcRow && btcRow.momentum <= CONFIG.solLongMaxBtcMomentum6hBps) ||
-        !(candidate.spread <= CONFIG.solLongMaxSpreadBps) ||
-        !(candidate.momentum > CONFIG.solLongMinAltMomentum6hBps)
-      )
-    ) {
-      continue;
-    }
     const exitHour = byHour.get(hours[i + CONFIG.holdHours]);
     if (!exitHour) continue;
-    const exitPrice = exitHour.get(candidate.symbol);
-    if (!exitPrice) continue;
-    const qty = CONFIG.notionalUsd / candidate.current;
-    const pnl =
-      direction === "short"
-        ? qty * (candidate.current - exitPrice)
-        : qty * (exitPrice - candidate.current);
-    opens.push({
-      opened_at: hours[i],
-      closed_at: hours[i + CONFIG.holdHours],
-      symbol: candidate.symbol,
-      direction,
-      spread_bps: Number(candidate.spread.toFixed(4)),
-      pnl_usd: Number(pnl.toFixed(4))
-    });
+    let insertedThisHour = 0;
+    for (const candidate of ranked) {
+      if (insertedThisHour >= CONFIG.allowlist.size) break;
+      if (Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
+      const direction = candidate.spread > 0 ? "short" : "long";
+      if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
+      if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
+      if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
+      if (
+        candidate.symbol === "XRPUSD" &&
+        direction === "short" &&
+        !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps)
+      ) {
+        continue;
+      }
+      if (
+        candidate.symbol === "ETHUSD" &&
+        direction === "long" &&
+        (
+          !(btcRow && btcRow.momentum < CONFIG.ethLongMinBtcMomentum6hBps) ||
+          candidate.spread < CONFIG.ethLongMinSpreadBps
+        )
+      ) {
+        continue;
+      }
+      if (
+        candidate.symbol === "AVAXUSD" &&
+        direction === "short" &&
+        (
+          !(btcRow && btcRow.momentum >= CONFIG.avaxShortMinBtcMomentum6hBps) ||
+          candidate.spread < CONFIG.avaxShortMinSpreadBps
+        )
+      ) {
+        continue;
+      }
+      if (
+        candidate.symbol === "SOLUSD" &&
+        direction === "long" &&
+        (
+          !(btcRow && btcRow.momentum <= CONFIG.solLongMaxBtcMomentum6hBps) ||
+          !(candidate.spread <= CONFIG.solLongMaxSpreadBps) ||
+          !(candidate.momentum > CONFIG.solLongMinAltMomentum6hBps)
+        )
+      ) {
+        continue;
+      }
+      const exitPrice = exitHour.get(candidate.symbol);
+      if (!exitPrice) continue;
+      const qty = CONFIG.notionalUsd / candidate.current;
+      const pnl =
+        direction === "short"
+          ? qty * (candidate.current - exitPrice)
+          : qty * (exitPrice - candidate.current);
+      opens.push({
+        opened_at: hours[i],
+        closed_at: hours[i + CONFIG.holdHours],
+        symbol: candidate.symbol,
+        direction,
+        strategy_variant: strategyVariantForSymbol(candidate.symbol),
+        spread_bps: Number(candidate.spread.toFixed(4)),
+        pnl_usd: Number(pnl.toFixed(4))
+      });
+      insertedThisHour += 1;
+    }
   }
   const pnlTotal = opens.reduce((sum, row) => sum + row.pnl_usd, 0);
   return {
