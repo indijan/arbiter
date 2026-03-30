@@ -210,17 +210,12 @@ export default async function DashboardPage() {
   const shadowOpen = shadowWithBtcMeta.filter((row) => row.status === "open");
   const shadowPnl = shadowClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowXrpCoreClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
-  const shadowEthClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "eth_shadow_long");
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_long_canary");
+  const shadowSolClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
   const shadowXrpCoreOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
-  const shadowEthOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "eth_shadow_long");
   const shadowAvaxOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_long_canary");
+  const shadowSolOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
   const shadowXrpCorePnl = shadowXrpCoreClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
-  const shadowEthPnl = shadowClosed
-    .filter((row) => row.symbol === "ETHUSD")
-    .reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowSolPnl = shadowSolClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const latestShadowTrade = shadowClosed[0] ?? null;
@@ -426,23 +421,18 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-300/80">Strategy lanes</p>
-                <h2 className="mt-1 text-2xl font-semibold">Core, legacy branch, canary</h2>
+                <h2 className="mt-1 text-2xl font-semibold">Core and canary lanes</h2>
               </div>
               <div className={`rounded-2xl border px-3 py-2 text-right ${shadowPnl >= 0 ? "border-emerald-300/25 bg-emerald-500/10" : "border-rose-300/25 bg-rose-500/10"}`}>
                 <p className="text-xs uppercase tracking-[0.24em] text-brand-100/60">BTC-meta sample</p>
                 <p className={`mt-1 text-xl font-semibold ${toneClass(shadowPnl)}`}>{usd(shadowPnl)}</p>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className={pnlCardClass(shadowXrpCorePnl)}>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">XRP core short</p>
                 <p className={`mt-2 ${pnlValueClass(shadowXrpCorePnl, "md")}`}>{usd(shadowXrpCorePnl)}</p>
                 <p className="mt-2 text-sm text-brand-100/70">{shadowXrpCoreClosed.length} zárt · {shadowXrpCoreOpen.length} nyitott</p>
-              </div>
-              <div className={pnlCardClass(shadowEthPnl)}>
-                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">ETH branch long</p>
-                <p className={`mt-2 ${pnlValueClass(shadowEthPnl, "md")}`}>{usd(shadowEthPnl)}</p>
-                <p className="mt-2 text-sm text-brand-100/70">{shadowEthClosed.length} zárt · {shadowEthOpen.length} nyitott</p>
               </div>
               <div className={pnlCardClass(shadowAvaxPnl)}>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">AVAX canary short</p>
@@ -450,7 +440,7 @@ export default async function DashboardPage() {
                 <p className="mt-2 text-sm text-brand-100/70">{shadowAvaxClosed.length} zárt · {shadowAvaxOpen.length} nyitott</p>
               </div>
               <div className={pnlCardClass(shadowSolPnl)}>
-                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL canary long</p>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL canary short</p>
                 <p className={`mt-2 ${pnlValueClass(shadowSolPnl, "md")}`}>{usd(shadowSolPnl)}</p>
                 <p className="mt-2 text-sm text-brand-100/70">{shadowSolClosed.length} zárt · {shadowSolOpen.length} nyitott</p>
               </div>

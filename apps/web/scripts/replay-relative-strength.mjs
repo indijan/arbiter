@@ -8,34 +8,30 @@ const CONFIG = {
   entryThresholdBps: 50,
   exitThresholdBps: 25,
   notionalUsd: 100,
-  allowlist: new Set(["ETHUSD", "XRPUSD", "AVAXUSD", "SOLUSD"]),
+  allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
   directionRules: {
-    ETHUSD: "long",
     XRPUSD: "short",
     AVAXUSD: "short",
-    SOLUSD: "long"
+    SOLUSD: "short"
   },
   btcFilters: {
     XRPUSD: "btc_neg",
     AVAXUSD: "btc_pos",
     SOLUSD: "btc_neg"
   },
-  xrpShortMinBtcMomentum6hBps: -150,
-  ethLongMinBtcMomentum6hBps: -100,
-  ethLongMinSpreadBps: -80,
+  xrpShortMinBtcMomentum6hBps: -100,
   avaxShortMinBtcMomentum6hBps: 150,
   avaxShortMinSpreadBps: 60,
-  solLongMaxBtcMomentum6hBps: -50,
-  solLongMaxSpreadBps: -80,
-  solLongMinAltMomentum6hBps: -150
+  solShortMaxBtcMomentum6hBps: -100,
+  solShortMinSpreadBps: 0,
+  solShortMaxAltMomentum6hBps: -100
 };
 
 function strategyVariantForSymbol(symbol) {
   if (symbol === "XRPUSD") return "xrp_shadow_short_core";
   if (symbol === "AVAXUSD") return "avax_shadow_short_canary";
-  if (symbol === "SOLUSD") return "sol_shadow_long_canary";
-  if (symbol === "ETHUSD") return "eth_shadow_long";
+  if (symbol === "SOLUSD") return "sol_shadow_short_canary";
   return "relative_strength";
 }
 
@@ -124,16 +120,6 @@ function simulate(snapshots) {
         continue;
       }
       if (
-        candidate.symbol === "ETHUSD" &&
-        direction === "long" &&
-        (
-          !(btcRow && btcRow.momentum < CONFIG.ethLongMinBtcMomentum6hBps) ||
-          candidate.spread < CONFIG.ethLongMinSpreadBps
-        )
-      ) {
-        continue;
-      }
-      if (
         candidate.symbol === "AVAXUSD" &&
         direction === "short" &&
         (
@@ -145,11 +131,11 @@ function simulate(snapshots) {
       }
       if (
         candidate.symbol === "SOLUSD" &&
-        direction === "long" &&
+        direction === "short" &&
         (
-          !(btcRow && btcRow.momentum <= CONFIG.solLongMaxBtcMomentum6hBps) ||
-          !(candidate.spread <= CONFIG.solLongMaxSpreadBps) ||
-          !(candidate.momentum > CONFIG.solLongMinAltMomentum6hBps)
+          !(btcRow && btcRow.momentum <= CONFIG.solShortMaxBtcMomentum6hBps) ||
+          !(candidate.spread >= CONFIG.solShortMinSpreadBps) ||
+          !(candidate.momentum <= CONFIG.solShortMaxAltMomentum6hBps)
         )
       ) {
         continue;
