@@ -109,6 +109,21 @@ function bucketHourIso(value: string) {
   return new Date(Math.floor(new Date(value).getTime() / 3600000) * 3600000).toISOString();
 }
 
+function sparklinePath(values: number[], width: number, height: number) {
+  if (values.length === 0) return "";
+  if (values.length === 1) return `M 0 ${height / 2} L ${width} ${height / 2}`;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
 
 export default async function DashboardPage() {
   async function signOutAction() {
@@ -231,13 +246,16 @@ export default async function DashboardPage() {
   const shadowPnl = shadowClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowXrpCoreClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolShortClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolLongClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_long_canary");
   const shadowXrpCoreOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowAvaxOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolShortOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolLongOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_long_canary");
   const shadowXrpCorePnl = shadowXrpCoreClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
-  const shadowSolPnl = shadowSolClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowSolShortPnl = shadowSolShortClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowSolLongPnl = shadowSolLongClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const latestShadowTrade = shadowClosed[0] ?? null;
   const btcSnapshots = (btcSnapshotsResult.data ?? []) as SnapshotRow[];
   const btcHourly = new Map<string, number>();
@@ -275,26 +293,62 @@ export default async function DashboardPage() {
     latestBtcMomentum >= 150
       ? [
           { label: "AVAX canary short", state: "active" },
+          { label: "SOL bull canary long", state: "active" },
           { label: "XRP core short", state: "standby" },
-          { label: "SOL canary short", state: "standby" }
+          { label: "SOL bear canary short", state: "standby" }
         ]
       : latestBtcMomentum <= -100
         ? [
             { label: "XRP core short", state: "active" },
-            { label: "SOL canary short", state: "active" },
-            { label: "AVAX canary short", state: "standby" }
+            { label: "SOL bear canary short", state: "active" },
+            { label: "AVAX canary short", state: "standby" },
+            { label: "SOL bull canary long", state: "standby" }
           ]
         : latestBtcMomentum < 0
           ? [
-              { label: "SOL canary short", state: "watch" },
+              { label: "SOL bear canary short", state: "watch" },
               { label: "XRP core short", state: "watch" },
-              { label: "AVAX canary short", state: "standby" }
+              { label: "AVAX canary short", state: "standby" },
+              { label: "SOL bull canary long", state: "standby" }
             ]
           : [
               { label: "AVAX canary short", state: "watch" },
+              { label: "SOL bull canary long", state: "watch" },
               { label: "XRP core short", state: "standby" },
-              { label: "SOL canary short", state: "standby" }
+              { label: "SOL bear canary short", state: "standby" }
             ];
+  const btcSparklineValues = btcHours.map((hour) => btcHourly.get(hour) ?? 0).filter((value) => value > 0);
+  const btcSparklinePath = sparklinePath(btcSparklineValues, 560, 120);
+  const lanePanels = [
+    {
+      label: "XRP core short",
+      pnl: shadowXrpCorePnl,
+      closed: shadowXrpCoreClosed.length,
+      open: shadowXrpCoreOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "XRP core short")?.state ?? "standby"
+    },
+    {
+      label: "AVAX canary short",
+      pnl: shadowAvaxPnl,
+      closed: shadowAvaxClosed.length,
+      open: shadowAvaxOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "AVAX canary short")?.state ?? "standby"
+    },
+    {
+      label: "SOL bear canary short",
+      pnl: shadowSolShortPnl,
+      closed: shadowSolShortClosed.length,
+      open: shadowSolShortOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "SOL bear canary short")?.state ?? "standby"
+    },
+    {
+      label: "SOL bull canary long",
+      pnl: shadowSolLongPnl,
+      closed: shadowSolLongClosed.length,
+      open: shadowSolLongOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "SOL bull canary long")?.state ?? "standby"
+    }
+  ];
 
   const bySymbol = new Map<string, SymbolStats>();
   for (const row of positions30d) {
@@ -485,7 +539,7 @@ export default async function DashboardPage() {
           </section>
         </header>
 
-        <section className="grid gap-4 xl:grid-cols-[1.05fr_1.1fr_0.85fr]">
+        <section className="space-y-4">
           <div className="card space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -508,10 +562,15 @@ export default async function DashboardPage() {
                 <p className={`mt-2 ${pnlValueClass(shadowAvaxPnl, "md")}`}>{usd(shadowAvaxPnl)}</p>
                 <p className="mt-2 text-sm text-brand-100/70">{shadowAvaxClosed.length} zárt · {shadowAvaxOpen.length} nyitott</p>
               </div>
-              <div className={pnlCardClass(shadowSolPnl)}>
-                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL canary short</p>
-                <p className={`mt-2 ${pnlValueClass(shadowSolPnl, "md")}`}>{usd(shadowSolPnl)}</p>
-                <p className="mt-2 text-sm text-brand-100/70">{shadowSolClosed.length} zárt · {shadowSolOpen.length} nyitott</p>
+              <div className={pnlCardClass(shadowSolShortPnl)}>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL bear canary short</p>
+                <p className={`mt-2 ${pnlValueClass(shadowSolShortPnl, "md")}`}>{usd(shadowSolShortPnl)}</p>
+                <p className="mt-2 text-sm text-brand-100/70">{shadowSolShortClosed.length} zárt · {shadowSolShortOpen.length} nyitott</p>
+              </div>
+              <div className={pnlCardClass(shadowSolLongPnl)}>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL bull canary long</p>
+                <p className={`mt-2 ${pnlValueClass(shadowSolLongPnl, "md")}`}>{usd(shadowSolLongPnl)}</p>
+                <p className="mt-2 text-sm text-brand-100/70">{shadowSolLongClosed.length} zárt · {shadowSolLongOpen.length} nyitott</p>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -538,33 +597,68 @@ export default async function DashboardPage() {
                   {latestBtcHour ? `${latestBtcMomentum.toFixed(1)} bps` : "nincs BTC minta"}
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 p-4">
-                  <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">BTC momentum dial</p>
-                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-brand-800/80">
-                    <div
-                      className={`h-full rounded-full ${latestBtcMomentum < 0 ? "bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300" : latestBtcMomentum > 0 ? "bg-gradient-to-r from-amber-300 via-orange-300 to-rose-300" : "bg-brand-300/40"}`}
-                      style={{ width: `${Math.max(8, Math.min(100, 50 + btcRegimeDial / 3.6))}%` }}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-brand-100/55">
-                    <span>neg</span>
-                    <span>flat</span>
-                    <span>poz</span>
-                  </div>
-                  <p className="mt-3 text-sm text-brand-100/70">
-                    Aktuális 6h BTC mozgás: <span className={toneClass(latestBtcMomentum)}>{latestBtcMomentum.toFixed(1)} bps</span>
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {regimeActiveLanes.map((lane) => (
-                    <div key={lane.label} className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-3 py-3">
-                      <p className="text-brand-100/55">{lane.label}</p>
-                      <p className={`mt-2 text-base font-semibold ${lane.state === "active" ? "text-emerald-200" : lane.state === "watch" ? "text-amber-100" : "text-brand-100/65"}`}>
-                        {lane.state}
-                      </p>
+              <div className="mt-4 rounded-[24px] border border-brand-300/10 bg-brand-950/40 p-4">
+                <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+                  <div className="rounded-[20px] border border-brand-300/10 bg-brand-900/45 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">BTC motion</p>
+                        <p className="mt-2 text-3xl font-semibold text-white">{latestBtcRegime}</p>
+                        <p className="mt-2 text-sm text-brand-100/65">
+                          Aktuális 6h BTC mozgás: <span className={toneClass(latestBtcMomentum)}>{latestBtcMomentum.toFixed(1)} bps</span>
+                        </p>
+                      </div>
+                      <div className={`rounded-2xl border px-4 py-3 text-right ${regimeTone}`}>
+                        <p className="text-[11px] uppercase tracking-[0.24em]">regime bias</p>
+                        <p className="mt-1 text-2xl font-semibold">{latestBtcMomentum > 0 ? "bullish" : latestBtcMomentum < 0 ? "bearish" : "flat"}</p>
+                      </div>
                     </div>
-                  ))}
+                    <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/50 p-3">
+                      <svg viewBox="0 0 560 140" className="h-36 w-full">
+                        <defs>
+                          <linearGradient id="btcFlightStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor={latestBtcMomentum < 0 ? "#6ee7b7" : "#fbbf24"} />
+                            <stop offset="50%" stopColor={latestBtcMomentum < 0 ? "#67e8f9" : "#fb923c"} />
+                            <stop offset="100%" stopColor={latestBtcMomentum < 0 ? "#93c5fd" : "#f87171"} />
+                          </linearGradient>
+                        </defs>
+                        <path d="M 0 120 H 560" stroke="rgba(148,163,184,0.2)" strokeWidth="1" fill="none" />
+                        {btcSparklinePath ? (
+                          <path
+                            d={btcSparklinePath}
+                            fill="none"
+                            stroke="url(#btcFlightStroke)"
+                            strokeWidth="5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ) : null}
+                      </svg>
+                      <div className="mt-2 flex items-center justify-between text-xs uppercase tracking-[0.22em] text-brand-100/45">
+                        <span>6h ago</span>
+                        <span>now</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3">
+                    {lanePanels.map((lane) => (
+                      <div key={lane.label} className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">{lane.label}</p>
+                            <p className={`mt-2 text-2xl font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
+                          </div>
+                          <div className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] ${lane.state === "active" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : lane.state === "watch" ? "border-amber-300/20 bg-amber-500/10 text-amber-100" : "border-brand-300/10 bg-brand-900/50 text-brand-100/55"}`}>
+                            {lane.state}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-sm text-brand-100/65">
+                          <span>{lane.closed} zárt</span>
+                          <span>{lane.open} nyitott</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -586,7 +680,8 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="card">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-300/80">Symbol PnL</p>
@@ -628,39 +723,40 @@ export default async function DashboardPage() {
                 <p className="text-sm text-brand-100/70">Nincs még symbol szintű minta.</p>
               )}
             </div>
-          </div>
-
-          <div className="card">
-            <p className="text-xs uppercase tracking-[0.28em] text-brand-300/80">Folyamatok</p>
-            <h2 className="mt-1 text-2xl font-semibold">Mi történik éppen</h2>
-            <div className="mt-5 space-y-3 text-sm text-brand-100/80">
-              <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
-                <p className="text-brand-100/55">Utolsó tick</p>
-                <p className="mt-1 text-base font-semibold text-white">{formatTs(latestTick?.ts ?? null)}</p>
-                <p className="mt-1 text-brand-100/60">Kor: {formatAgeMinutes(latestTick?.ts ?? null)}</p>
-              </div>
-              <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
-                <p className="text-brand-100/55">Legfontosabb szűrők</p>
-                <div className="mt-3 space-y-2">
-                  {topPrefilters.length > 0 ? topPrefilters.map(([key, value]) => (
-                    <div key={key} className="flex items-center justify-between gap-3">
-                      <span className="truncate text-brand-100/70">{key}</span>
-                      <span className="rounded-full border border-brand-300/15 px-2 py-0.5 font-semibold text-white">{value}</span>
-                    </div>
-                  )) : (
-                    <p className="text-brand-100/60">Nincs friss prefilter jel.</p>
-                  )}
+            </div>
+          
+            <div className="card">
+              <p className="text-xs uppercase tracking-[0.28em] text-brand-300/80">Folyamatok</p>
+              <h2 className="mt-1 text-2xl font-semibold">Mi történik éppen</h2>
+              <div className="mt-5 space-y-3 text-sm text-brand-100/80">
+                <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
+                  <p className="text-brand-100/55">Utolsó tick</p>
+                  <p className="mt-1 text-base font-semibold text-white">{formatTs(latestTick?.ts ?? null)}</p>
+                  <p className="mt-1 text-brand-100/60">Kor: {formatAgeMinutes(latestTick?.ts ?? null)}</p>
                 </div>
-              </div>
-              <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
-                <p className="text-brand-100/55">Notional keret</p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span>Min</span>
-                  <span className="font-semibold text-white">{compactUsd(asNumber(paperAccountResult.data?.min_notional_usd ?? 100))}</span>
+                <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
+                  <p className="text-brand-100/55">Legfontosabb szűrők</p>
+                  <div className="mt-3 space-y-2">
+                    {topPrefilters.length > 0 ? topPrefilters.map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-3">
+                        <span className="truncate text-brand-100/70">{key}</span>
+                        <span className="rounded-full border border-brand-300/15 px-2 py-0.5 font-semibold text-white">{value}</span>
+                      </div>
+                    )) : (
+                      <p className="text-brand-100/60">Nincs friss prefilter jel.</p>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span>Max</span>
-                  <span className="font-semibold text-white">{compactUsd(asNumber(paperAccountResult.data?.max_notional_usd ?? 500))}</span>
+                <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
+                  <p className="text-brand-100/55">Notional keret</p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span>Min</span>
+                    <span className="font-semibold text-white">{compactUsd(asNumber(paperAccountResult.data?.min_notional_usd ?? 100))}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span>Max</span>
+                    <span className="font-semibold text-white">{compactUsd(asNumber(paperAccountResult.data?.max_notional_usd ?? 500))}</span>
+                  </div>
                 </div>
               </div>
             </div>

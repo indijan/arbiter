@@ -10,30 +10,23 @@ const CONFIG = {
   notionalUsd: 100,
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
-  directionRules: {
-    XRPUSD: "short",
-    AVAXUSD: "short",
-    SOLUSD: "short"
-  },
-  btcFilters: {
-    XRPUSD: "btc_neg",
-    AVAXUSD: "btc_pos",
-    SOLUSD: "btc_neg"
-  },
   xrpShortMinBtcMomentum6hBps: -100,
   avaxShortMinBtcMomentum6hBps: 150,
   avaxShortMinSpreadBps: 60,
   solShortMaxBtcMomentum6hBps: -100,
   solShortMinSpreadBps: -25,
-  solShortMaxAltMomentum6hBps: -100
+  solShortMaxAltMomentum6hBps: -100,
+  solBullLongMinBtcMomentum6hBps: 50,
+  solBullLongMinSpreadBps: 0,
+  solBullLongMaxAltMomentum6hBps: 50
 };
 
-function strategyVariantForSymbol(symbol) {
-  if (symbol === "XRPUSD") return "xrp_shadow_short_core";
-  if (symbol === "AVAXUSD") return "avax_shadow_short_canary";
-  if (symbol === "SOLUSD") return "sol_shadow_short_canary";
-  return "relative_strength";
-}
+const LANE_DEFS = [
+  { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_core" },
+  { symbol: "AVAXUSD", direction: "short", strategyVariant: "avax_shadow_short_canary" },
+  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" },
+  { symbol: "SOLUSD", direction: "long", strategyVariant: "sol_shadow_long_canary" }
+];
 
 function parseArgs(argv) {
   const args = { fixture: "fixtures/xarb-historical-export.json", windows: [] };
@@ -105,54 +98,51 @@ function simulate(snapshots) {
     const exitHour = byHour.get(hours[i + CONFIG.holdHours]);
     if (!exitHour) continue;
     let insertedThisHour = 0;
-    for (const candidate of ranked) {
-      if (insertedThisHour >= CONFIG.allowlist.size) break;
+    for (const lane of LANE_DEFS) {
+      if (insertedThisHour >= LANE_DEFS.length) break;
+      const candidate = ranked.find((row) => row.symbol === lane.symbol);
+      if (!candidate) continue;
       if (Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
-      const direction = candidate.spread > 0 ? "short" : "long";
-      if (CONFIG.directionRules[candidate.symbol] && CONFIG.directionRules[candidate.symbol] !== direction) continue;
-      if (CONFIG.btcFilters[candidate.symbol] === "btc_neg" && !(btcRow && btcRow.momentum < 0)) continue;
-      if (CONFIG.btcFilters[candidate.symbol] === "btc_pos" && !(btcRow && btcRow.momentum > 0)) continue;
       if (
-        candidate.symbol === "XRPUSD" &&
-        direction === "short" &&
-        !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps)
-      ) {
-        continue;
-      }
+        lane.strategyVariant === "xrp_shadow_short_core" &&
+        (!(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps) || !(candidate.spread >= 0))
+      ) continue;
       if (
-        candidate.symbol === "AVAXUSD" &&
-        direction === "short" &&
+        lane.strategyVariant === "avax_shadow_short_canary" &&
         (
           !(btcRow && btcRow.momentum >= CONFIG.avaxShortMinBtcMomentum6hBps) ||
-          candidate.spread < CONFIG.avaxShortMinSpreadBps
+          !(candidate.spread >= CONFIG.avaxShortMinSpreadBps)
         )
-      ) {
-        continue;
-      }
+      ) continue;
       if (
-        candidate.symbol === "SOLUSD" &&
-        direction === "short" &&
+        lane.strategyVariant === "sol_shadow_short_canary" &&
         (
           !(btcRow && btcRow.momentum <= CONFIG.solShortMaxBtcMomentum6hBps) ||
           !(candidate.spread >= CONFIG.solShortMinSpreadBps) ||
           !(candidate.momentum <= CONFIG.solShortMaxAltMomentum6hBps)
         )
-      ) {
-        continue;
-      }
+      ) continue;
+      if (
+        lane.strategyVariant === "sol_shadow_long_canary" &&
+        (
+          !(btcRow && btcRow.momentum >= CONFIG.solBullLongMinBtcMomentum6hBps) ||
+          !(candidate.spread >= CONFIG.solBullLongMinSpreadBps) ||
+          !(candidate.momentum < CONFIG.solBullLongMaxAltMomentum6hBps)
+        )
+      ) continue;
       const exitPrice = exitHour.get(candidate.symbol);
       if (!exitPrice) continue;
       const qty = CONFIG.notionalUsd / candidate.current;
       const pnl =
-        direction === "short"
+        lane.direction === "short"
           ? qty * (candidate.current - exitPrice)
           : qty * (exitPrice - candidate.current);
       opens.push({
         opened_at: hours[i],
         closed_at: hours[i + CONFIG.holdHours],
         symbol: candidate.symbol,
-        direction,
-        strategy_variant: strategyVariantForSymbol(candidate.symbol),
+        direction: lane.direction,
+        strategy_variant: lane.strategyVariant,
         spread_bps: Number(candidate.spread.toFixed(4)),
         pnl_usd: Number(pnl.toFixed(4))
       });

@@ -160,7 +160,7 @@ function coerceClassification(input: Partial<Classification>): Classification {
 
 async function classifyNewsItem(item: ParsedItem) {
   const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_NEWS_MODEL ?? "gpt-5-mini";
+  const model = process.env.OPENAI_NEWS_MODEL ?? "gpt-4o-mini";
 
   if (!apiKey) {
     return { used: false, model, classification: null as Classification | null, raw: "missing_api_key" };
@@ -217,7 +217,13 @@ async function classifyNewsItem(item: ParsedItem) {
   });
 
   if (!response.ok) {
-    return { used: true, model, classification: null as Classification | null, raw: `http_${response.status}` };
+    const errorText = await response.text().catch(() => "");
+    return {
+      used: true,
+      model,
+      classification: null as Classification | null,
+      raw: `http_${response.status}${errorText ? `: ${errorText.slice(0, 500)}` : ""}`
+    };
   }
 
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
@@ -238,6 +244,34 @@ async function classifyNewsItem(item: ParsedItem) {
   } catch {
     return { used: true, model, classification: null as Classification | null, raw: content || "invalid_json" };
   }
+}
+
+async function updateExistingPendingClassification(
+  adminSupabase: NonNullable<ReturnType<typeof createAdminSupabase>>,
+  existingId: number,
+  item: ParsedItem
+) {
+  const classificationResult = await classifyNewsItem(item);
+  const classification = classificationResult.classification;
+  const payload = {
+    affected_assets: classification?.affected_assets ?? [],
+    event_type: classification?.event_type ?? null,
+    sentiment: classification?.sentiment ?? null,
+    action_bias: classification?.action_bias ?? null,
+    impact_horizon: classification?.impact_horizon ?? null,
+    confidence: classification?.confidence ?? null,
+    novelty_score: classification?.novelty_score ?? null,
+    risk_gate: classification?.risk_gate ?? false,
+    risk_gate_reason: classification?.risk_gate_reason ?? null,
+    risk_gate_hours: classification?.risk_gate_hours ?? null,
+    classification_status: classification ? "classified" : "pending",
+    classification_model: classificationResult.used ? classificationResult.model : null,
+    classification_json: classification ? classification : { raw: classificationResult.raw },
+    classified_at: classification ? new Date().toISOString() : null
+  };
+  const { error } = await adminSupabase.from("news_events").update(payload).eq("id", existingId);
+  if (error) throw new Error(error.message);
+  return { classified: Boolean(classification), gated: Boolean(classification?.risk_gate) };
 }
 
 export async function ingestCryptoNews(): Promise<IngestCryptoNewsResult> {
@@ -270,11 +304,16 @@ export async function ingestCryptoNews(): Promise<IngestCryptoNewsResult> {
       for (const item of items) {
         const { data: existing, error: existingError } = await adminSupabase
           .from("news_events")
-          .select("id")
+          .select("id, classification_status")
           .eq("url", item.url)
           .maybeSingle();
         if (existingError) throw new Error(existingError.message);
         if (existing) {
+          if (existing.classification_status === "pending") {
+            const retried = await updateExistingPendingClassification(adminSupabase, existing.id, item);
+            if (retried.classified) classified += 1;
+            if (retried.gated) gated += 1;
+          }
           skippedExisting += 1;
           continue;
         }

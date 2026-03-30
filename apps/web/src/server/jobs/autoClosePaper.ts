@@ -52,8 +52,8 @@ const BINANCE_BASE_URLS = [
 
 function relativeStrengthHoldSecondsForVariant(strategyVariant: string, symbol: string) {
   if (strategyVariant === "xrp_shadow_short_core" || symbol === "XRPUSD") return 4 * 60 * 60;
-  if (strategyVariant === "eth_shadow_long" || symbol === "ETHUSD") return 4 * 60 * 60;
   if (strategyVariant === "avax_shadow_short_canary" || symbol === "AVAXUSD") return 4 * 60 * 60;
+  if (strategyVariant === "sol_shadow_short_canary") return 4 * 60 * 60;
   if (strategyVariant === "sol_shadow_long_canary" || symbol === "SOLUSD") return 4 * 60 * 60;
   return FIXED_HOLD_SECONDS_RELATIVE_STRENGTH;
 }
