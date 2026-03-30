@@ -118,7 +118,7 @@ const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 150;
 const AVAX_SHORT_MIN_SPREAD_BPS = 60;
 const SOL_SHORT_MAX_BTC_MOMENTUM_6H_BPS = -100;
 const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -100;
-const SOL_SHORT_MIN_SPREAD_BPS = 0;
+const SOL_SHORT_MIN_SPREAD_BPS = -25;
 
 function strategyVariantForRelativeStrengthSymbol(symbol: string) {
   if (symbol === "XRPUSD") return "xrp_shadow_short_core";

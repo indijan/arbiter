@@ -24,7 +24,7 @@ const CONFIG = {
   avaxShortMinBtcMomentum6hBps: 150,
   avaxShortMinSpreadBps: 60,
   solShortMaxBtcMomentum6hBps: -100,
-  solShortMinSpreadBps: 0,
+  solShortMinSpreadBps: -25,
   solShortMaxAltMomentum6hBps: -100
 };
 
