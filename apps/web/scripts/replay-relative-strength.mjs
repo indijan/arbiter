@@ -10,22 +10,17 @@ const CONFIG = {
   notionalUsd: 100,
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
-  xrpShortMinBtcMomentum6hBps: -75,
-  avaxShortMinBtcMomentum6hBps: 100,
+  xrpShortMinBtcMomentum6hBps: 0,
+  avaxShortMinBtcMomentum6hBps: 0,
   avaxShortMinSpreadBps: 50,
-  solShortMaxBtcMomentum6hBps: -75,
   solShortMinSpreadBps: -25,
-  solShortMaxAltMomentum6hBps: -75,
-  solBullLongMinBtcMomentum6hBps: 25,
-  solBullLongMinSpreadBps: 0,
-  solBullLongMaxAltMomentum6hBps: 100
+  solShortMaxAltMomentum6hBps: -75
 };
 
 const LANE_DEFS = [
   { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_core" },
   { symbol: "AVAXUSD", direction: "short", strategyVariant: "avax_shadow_short_canary" },
-  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" },
-  { symbol: "SOLUSD", direction: "long", strategyVariant: "sol_shadow_long_canary" }
+  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" }
 ];
 
 function parseArgs(argv) {
@@ -117,17 +112,8 @@ function simulate(snapshots) {
       if (
         lane.strategyVariant === "sol_shadow_short_canary" &&
         (
-          !(btcRow && btcRow.momentum <= CONFIG.solShortMaxBtcMomentum6hBps) ||
           !(candidate.spread >= CONFIG.solShortMinSpreadBps) ||
           !(candidate.momentum <= CONFIG.solShortMaxAltMomentum6hBps)
-        )
-      ) continue;
-      if (
-        lane.strategyVariant === "sol_shadow_long_canary" &&
-        (
-          !(btcRow && btcRow.momentum >= CONFIG.solBullLongMinBtcMomentum6hBps) ||
-          !(candidate.spread >= CONFIG.solBullLongMinSpreadBps) ||
-          !(candidate.momentum < CONFIG.solBullLongMaxAltMomentum6hBps)
         )
       ) continue;
       const exitPrice = exitHour.get(candidate.symbol);

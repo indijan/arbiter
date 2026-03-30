@@ -103,21 +103,16 @@ const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 0.1;
 const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
-const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -75;
-const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 100;
+const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
+const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
-const SOL_SHORT_MAX_BTC_MOMENTUM_6H_BPS = -75;
 const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -75;
 const SOL_SHORT_MIN_SPREAD_BPS = -25;
-const SOL_BULL_LONG_MIN_BTC_MOMENTUM_6H_BPS = 25;
-const SOL_BULL_LONG_MAX_ALT_MOMENTUM_6H_BPS = 100;
-const SOL_BULL_LONG_MIN_SPREAD_BPS = 0;
 
 function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   if (strategyVariant === "xrp_shadow_short_core") return 4 * 60 * 60;
   if (strategyVariant === "avax_shadow_short_canary") return 4 * 60 * 60;
   if (strategyVariant === "sol_shadow_short_canary") return 4 * 60 * 60;
-  if (strategyVariant === "sol_shadow_long_canary") return 4 * 60 * 60;
   return 4 * 60 * 60;
 }
 
@@ -1878,26 +1873,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         strategyVariant === "sol_shadow_short_canary" &&
         (
           !(direction === "short") ||
-          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps <= SOL_SHORT_MAX_BTC_MOMENTUM_6H_BPS) ||
           !(Number.isFinite(spreadBps) && spreadBps >= SOL_SHORT_MIN_SPREAD_BPS) ||
           !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps <= SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS)
         )
       ) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_sol_short_filter_blocked" });
-        continue;
-      }
-      if (
-        strategyVariant === "sol_shadow_long_canary" &&
-        (
-          !(direction === "long") ||
-          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps >= SOL_BULL_LONG_MIN_BTC_MOMENTUM_6H_BPS) ||
-          !(Number.isFinite(spreadBps) && spreadBps >= SOL_BULL_LONG_MIN_SPREAD_BPS) ||
-          !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps < SOL_BULL_LONG_MAX_ALT_MOMENTUM_6H_BPS)
-        )
-      ) {
-        skipped += 1;
-        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_sol_long_filter_blocked" });
         continue;
       }
 
@@ -1959,12 +1940,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             xrp_short_min_btc_momentum_6h_bps: symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
             avax_short_min_btc_momentum_6h_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
             avax_short_min_spread_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
-            sol_short_max_btc_momentum_6h_bps: symbol === "SOLUSD" ? SOL_SHORT_MAX_BTC_MOMENTUM_6H_BPS : null,
+            sol_short_max_btc_momentum_6h_bps: null,
             sol_short_min_spread_bps: symbol === "SOLUSD" ? SOL_SHORT_MIN_SPREAD_BPS : null,
             sol_short_max_alt_momentum_6h_bps: symbol === "SOLUSD" ? SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS : null,
-            sol_long_min_btc_momentum_6h_bps: strategyVariant === "sol_shadow_long_canary" ? SOL_BULL_LONG_MIN_BTC_MOMENTUM_6H_BPS : null,
-            sol_long_min_spread_bps: strategyVariant === "sol_shadow_long_canary" ? SOL_BULL_LONG_MIN_SPREAD_BPS : null,
-            sol_long_max_alt_momentum_6h_bps: strategyVariant === "sol_shadow_long_canary" ? SOL_BULL_LONG_MAX_ALT_MOMENTUM_6H_BPS : null,
+            sol_long_min_btc_momentum_6h_bps: null,
+            sol_long_min_spread_bps: null,
+            sol_long_max_alt_momentum_6h_bps: null,
             exit_threshold_bps: details.exit_threshold_bps
           }
         })
