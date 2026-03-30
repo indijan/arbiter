@@ -30,6 +30,13 @@ type ExchangeStats = {
   pnl7d: number;
 };
 
+type SnapshotRow = {
+  ts: string;
+  symbol: string;
+  spot_bid: number | string | null;
+  spot_ask: number | string | null;
+};
+
 
 function asNumber(value: unknown) {
   const n = Number(value ?? 0);
@@ -98,6 +105,10 @@ function formatExchange(meta: Record<string, unknown> | null) {
   return buyExchange ?? sellExchange ?? "-";
 }
 
+function bucketHourIso(value: string) {
+  return new Date(Math.floor(new Date(value).getTime() / 3600000) * 3600000).toISOString();
+}
+
 
 export default async function DashboardPage() {
   async function signOutAction() {
@@ -138,7 +149,8 @@ export default async function DashboardPage() {
     paperAccountResult,
     positions30dResult,
     openPositionsResult,
-    recentClosedResult
+    recentClosedResult,
+    btcSnapshotsResult
   ] = await Promise.all([
     supabase
       .from("system_ticks")
@@ -171,6 +183,14 @@ export default async function DashboardPage() {
       .eq("status", "closed")
       .order("exit_ts", { ascending: false })
       .limit(12),
+    supabase
+      .from("market_snapshots")
+      .select("ts, symbol, spot_bid, spot_ask")
+      .eq("exchange", "coinbase")
+      .eq("symbol", "BTCUSD")
+      .gte("ts", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
+      .order("ts", { ascending: true })
+      .limit(1000)
   ]);
 
   const latestTick = latestTickResult.data;
@@ -219,13 +239,62 @@ export default async function DashboardPage() {
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowSolPnl = shadowSolClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const latestShadowTrade = shadowClosed[0] ?? null;
-  const latestBtcMomentum = latestShadowTrade ? asNumber(latestShadowTrade.meta?.btc_momentum_6h_bps) : 0;
+  const btcSnapshots = (btcSnapshotsResult.data ?? []) as SnapshotRow[];
+  const btcHourly = new Map<string, number>();
+  for (const row of btcSnapshots) {
+    const bid = asNumber(row.spot_bid);
+    const ask = asNumber(row.spot_ask);
+    if (!(ask > bid) || bid <= 0) continue;
+    btcHourly.set(bucketHourIso(row.ts), (bid + ask) / 2);
+  }
+  const btcHours = Array.from(btcHourly.keys()).sort();
+  const latestBtcHour = btcHours[btcHours.length - 1] ?? null;
+  const lookbackBtcHour = btcHours.length >= 7 ? btcHours[btcHours.length - 7] : null;
+  const latestBtcMid = latestBtcHour ? btcHourly.get(latestBtcHour) ?? 0 : 0;
+  const lookbackBtcMid = lookbackBtcHour ? btcHourly.get(lookbackBtcHour) ?? 0 : 0;
+  const latestBtcMomentum =
+    latestBtcMid > 0 && lookbackBtcMid > 0 ? ((latestBtcMid - lookbackBtcMid) / lookbackBtcMid) * 10000 : 0;
   const latestBtcRegime =
-    latestShadowTrade && latestBtcMomentum < 0
-      ? "btc_neg"
-      : latestShadowTrade && latestBtcMomentum > 0
-        ? "btc_pos"
-        : "flat/unknown";
+    latestBtcMomentum <= -100
+      ? "btc_neg_strong"
+      : latestBtcMomentum < 0
+        ? "btc_neg"
+        : latestBtcMomentum >= 150
+          ? "btc_pos_strong"
+          : latestBtcMomentum > 0
+            ? "btc_pos"
+            : "flat/unknown";
+  const regimeTone =
+    latestBtcMomentum < 0
+      ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+      : latestBtcMomentum > 0
+        ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
+        : "border-brand-300/15 text-brand-100/70";
+  const btcRegimeDial = Math.max(-180, Math.min(180, latestBtcMomentum / 2.5));
+  const regimeActiveLanes =
+    latestBtcMomentum >= 150
+      ? [
+          { label: "AVAX canary short", state: "active" },
+          { label: "XRP core short", state: "standby" },
+          { label: "SOL canary short", state: "standby" }
+        ]
+      : latestBtcMomentum <= -100
+        ? [
+            { label: "XRP core short", state: "active" },
+            { label: "SOL canary short", state: "active" },
+            { label: "AVAX canary short", state: "standby" }
+          ]
+        : latestBtcMomentum < 0
+          ? [
+              { label: "SOL canary short", state: "watch" },
+              { label: "XRP core short", state: "watch" },
+              { label: "AVAX canary short", state: "standby" }
+            ]
+          : [
+              { label: "AVAX canary short", state: "watch" },
+              { label: "XRP core short", state: "standby" },
+              { label: "SOL canary short", state: "standby" }
+            ];
 
   const bySymbol = new Map<string, SymbolStats>();
   for (const row of positions30d) {
@@ -465,11 +534,40 @@ export default async function DashboardPage() {
                   <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">Shadow flight panel</p>
                   <p className="mt-1 text-lg font-semibold text-white">BTC regime: {latestBtcRegime}</p>
                 </div>
-                <div className={`rounded-full border px-3 py-1 text-sm ${latestBtcMomentum < 0 ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : latestBtcMomentum > 0 ? "border-amber-300/20 bg-amber-500/10 text-amber-100" : "border-brand-300/15 text-brand-100/70"}`}>
-                  {latestShadowTrade ? `${latestBtcMomentum.toFixed(1)} bps` : "nincs minta"}
+                <div className={`rounded-full border px-3 py-1 text-sm ${regimeTone}`}>
+                  {latestBtcHour ? `${latestBtcMomentum.toFixed(1)} bps` : "nincs BTC minta"}
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 p-4">
+                  <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">BTC momentum dial</p>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-brand-800/80">
+                    <div
+                      className={`h-full rounded-full ${latestBtcMomentum < 0 ? "bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300" : latestBtcMomentum > 0 ? "bg-gradient-to-r from-amber-300 via-orange-300 to-rose-300" : "bg-brand-300/40"}`}
+                      style={{ width: `${Math.max(8, Math.min(100, 50 + btcRegimeDial / 3.6))}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-brand-100/55">
+                    <span>neg</span>
+                    <span>flat</span>
+                    <span>poz</span>
+                  </div>
+                  <p className="mt-3 text-sm text-brand-100/70">
+                    Aktuális 6h BTC mozgás: <span className={toneClass(latestBtcMomentum)}>{latestBtcMomentum.toFixed(1)} bps</span>
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {regimeActiveLanes.map((lane) => (
+                    <div key={lane.label} className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-3 py-3">
+                      <p className="text-brand-100/55">{lane.label}</p>
+                      <p className={`mt-2 text-base font-semibold ${lane.state === "active" ? "text-emerald-200" : lane.state === "watch" ? "text-amber-100" : "text-brand-100/65"}`}>
+                        {lane.state}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-3 py-3">
                   <p className="text-brand-100/55">Lezárt shadow trade-ek</p>
                   <p className="mt-1 text-xl font-semibold text-white">{shadowClosed.length}</p>
