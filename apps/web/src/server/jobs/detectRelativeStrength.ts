@@ -97,6 +97,17 @@ function bucketHour(ts: string) {
   return new Date(Math.floor(Date.parse(ts) / (60 * 60 * 1000)) * 60 * 60 * 1000).toISOString();
 }
 
+function xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps: number | null) {
+  if (!Number.isFinite(btcMomentum6hBps)) return 50;
+  const value = btcMomentum6hBps as number;
+  if (value < -150) return 20;
+  if (value < -100) return 40;
+  if (value < -75) return 50;
+  if (value < -50) return 40;
+  if (value < 0) return 50;
+  return 50;
+}
+
 const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
   {
     key: "xrp_short",
@@ -107,11 +118,12 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     evaluate: ({ btcMomentum6hBps, spreadBps }) => {
       if (!(btcMomentum6hBps !== null && btcMomentum6hBps < 0)) return "btc_filter_blocked";
       if (!(btcMomentum6hBps < XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS)) return "xrp_short_filter_blocked";
-      if (!(spreadBps >= 0)) return "direction_blocked";
+      if (!(spreadBps >= xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps))) return "xrp_short_filter_blocked";
       return null;
     },
     details: ({ btcMomentum6hBps }) => ({
       xrp_short_min_btc_momentum_6h_bps: XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS,
+      xrp_short_min_spread_bps: xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps),
       btc_momentum_6h_bps: btcMomentum6hBps
     })
   },

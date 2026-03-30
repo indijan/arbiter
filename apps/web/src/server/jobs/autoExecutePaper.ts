@@ -116,6 +116,16 @@ function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   return 4 * 60 * 60;
 }
 
+function xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps: number) {
+  if (!Number.isFinite(btcMomentum6hBps)) return 50;
+  if (btcMomentum6hBps < -150) return 20;
+  if (btcMomentum6hBps < -100) return 40;
+  if (btcMomentum6hBps < -75) return 50;
+  if (btcMomentum6hBps < -50) return 40;
+  if (btcMomentum6hBps < 0) return 50;
+  return 50;
+}
+
 const CANONICAL_MAP: Record<
   string,
   { binance?: string; bybit: string; okx: string; coinbase?: string; kraken?: string }
@@ -1849,13 +1859,24 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       const strategyVariant = String((details as Record<string, unknown>).strategy_variant ?? "relative_strength");
       if (
         strategyVariant === "xrp_shadow_short_core" &&
-        (!(direction === "short") || !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps < XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS))
+        (
+          !(direction === "short") ||
+          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps < XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS)
+        )
       ) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_xrp_short_filter_blocked" });
         continue;
       }
       const spreadBps = Number((details as Record<string, unknown>).spread_bps ?? NaN);
+      if (
+        strategyVariant === "xrp_shadow_short_core" &&
+        !(Number.isFinite(spreadBps) && spreadBps >= xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps))
+      ) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_xrp_short_filter_blocked" });
+        continue;
+      }
       if (
         strategyVariant === "avax_shadow_short_canary" &&
         (
@@ -1938,6 +1959,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             btc_momentum_6h_bps: details.btc_momentum_6h_bps,
             spread_bps: details.spread_bps,
             xrp_short_min_btc_momentum_6h_bps: symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
+            xrp_short_min_spread_bps:
+              strategyVariant === "xrp_shadow_short_core" ? xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps) : null,
             avax_short_min_btc_momentum_6h_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
             avax_short_min_spread_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
             sol_short_max_btc_momentum_6h_bps: null,

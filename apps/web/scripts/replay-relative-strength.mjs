@@ -23,6 +23,16 @@ const LANE_DEFS = [
   { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" }
 ];
 
+function xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps) {
+  if (!Number.isFinite(btcMomentum6hBps)) return 50;
+  if (btcMomentum6hBps < -150) return 20;
+  if (btcMomentum6hBps < -100) return 40;
+  if (btcMomentum6hBps < -75) return 50;
+  if (btcMomentum6hBps < -50) return 40;
+  if (btcMomentum6hBps < 0) return 50;
+  return 50;
+}
+
 function parseArgs(argv) {
   const args = { fixture: "fixtures/xarb-historical-export.json", windows: [] };
   for (let i = 2; i < argv.length; i += 1) {
@@ -100,7 +110,10 @@ function simulate(snapshots) {
       if (Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
       if (
         lane.strategyVariant === "xrp_shadow_short_core" &&
-        (!(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps) || !(candidate.spread >= 0))
+        (
+          !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps) ||
+          !(candidate.spread >= xrpShortSpreadFloorForBtcMomentum(btcRow?.momentum))
+        )
       ) continue;
       if (
         lane.strategyVariant === "avax_shadow_short_canary" &&
