@@ -10,15 +10,15 @@ const CONFIG = {
   notionalUsd: 100,
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
-  xrpShortMinBtcMomentum6hBps: -100,
-  avaxShortMinBtcMomentum6hBps: 150,
-  avaxShortMinSpreadBps: 60,
-  solShortMaxBtcMomentum6hBps: -100,
+  xrpShortMinBtcMomentum6hBps: -75,
+  avaxShortMinBtcMomentum6hBps: 100,
+  avaxShortMinSpreadBps: 50,
+  solShortMaxBtcMomentum6hBps: -75,
   solShortMinSpreadBps: -25,
-  solShortMaxAltMomentum6hBps: -100,
-  solBullLongMinBtcMomentum6hBps: 50,
+  solShortMaxAltMomentum6hBps: -75,
+  solBullLongMinBtcMomentum6hBps: 25,
   solBullLongMinSpreadBps: 0,
-  solBullLongMaxAltMomentum6hBps: 50
+  solBullLongMaxAltMomentum6hBps: 100
 };
 
 const LANE_DEFS = [

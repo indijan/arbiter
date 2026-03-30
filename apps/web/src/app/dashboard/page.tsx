@@ -281,7 +281,17 @@ export default async function DashboardPage() {
           ? "btc_pos_strong"
           : latestBtcMomentum > 0
             ? "btc_pos"
-            : "flat/unknown";
+          : "flat/unknown";
+  const latestBtcRegimeLabel =
+    latestBtcMomentum <= -100
+      ? "Bear"
+      : latestBtcMomentum < 0
+        ? "Soft Bear"
+        : latestBtcMomentum >= 150
+          ? "Bull"
+          : latestBtcMomentum > 0
+            ? "Soft Bull"
+            : "Flat";
   const regimeTone =
     latestBtcMomentum < 0
       ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
@@ -589,32 +599,33 @@ export default async function DashboardPage() {
             </div>
             <div className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">Shadow flight panel</p>
-                  <p className="mt-1 text-lg font-semibold text-white">BTC regime: {latestBtcRegime}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">BTC regime: {latestBtcRegimeLabel}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-100/45">{latestBtcRegime}</p>
                 </div>
-                <div className={`rounded-full border px-3 py-1 text-sm ${regimeTone}`}>
+                <div className={`shrink-0 rounded-full border px-3 py-1 text-sm ${regimeTone}`}>
                   {latestBtcHour ? `${latestBtcMomentum.toFixed(1)} bps` : "nincs BTC minta"}
                 </div>
               </div>
-              <div className="mt-4 rounded-[24px] border border-brand-300/10 bg-brand-950/40 p-4">
-                <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-                  <div className="rounded-[20px] border border-brand-300/10 bg-brand-900/45 p-4">
+              <div className="mt-4 overflow-hidden rounded-[24px] border border-brand-300/10 bg-brand-950/40 p-3 sm:p-4">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+                  <div className="min-w-0 rounded-[20px] border border-brand-300/10 bg-brand-900/45 p-3 sm:p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">BTC motion</p>
-                        <p className="mt-2 text-3xl font-semibold text-white">{latestBtcRegime}</p>
+                        <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{latestBtcRegimeLabel}</p>
                         <p className="mt-2 text-sm text-brand-100/65">
                           Aktuális 6h BTC mozgás: <span className={toneClass(latestBtcMomentum)}>{latestBtcMomentum.toFixed(1)} bps</span>
                         </p>
                       </div>
-                      <div className={`rounded-2xl border px-4 py-3 text-right ${regimeTone}`}>
+                      <div className={`shrink-0 rounded-2xl border px-3 py-2 text-right sm:px-4 sm:py-3 ${regimeTone}`}>
                         <p className="text-[11px] uppercase tracking-[0.24em]">regime bias</p>
-                        <p className="mt-1 text-2xl font-semibold">{latestBtcMomentum > 0 ? "bullish" : latestBtcMomentum < 0 ? "bearish" : "flat"}</p>
+                        <p className="mt-1 text-xl font-semibold sm:text-2xl">{latestBtcMomentum > 0 ? "Bull" : latestBtcMomentum < 0 ? "Bear" : "Flat"}</p>
                       </div>
                     </div>
-                    <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/50 p-3">
-                      <svg viewBox="0 0 560 140" className="h-36 w-full">
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-brand-300/10 bg-brand-950/50 p-2 sm:p-3">
+                      <svg viewBox="0 0 560 140" className="block h-28 w-full sm:h-36" preserveAspectRatio="none">
                         <defs>
                           <linearGradient id="btcFlightStroke" x1="0%" y1="0%" x2="100%" y2="0%">
                             <stop offset="0%" stopColor={latestBtcMomentum < 0 ? "#6ee7b7" : "#fbbf24"} />
@@ -640,7 +651,7 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="grid gap-3">
+                  <div className="grid min-w-0 gap-3">
                     {lanePanels.map((lane) => (
                       <div key={lane.label} className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)}`}>
                         <div className="flex items-start justify-between gap-3">
