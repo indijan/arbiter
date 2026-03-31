@@ -309,14 +309,14 @@ export default async function DashboardPage() {
         ]
       : latestBtcMomentum <= -100
         ? [
-            { label: "XRP core short", state: "active" },
+            { label: "XRP core short", state: "standby" },
             { label: "SOL bear canary short", state: "active" },
             { label: "AVAX canary short", state: "standby" }
           ]
         : latestBtcMomentum < 0
           ? [
               { label: "SOL bear canary short", state: "watch" },
-              { label: "XRP core short", state: "watch" },
+              { label: "XRP core short", state: "active" },
               { label: "AVAX canary short", state: "standby" }
             ]
           : [

@@ -9,7 +9,11 @@ const CONFIG = {
   notionalUsd: 100,
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
-  xrpShortMinBtcMomentum6hBps: 0,
+  xrpShortMinBtcMomentum6hBps: -75,
+  xrpShortMaxBtcMomentum6hBps: 0,
+  xrpShortMinSpreadBps: 0,
+  xrpShortMaxSpreadBps: 40,
+  xrpShortMaxAltMomentum2hBps: 25,
   xrpBullFadeMinBtcMomentum6hBps: 100,
   xrpBullFadeMaxSpreadBps: -50,
   xrpBullFadeMinAltMomentum2hBps: 25,
@@ -25,16 +29,6 @@ const LANE_DEFS = [
   { symbol: "AVAXUSD", direction: "short", strategyVariant: "avax_shadow_short_canary" },
   { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" }
 ];
-
-function xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps) {
-  if (!Number.isFinite(btcMomentum6hBps)) return 50;
-  if (btcMomentum6hBps < -150) return 20;
-  if (btcMomentum6hBps < -100) return 40;
-  if (btcMomentum6hBps < -75) return 50;
-  if (btcMomentum6hBps < -50) return 40;
-  if (btcMomentum6hBps < 0) return 50;
-  return 50;
-}
 
 function parseArgs(argv) {
   const args = { fixture: "fixtures/xarb-historical-export.json", windows: [] };
@@ -120,8 +114,10 @@ function simulate(snapshots) {
       if (
         lane.strategyVariant === "xrp_shadow_short_core" &&
         (
-          !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps) ||
-          !(candidate.spread >= xrpShortSpreadFloorForBtcMomentum(btcRow?.momentum))
+          !(btcRow && btcRow.momentum >= CONFIG.xrpShortMinBtcMomentum6hBps && btcRow.momentum < CONFIG.xrpShortMaxBtcMomentum6hBps) ||
+          !(candidate.spread >= CONFIG.xrpShortMinSpreadBps) ||
+          !(candidate.spread < CONFIG.xrpShortMaxSpreadBps) ||
+          !(candidate.momentum2h <= CONFIG.xrpShortMaxAltMomentum2hBps)
         )
       ) continue;
       if (
