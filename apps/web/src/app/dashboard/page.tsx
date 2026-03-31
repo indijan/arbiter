@@ -247,15 +247,18 @@ export default async function DashboardPage() {
   const shadowXrpCoreClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowXrpBullFadeClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolShortClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolSoftBearClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bear_laggard");
+  const shadowSolDeepBearClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_deep_bear_continuation");
   const shadowXrpCoreOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowXrpBullFadeOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
-  const shadowSolShortOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
+  const shadowSolSoftBearOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bear_laggard");
+  const shadowSolDeepBearOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_deep_bear_continuation");
   const shadowXrpCorePnl = shadowXrpCoreClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowXrpBullFadePnl = shadowXrpBullFadeClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
-  const shadowSolShortPnl = shadowSolShortClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowSolSoftBearPnl = shadowSolSoftBearClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowSolDeepBearPnl = shadowSolDeepBearClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const latestShadowTrade = shadowClosed[0] ?? null;
   const btcSnapshots = (btcSnapshotsResult.data ?? []) as SnapshotRow[];
   const btcHourly = new Map<string, number>();
@@ -305,25 +308,29 @@ export default async function DashboardPage() {
           { label: "AVAX canary short", state: "active" },
           { label: "XRP bull fade canary", state: "active" },
           { label: "XRP core short", state: "standby" },
-          { label: "SOL bear canary short", state: "standby" }
+          { label: "SOL soft-bear laggard", state: "standby" },
+          { label: "SOL deep-bear continuation", state: "standby" }
         ]
       : latestBtcMomentum <= -100
         ? [
             { label: "XRP core short", state: "standby" },
-            { label: "SOL bear canary short", state: "active" },
+            { label: "SOL deep-bear continuation", state: "active" },
+            { label: "SOL soft-bear laggard", state: "standby" },
             { label: "AVAX canary short", state: "standby" }
           ]
         : latestBtcMomentum < 0
           ? [
-              { label: "SOL bear canary short", state: "watch" },
               { label: "XRP core short", state: "active" },
+              { label: "SOL soft-bear laggard", state: "watch" },
+              { label: "SOL deep-bear continuation", state: "standby" },
               { label: "AVAX canary short", state: "standby" }
             ]
           : [
               { label: "AVAX canary short", state: "watch" },
               { label: "XRP bull fade canary", state: "watch" },
               { label: "XRP core short", state: "standby" },
-              { label: "SOL bear canary short", state: "standby" }
+              { label: "SOL soft-bear laggard", state: "standby" },
+              { label: "SOL deep-bear continuation", state: "standby" }
             ];
   const btcSparklineValues = btcHours.map((hour) => btcHourly.get(hour) ?? 0).filter((value) => value > 0);
   const btcSparklinePath = sparklinePath(btcSparklineValues, 560, 120);
@@ -350,11 +357,18 @@ export default async function DashboardPage() {
       state: regimeActiveLanes.find((lane) => lane.label === "AVAX canary short")?.state ?? "standby"
     },
     {
-      label: "SOL bear canary short",
-      pnl: shadowSolShortPnl,
-      closed: shadowSolShortClosed.length,
-      open: shadowSolShortOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "SOL bear canary short")?.state ?? "standby"
+      label: "SOL soft-bear laggard",
+      pnl: shadowSolSoftBearPnl,
+      closed: shadowSolSoftBearClosed.length,
+      open: shadowSolSoftBearOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "SOL soft-bear laggard")?.state ?? "standby"
+    },
+    {
+      label: "SOL deep-bear continuation",
+      pnl: shadowSolDeepBearPnl,
+      closed: shadowSolDeepBearClosed.length,
+      open: shadowSolDeepBearOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "SOL deep-bear continuation")?.state ?? "standby"
     }
   ];
 
@@ -559,7 +573,7 @@ export default async function DashboardPage() {
                 <p className={`mt-1 text-xl font-semibold ${toneClass(shadowPnl)}`}>{usd(shadowPnl)}</p>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <div className={pnlCardClass(shadowXrpCorePnl)}>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">XRP core short</p>
                 <p className={`mt-2 ${pnlValueClass(shadowXrpCorePnl, "md")}`}>{usd(shadowXrpCorePnl)}</p>
@@ -575,10 +589,15 @@ export default async function DashboardPage() {
                 <p className={`mt-2 ${pnlValueClass(shadowAvaxPnl, "md")}`}>{usd(shadowAvaxPnl)}</p>
                 <p className="mt-2 text-sm text-brand-100/70">{shadowAvaxClosed.length} zárt · {shadowAvaxOpen.length} nyitott</p>
               </div>
-              <div className={pnlCardClass(shadowSolShortPnl)}>
-                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL bear canary short</p>
-                <p className={`mt-2 ${pnlValueClass(shadowSolShortPnl, "md")}`}>{usd(shadowSolShortPnl)}</p>
-                <p className="mt-2 text-sm text-brand-100/70">{shadowSolShortClosed.length} zárt · {shadowSolShortOpen.length} nyitott</p>
+              <div className={pnlCardClass(shadowSolSoftBearPnl)}>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL soft-bear laggard</p>
+                <p className={`mt-2 ${pnlValueClass(shadowSolSoftBearPnl, "md")}`}>{usd(shadowSolSoftBearPnl)}</p>
+                <p className="mt-2 text-sm text-brand-100/70">{shadowSolSoftBearClosed.length} zárt · {shadowSolSoftBearOpen.length} nyitott</p>
+              </div>
+              <div className={pnlCardClass(shadowSolDeepBearPnl)}>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">SOL deep-bear continuation</p>
+                <p className={`mt-2 ${pnlValueClass(shadowSolDeepBearPnl, "md")}`}>{usd(shadowSolDeepBearPnl)}</p>
+                <p className="mt-2 text-sm text-brand-100/70">{shadowSolDeepBearClosed.length} zárt · {shadowSolDeepBearOpen.length} nyitott</p>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">

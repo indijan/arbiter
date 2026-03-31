@@ -18,8 +18,16 @@ const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
 const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
 const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
-const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -75;
-const SOL_SHORT_MIN_SPREAD_BPS = -25;
+const SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -50;
+const SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS = 0;
+const SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS = -100;
+const SOL_SOFT_BEAR_MAX_ALT_MOMENTUM_2H_BPS = 25;
+const SOL_SOFT_BEAR_MAX_SPREAD_BPS = -25;
+const SOL_DEEP_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -200;
+const SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS = -100;
+const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS = -100;
+const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS = -25;
+const SOL_DEEP_BEAR_MIN_SPREAD_BPS = -25;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
 const MAX_EXIT_SPREAD_BPS = 25;
@@ -177,25 +185,54 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     })
   },
   {
-    key: "sol_short",
+    key: "sol_soft_bear_short",
     symbol: "SOLUSD",
     direction: "short",
-    variant: "sol_shadow_short_canary",
+    variant: "sol_shadow_short_soft_bear_laggard",
     holdSeconds: 4 * 60 * 60,
-    evaluate: ({ btcMomentum6hBps, spreadBps, momentum6hBps }) => {
+    evaluate: ({ btcMomentum6hBps, spreadBps, momentum6hBps, momentum2hBps }) => {
       if (
-        !(momentum6hBps <= SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS) ||
-        !(spreadBps >= SOL_SHORT_MIN_SPREAD_BPS)
+        !(btcMomentum6hBps !== null && btcMomentum6hBps >= SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS && btcMomentum6hBps < SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS) ||
+        !(momentum6hBps > SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS) ||
+        !(momentum2hBps < SOL_SOFT_BEAR_MAX_ALT_MOMENTUM_2H_BPS) ||
+        !(spreadBps < SOL_SOFT_BEAR_MAX_SPREAD_BPS)
       ) {
-        return "sol_short_filter_blocked";
+        return "sol_soft_bear_filter_blocked";
       }
-      if (!(spreadBps >= 0)) return "direction_blocked";
       return null;
     },
     details: ({ btcMomentum6hBps }) => ({
-      sol_short_max_btc_momentum_6h_bps: null,
-      sol_short_max_alt_momentum_6h_bps: SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS,
-      sol_short_min_spread_bps: SOL_SHORT_MIN_SPREAD_BPS,
+      sol_soft_bear_min_btc_momentum_6h_bps: SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS,
+      sol_soft_bear_max_btc_momentum_6h_bps: SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS,
+      sol_soft_bear_min_alt_momentum_6h_bps: SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS,
+      sol_soft_bear_max_alt_momentum_2h_bps: SOL_SOFT_BEAR_MAX_ALT_MOMENTUM_2H_BPS,
+      sol_soft_bear_max_spread_bps: SOL_SOFT_BEAR_MAX_SPREAD_BPS,
+      btc_momentum_6h_bps: btcMomentum6hBps
+    })
+  },
+  {
+    key: "sol_deep_bear_short",
+    symbol: "SOLUSD",
+    direction: "short",
+    variant: "sol_shadow_short_deep_bear_continuation",
+    holdSeconds: 4 * 60 * 60,
+    evaluate: ({ btcMomentum6hBps, spreadBps, momentum6hBps, momentum2hBps }) => {
+      if (
+        !(btcMomentum6hBps !== null && btcMomentum6hBps >= SOL_DEEP_BEAR_MIN_BTC_MOMENTUM_6H_BPS && btcMomentum6hBps < SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS) ||
+        !(momentum6hBps <= SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS) ||
+        !(momentum2hBps <= SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS) ||
+        !(spreadBps >= SOL_DEEP_BEAR_MIN_SPREAD_BPS)
+      ) {
+        return "sol_deep_bear_filter_blocked";
+      }
+      return null;
+    },
+    details: ({ btcMomentum6hBps }) => ({
+      sol_deep_bear_min_btc_momentum_6h_bps: SOL_DEEP_BEAR_MIN_BTC_MOMENTUM_6H_BPS,
+      sol_deep_bear_max_btc_momentum_6h_bps: SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS,
+      sol_deep_bear_max_alt_momentum_6h_bps: SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS,
+      sol_deep_bear_max_alt_momentum_2h_bps: SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS,
+      sol_deep_bear_min_spread_bps: SOL_DEEP_BEAR_MIN_SPREAD_BPS,
       btc_momentum_6h_bps: btcMomentum6hBps
     })
   }
@@ -341,7 +378,9 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
               ? XRP_BULL_FADE_MAX_SPREAD_BPS
             : lane.variant === "avax_shadow_short_canary"
               ? AVAX_SHORT_MIN_SPREAD_BPS
-              : SOL_SHORT_MIN_SPREAD_BPS,
+              : lane.variant === "sol_shadow_short_soft_bear_laggard"
+                ? SOL_SOFT_BEAR_MAX_SPREAD_BPS
+                : SOL_DEEP_BEAR_MIN_SPREAD_BPS,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
         hold_seconds: lane.holdSeconds,
         strategy_variant: lane.variant,

@@ -54,7 +54,8 @@ function relativeStrengthHoldSecondsForVariant(strategyVariant: string, symbol: 
   if (strategyVariant === "xrp_shadow_short_core" || symbol === "XRPUSD") return 4 * 60 * 60;
   if (strategyVariant === "xrp_shadow_short_bull_fade_canary") return 4 * 60 * 60;
   if (strategyVariant === "avax_shadow_short_canary" || symbol === "AVAXUSD") return 4 * 60 * 60;
-  if (strategyVariant === "sol_shadow_short_canary") return 4 * 60 * 60;
+  if (strategyVariant === "sol_shadow_short_soft_bear_laggard") return 4 * 60 * 60;
+  if (strategyVariant === "sol_shadow_short_deep_bear_continuation") return 4 * 60 * 60;
   if (symbol === "SOLUSD") return 4 * 60 * 60;
   return FIXED_HOLD_SECONDS_RELATIVE_STRENGTH;
 }

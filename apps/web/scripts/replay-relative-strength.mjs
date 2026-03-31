@@ -19,15 +19,24 @@ const CONFIG = {
   xrpBullFadeMinAltMomentum2hBps: 25,
   avaxShortMinBtcMomentum6hBps: 0,
   avaxShortMinSpreadBps: 50,
-  solShortMinSpreadBps: -25,
-  solShortMaxAltMomentum6hBps: -75
+  solSoftBearMinBtcMomentum6hBps: -50,
+  solSoftBearMaxBtcMomentum6hBps: 0,
+  solSoftBearMinAltMomentum6hBps: -100,
+  solSoftBearMaxAltMomentum2hBps: 25,
+  solSoftBearMaxSpreadBps: -25,
+  solDeepBearMinBtcMomentum6hBps: -200,
+  solDeepBearMaxBtcMomentum6hBps: -100,
+  solDeepBearMaxAltMomentum6hBps: -100,
+  solDeepBearMaxAltMomentum2hBps: -25,
+  solDeepBearMinSpreadBps: -25
 };
 
 const LANE_DEFS = [
   { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_core" },
   { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_bull_fade_canary" },
   { symbol: "AVAXUSD", direction: "short", strategyVariant: "avax_shadow_short_canary" },
-  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" }
+  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_soft_bear_laggard" },
+  { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_deep_bear_continuation" }
 ];
 
 function parseArgs(argv) {
@@ -136,10 +145,21 @@ function simulate(snapshots) {
         )
       ) continue;
       if (
-        lane.strategyVariant === "sol_shadow_short_canary" &&
+        lane.strategyVariant === "sol_shadow_short_soft_bear_laggard" &&
         (
-          !(candidate.spread >= CONFIG.solShortMinSpreadBps) ||
-          !(candidate.momentum <= CONFIG.solShortMaxAltMomentum6hBps)
+          !(btcRow && btcRow.momentum >= CONFIG.solSoftBearMinBtcMomentum6hBps && btcRow.momentum < CONFIG.solSoftBearMaxBtcMomentum6hBps) ||
+          !(candidate.momentum > CONFIG.solSoftBearMinAltMomentum6hBps) ||
+          !(candidate.momentum2h < CONFIG.solSoftBearMaxAltMomentum2hBps) ||
+          !(candidate.spread < CONFIG.solSoftBearMaxSpreadBps)
+        )
+      ) continue;
+      if (
+        lane.strategyVariant === "sol_shadow_short_deep_bear_continuation" &&
+        (
+          !(btcRow && btcRow.momentum >= CONFIG.solDeepBearMinBtcMomentum6hBps && btcRow.momentum < CONFIG.solDeepBearMaxBtcMomentum6hBps) ||
+          !(candidate.momentum <= CONFIG.solDeepBearMaxAltMomentum6hBps) ||
+          !(candidate.momentum2h <= CONFIG.solDeepBearMaxAltMomentum2hBps) ||
+          !(candidate.spread >= CONFIG.solDeepBearMinSpreadBps)
         )
       ) continue;
       const exitPrice = exitHour.get(candidate.symbol);
