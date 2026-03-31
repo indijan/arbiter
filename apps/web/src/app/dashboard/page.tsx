@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { lanePolicyStateFromRow, type LanePolicyState } from "@/server/lanes/policy";
 
 type PositionRow = {
   id: number;
@@ -36,6 +37,107 @@ type SnapshotRow = {
   spot_bid: number | string | null;
   spot_ask: number | string | null;
 };
+
+type LaneState = "active" | "watch" | "standby";
+type RegimeMatrixKey = "btc_neg_strong" | "btc_neg" | "btc_pos" | "btc_pos_strong";
+type RegimeMatrixRow = {
+  key: RegimeMatrixKey;
+  label: string;
+  states: Record<string, LaneState>;
+};
+
+type StrategySettingRow = {
+  strategy_key: string;
+  enabled: boolean;
+  config?: Record<string, unknown> | null;
+};
+
+type LanePolicyReviewRow = {
+  id: string;
+  created_at: string;
+  current_btc_regime: string;
+  current_btc_momentum_6h_bps: number | string;
+  model: string | null;
+  used_ai: boolean;
+  recommendations: Array<{
+    strategy_key: string;
+    label: string;
+    current_state: LanePolicyState;
+    recommended_state: LanePolicyState;
+    reason: string;
+    confidence: number;
+  }> | null;
+};
+
+const LANE_LABELS = [
+  "XRP core short",
+  "XRP bull fade canary",
+  "AVAX canary short",
+  "SOL soft-bear laggard",
+  "SOL deep-bear continuation"
+] as const;
+
+const BTC_REGIME_MATRIX: RegimeMatrixRow[] = [
+  {
+    key: "btc_neg_strong",
+    label: "Deep Bear",
+    states: {
+      "XRP core short": "standby",
+      "XRP bull fade canary": "standby",
+      "AVAX canary short": "standby",
+      "SOL soft-bear laggard": "standby",
+      "SOL deep-bear continuation": "active"
+    }
+  },
+  {
+    key: "btc_neg",
+    label: "Soft Bear",
+    states: {
+      "XRP core short": "active",
+      "XRP bull fade canary": "standby",
+      "AVAX canary short": "standby",
+      "SOL soft-bear laggard": "watch",
+      "SOL deep-bear continuation": "standby"
+    }
+  },
+  {
+    key: "btc_pos",
+    label: "Soft Bull",
+    states: {
+      "XRP core short": "standby",
+      "XRP bull fade canary": "watch",
+      "AVAX canary short": "watch",
+      "SOL soft-bear laggard": "standby",
+      "SOL deep-bear continuation": "standby"
+    }
+  },
+  {
+    key: "btc_pos_strong",
+    label: "Strong Bull",
+    states: {
+      "XRP core short": "standby",
+      "XRP bull fade canary": "active",
+      "AVAX canary short": "active",
+      "SOL soft-bear laggard": "standby",
+      "SOL deep-bear continuation": "standby"
+    }
+  }
+];
+
+const LANE_LABEL_TO_KEY: Record<(typeof LANE_LABELS)[number], string> = {
+  "XRP core short": "xrp_shadow_short_core",
+  "XRP bull fade canary": "xrp_shadow_short_bull_fade_canary",
+  "AVAX canary short": "avax_shadow_short_canary",
+  "SOL soft-bear laggard": "sol_shadow_short_soft_bear_laggard",
+  "SOL deep-bear continuation": "sol_shadow_short_deep_bear_continuation"
+};
+
+function policyToneClass(state: LanePolicyState | LaneState) {
+  if (state === "active") return "border-emerald-300/20 bg-emerald-500/10 text-emerald-100";
+  if (state === "watch") return "border-amber-300/20 bg-amber-500/10 text-amber-100";
+  if (state === "standby") return "border-sky-300/20 bg-sky-500/10 text-sky-100";
+  return "border-rose-300/20 bg-rose-500/10 text-rose-100";
+}
 
 
 function asNumber(value: unknown) {
@@ -165,7 +267,9 @@ export default async function DashboardPage() {
     positions30dResult,
     openPositionsResult,
     recentClosedResult,
-    btcSnapshotsResult
+    btcSnapshotsResult,
+    strategySettingsResult,
+    lanePolicyReviewResult
   ] = await Promise.all([
     supabase
       .from("system_ticks")
@@ -205,7 +309,18 @@ export default async function DashboardPage() {
       .eq("symbol", "BTCUSD")
       .gte("ts", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
       .order("ts", { ascending: true })
-      .limit(1000)
+      .limit(1000),
+    supabase
+      .from("strategy_settings")
+      .select("strategy_key, enabled, config")
+      .in("strategy_key", Object.values(LANE_LABEL_TO_KEY)),
+    supabase
+      .from("lane_policy_reviews")
+      .select("id, created_at, current_btc_regime, current_btc_momentum_6h_bps, model, used_ai, recommendations")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
   ]);
 
   const latestTick = latestTickResult.data;
@@ -302,36 +417,18 @@ export default async function DashboardPage() {
         ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
         : "border-brand-300/15 text-brand-100/70";
   const btcRegimeDial = Math.max(-180, Math.min(180, latestBtcMomentum / 2.5));
-  const regimeActiveLanes =
-    latestBtcMomentum >= 150
-      ? [
-          { label: "AVAX canary short", state: "active" },
-          { label: "XRP bull fade canary", state: "active" },
-          { label: "XRP core short", state: "standby" },
-          { label: "SOL soft-bear laggard", state: "standby" },
-          { label: "SOL deep-bear continuation", state: "standby" }
-        ]
-      : latestBtcMomentum <= -100
-        ? [
-            { label: "XRP core short", state: "standby" },
-            { label: "SOL deep-bear continuation", state: "active" },
-            { label: "SOL soft-bear laggard", state: "standby" },
-            { label: "AVAX canary short", state: "standby" }
-          ]
-        : latestBtcMomentum < 0
-          ? [
-              { label: "XRP core short", state: "active" },
-              { label: "SOL soft-bear laggard", state: "watch" },
-              { label: "SOL deep-bear continuation", state: "standby" },
-              { label: "AVAX canary short", state: "standby" }
-            ]
-          : [
-              { label: "AVAX canary short", state: "watch" },
-              { label: "XRP bull fade canary", state: "watch" },
-              { label: "XRP core short", state: "standby" },
-              { label: "SOL soft-bear laggard", state: "standby" },
-              { label: "SOL deep-bear continuation", state: "standby" }
-            ];
+  const currentRegimeMatrix =
+    BTC_REGIME_MATRIX.find((row) => row.key === latestBtcRegime) ??
+    BTC_REGIME_MATRIX.find((row) => row.key === "btc_pos");
+  const lanePolicyMap = new Map(
+    ((strategySettingsResult.data ?? []) as StrategySettingRow[]).map((row) => [row.strategy_key, row])
+  );
+  const latestLanePolicyReview = (lanePolicyReviewResult.data ?? null) as LanePolicyReviewRow | null;
+  const regimeActiveLanes = LANE_LABELS.map((label) => ({
+    label,
+    recommendedState: currentRegimeMatrix?.states[label] ?? "standby",
+    actualState: lanePolicyStateFromRow(lanePolicyMap.get(LANE_LABEL_TO_KEY[label]))
+  }));
   const btcSparklineValues = btcHours.map((hour) => btcHourly.get(hour) ?? 0).filter((value) => value > 0);
   const btcSparklinePath = sparklinePath(btcSparklineValues, 560, 120);
   const lanePanels = [
@@ -340,35 +437,40 @@ export default async function DashboardPage() {
       pnl: shadowXrpCorePnl,
       closed: shadowXrpCoreClosed.length,
       open: shadowXrpCoreOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "XRP core short")?.state ?? "standby"
+      recommendedState: regimeActiveLanes.find((lane) => lane.label === "XRP core short")?.recommendedState ?? "standby",
+      actualState: regimeActiveLanes.find((lane) => lane.label === "XRP core short")?.actualState ?? "paused"
     },
     {
       label: "XRP bull fade canary",
       pnl: shadowXrpBullFadePnl,
       closed: shadowXrpBullFadeClosed.length,
       open: shadowXrpBullFadeOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "XRP bull fade canary")?.state ?? "standby"
+      recommendedState: regimeActiveLanes.find((lane) => lane.label === "XRP bull fade canary")?.recommendedState ?? "standby",
+      actualState: regimeActiveLanes.find((lane) => lane.label === "XRP bull fade canary")?.actualState ?? "paused"
     },
     {
       label: "AVAX canary short",
       pnl: shadowAvaxPnl,
       closed: shadowAvaxClosed.length,
       open: shadowAvaxOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "AVAX canary short")?.state ?? "standby"
+      recommendedState: regimeActiveLanes.find((lane) => lane.label === "AVAX canary short")?.recommendedState ?? "standby",
+      actualState: regimeActiveLanes.find((lane) => lane.label === "AVAX canary short")?.actualState ?? "paused"
     },
     {
       label: "SOL soft-bear laggard",
       pnl: shadowSolSoftBearPnl,
       closed: shadowSolSoftBearClosed.length,
       open: shadowSolSoftBearOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "SOL soft-bear laggard")?.state ?? "standby"
+      recommendedState: regimeActiveLanes.find((lane) => lane.label === "SOL soft-bear laggard")?.recommendedState ?? "standby",
+      actualState: regimeActiveLanes.find((lane) => lane.label === "SOL soft-bear laggard")?.actualState ?? "paused"
     },
     {
       label: "SOL deep-bear continuation",
       pnl: shadowSolDeepBearPnl,
       closed: shadowSolDeepBearClosed.length,
       open: shadowSolDeepBearOpen.length,
-      state: regimeActiveLanes.find((lane) => lane.label === "SOL deep-bear continuation")?.state ?? "standby"
+      recommendedState: regimeActiveLanes.find((lane) => lane.label === "SOL deep-bear continuation")?.recommendedState ?? "standby",
+      actualState: regimeActiveLanes.find((lane) => lane.label === "SOL deep-bear continuation")?.actualState ?? "paused"
     }
   ];
 
@@ -676,8 +778,13 @@ export default async function DashboardPage() {
                             <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">{lane.label}</p>
                             <p className={`mt-2 text-2xl font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
                           </div>
-                          <div className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] ${lane.state === "active" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100" : lane.state === "watch" ? "border-amber-300/20 bg-amber-500/10 text-amber-100" : "border-brand-300/10 bg-brand-900/50 text-brand-100/55"}`}>
-                            {lane.state}
+                          <div className="flex flex-col items-end gap-1">
+                            <div className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(lane.recommendedState)}`}>
+                              rec {lane.recommendedState}
+                            </div>
+                            <div className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(lane.actualState)}`}>
+                              live {lane.actualState}
+                            </div>
                           </div>
                         </div>
                         <div className="mt-3 flex items-center justify-between text-sm text-brand-100/65">
@@ -704,6 +811,117 @@ export default async function DashboardPage() {
                     {latestShadowTrade ? usd(asNumber(latestShadowTrade.realized_pnl_usd)) : "-"}
                   </p>
                 </div>
+              </div>
+              <div className="mt-3 rounded-2xl border border-brand-300/10 bg-brand-900/45 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">Lane activation matrix</p>
+                    <p className="mt-1 text-sm text-brand-100/70">BTC rezsimenként ajánlott state, mellette a tényleges policy state.</p>
+                  </div>
+                  <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
+                    current: {currentRegimeMatrix?.label ?? latestBtcRegimeLabel}
+                  </div>
+                </div>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-brand-300/10 text-brand-100/55">
+                        <th className="px-3 py-2 font-medium">BTC regime</th>
+                        {LANE_LABELS.map((label) => (
+                          <th key={label} className="px-3 py-2 font-medium">{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {BTC_REGIME_MATRIX.map((row) => (
+                        <tr
+                          key={row.key}
+                          className={`border-b border-brand-300/5 ${row.key === currentRegimeMatrix?.key ? "bg-brand-100/5" : ""}`}
+                        >
+                          <td className="px-3 py-3 font-medium text-white">{row.label}</td>
+                          {LANE_LABELS.map((label) => {
+                            const state = row.states[label];
+                            const actualState =
+                              regimeActiveLanes.find((lane) => lane.label === label)?.actualState ?? "paused";
+                            return (
+                              <td key={`${row.key}-${label}`} className="px-3 py-3">
+                                <div className="flex flex-col items-start gap-1">
+                                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(state)}`}>
+                                    rec {state}
+                                  </span>
+                                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(actualState)}`}>
+                                    live {actualState}
+                                  </span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="mt-3 rounded-2xl border border-brand-300/10 bg-brand-900/45 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">AI lane policy review</p>
+                    <p className="mt-1 text-sm text-brand-100/70">
+                      Óránkénti rezsim + lane performance review. Egyelőre javasol, nem ír át automatikusan.
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
+                    {latestLanePolicyReview
+                      ? `${latestLanePolicyReview.used_ai ? "AI" : "heuristic"} · ${latestLanePolicyReview.model ?? "-"}`
+                      : "nincs review"}
+                  </div>
+                </div>
+                {latestLanePolicyReview ? (
+                  <>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
+                        <p className="text-brand-100/55">Review ideje</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{formatTs(latestLanePolicyReview.created_at)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
+                        <p className="text-brand-100/55">BTC rezsim</p>
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {latestLanePolicyReview.current_btc_regime} · {asNumber(latestLanePolicyReview.current_btc_momentum_6h_bps).toFixed(1)} bps
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
+                        <p className="text-brand-100/55">Ajánlások</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{latestLanePolicyReview.recommendations?.length ?? 0}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                      {(latestLanePolicyReview.recommendations ?? []).map((row) => (
+                        <div key={row.strategy_key} className="rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-white">{row.label}</p>
+                              <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-100/45">{row.strategy_key}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.current_state)}`}>
+                                now {row.current_state}
+                              </div>
+                              <div className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.recommended_state)}`}>
+                                rec {row.recommended_state}
+                              </div>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm text-brand-100/75">{row.reason}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-brand-100/45">
+                            confidence {(Number(row.confidence ?? 0) * 100).toFixed(0)}%
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-brand-100/60">Még nincs lane policy review futás.</p>
+                )}
               </div>
             </div>
           </div>

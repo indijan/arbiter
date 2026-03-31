@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { LANE_POLICY_STATES, type LanePolicyState } from "@/server/lanes/policy";
 
 type SettingItem = {
   key: string;
   label: string;
   enabled: boolean;
+  isLane?: boolean;
+  state?: LanePolicyState;
 };
 
 type SettingsPanelProps = {
@@ -48,13 +51,14 @@ export default function SettingsPanel({ exchanges, strategies }: SettingsPanelPr
   const updateSetting = async (
     type: "exchange" | "strategy",
     key: string,
-    enabled: boolean
+    enabled: boolean,
+    config?: Record<string, unknown>
   ) => {
     setError(null);
     const endpoint = type === "exchange" ? "/api/settings/exchanges" : "/api/settings/strategies";
     const payload = type === "exchange"
       ? { exchange_key: key, enabled }
-      : { strategy_key: key, enabled };
+      : { strategy_key: key, enabled, config: config ?? {} };
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -106,24 +110,66 @@ export default function SettingsPanel({ exchanges, strategies }: SettingsPanelPr
         <section className="card">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Stratégiák</h2>
-            <span className="text-xs text-brand-100/60">Zöld = aktív</span>
+            <span className="text-xs text-brand-100/60">Lane-ek: active / watch / standby / paused</span>
           </div>
           <div className="mt-4 space-y-3">
             {strategyState.map((item, index) => (
-              <div key={item.key} className="flex min-h-12 items-center justify-between rounded-xl border border-brand-300/15 px-3 py-2">
+              <div key={item.key} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-brand-300/15 px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 rounded-full ${item.enabled ? "bg-emerald-300" : "bg-rose-300"}`} />
-                  <span className="text-sm">{item.label}</span>
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      item.isLane
+                        ? item.state === "active"
+                          ? "bg-emerald-300"
+                          : item.state === "watch"
+                            ? "bg-amber-300"
+                            : item.state === "standby"
+                              ? "bg-sky-300"
+                              : "bg-rose-300"
+                        : item.enabled
+                          ? "bg-emerald-300"
+                          : "bg-rose-300"
+                    }`}
+                  />
+                  <div>
+                    <span className="text-sm">{item.label}</span>
+                    {item.isLane ? (
+                      <p className="text-xs uppercase tracking-[0.2em] text-brand-100/45">
+                        {item.state}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-                <Toggle
-                  checked={item.enabled}
-                  onChange={(next) => {
-                    const updated = [...strategyState];
-                    updated[index] = { ...item, enabled: next };
-                    setStrategyState(updated);
-                    void updateSetting("strategy", item.key, next);
-                  }}
-                />
+                {item.isLane ? (
+                  <select
+                    value={item.state}
+                    onChange={(event) => {
+                      const nextState = event.target.value as LanePolicyState;
+                      const nextEnabled = nextState !== "paused";
+                      const updated = [...strategyState];
+                      updated[index] = { ...item, enabled: nextEnabled, state: nextState };
+                      setStrategyState(updated);
+                      void updateSetting("strategy", item.key, nextEnabled, { state: nextState });
+                    }}
+                    className="rounded-lg border border-brand-300/20 bg-slate-950/60 px-3 py-2 text-sm text-brand-50 outline-none"
+                  >
+                    {LANE_POLICY_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Toggle
+                    checked={item.enabled}
+                    onChange={(next) => {
+                      const updated = [...strategyState];
+                      updated[index] = { ...item, enabled: next };
+                      setStrategyState(updated);
+                      void updateSetting("strategy", item.key, next);
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>

@@ -11,6 +11,12 @@ import {
 import { scoreWithOpenAI } from "@/server/ai/openaiRanker";
 import { loadEffectivePolicy } from "@/server/policy/store";
 import { runStrategyPolicyController } from "@/server/policy/controller";
+import {
+  buildStrategySettingsMap,
+  lanePolicyStateFromSettingsMap,
+  laneStateAllowsDetection,
+  laneStateAllowsExecution
+} from "@/server/lanes/policy";
 
 const DEFAULT_NOTIONAL = 100;
 const DEFAULT_MIN_NOTIONAL = 100;
@@ -123,6 +129,13 @@ const SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS = -25;
 const SOL_DEEP_BEAR_MIN_SPREAD_BPS = -25;
+const RELATIVE_STRENGTH_LANE_KEYS = new Set([
+  "xrp_shadow_short_core",
+  "xrp_shadow_short_bull_fade_canary",
+  "avax_shadow_short_canary",
+  "sol_shadow_short_soft_bear_laggard",
+  "sol_shadow_short_deep_bear_continuation"
+]);
 
 function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   if (strategyVariant === "xrp_shadow_short_core") return 4 * 60 * 60;
@@ -618,6 +631,29 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const reserved = Number(account.reserved_usd ?? 0);
   const minNotional = Number(account.min_notional_usd ?? DEFAULT_MIN_NOTIONAL);
   const maxNotional = Number(account.max_notional_usd ?? DEFAULT_MAX_NOTIONAL);
+  const { data: strategySettingsRows, error: strategySettingsError } = await adminSupabase
+    .from("strategy_settings")
+    .select("strategy_key, enabled, config")
+    .eq("user_id", userId);
+
+  if (strategySettingsError) {
+    throw new Error(strategySettingsError.message);
+  }
+
+  const strategySettingsMap = buildStrategySettingsMap(
+    (strategySettingsRows ?? []) as Array<{
+      strategy_key: string | null;
+      enabled: boolean | null;
+      config?: Record<string, unknown> | null;
+    }>
+  );
+  const strategyEnabledMap = new Map(
+    Array.from(strategySettingsMap.entries()).map(([key, value]) => [key, Boolean(value.enabled)])
+  );
+  const isStrategyKeyEnabled = (key: string) => strategyEnabledMap.get(key) ?? true;
+  const strategyState = (key: string) => lanePolicyStateFromSettingsMap(strategySettingsMap, key);
+  const allowsDetect = (key: string) => laneStateAllowsDetection(strategyState(key));
+  const allowsExecute = (key: string) => laneStateAllowsExecution(strategyState(key));
 
   let policyControllerAction = "none";
   try {
@@ -1298,6 +1334,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         }
       }
       if (typed.type === "relative_strength") {
+        if (!allowsDetect("relative_strength")) {
+          markPrefilter("relative_strength_disabled");
+          return false;
+        }
         const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
         if (!Number.isFinite(ageHours) || ageHours > 2.5) {
           markPrefilter("stale_relative_strength_signal");
@@ -1305,6 +1345,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         }
         if (!RELATIVE_STRENGTH_ALLOWLIST.has(typed.symbol)) {
           markPrefilter("relative_strength_symbol_blocked");
+          return false;
+        }
+        const strategyVariant = String((typed.details as Record<string, unknown> | null)?.strategy_variant ?? "");
+        if (strategyVariant && RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant) && !allowsDetect(strategyVariant)) {
+          markPrefilter("relative_strength_lane_disabled");
           return false;
         }
       }
@@ -1864,6 +1909,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
       const btcMomentum6hBps = Number((details as Record<string, unknown>).btc_momentum_6h_bps ?? NaN);
       const strategyVariant = String((details as Record<string, unknown>).strategy_variant ?? "relative_strength");
+      if (!allowsExecute("relative_strength")) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_disabled" });
+        continue;
+      }
+      if (RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant) && !allowsExecute(strategyVariant)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_lane_disabled" });
+        continue;
+      }
       if (
         strategyVariant === "xrp_shadow_short_core" &&
         (

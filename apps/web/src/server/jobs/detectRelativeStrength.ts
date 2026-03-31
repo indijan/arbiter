@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
+import {
+  buildStrategySettingsMap,
+  lanePolicyStateFromSettingsMap,
+  laneStateAllowsDetection
+} from "@/server/lanes/policy";
 
 const LOOKBACK_HOURS = 24;
 const IDEMPOTENT_MINUTES = 10;
@@ -33,6 +38,7 @@ const EXIT_LOOKBACK_HOURS = 2;
 const MAX_EXIT_SPREAD_BPS = 25;
 const MIN_CONFIDENCE = 0.58;
 const MAX_SIGNALS = 4;
+const RELATIVE_STRENGTH_PARENT_KEY = "relative_strength";
 
 type RelativeStrengthLane = {
   key: string;
@@ -246,6 +252,36 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const idempotentSince = new Date(Date.now() - IDEMPOTENT_MINUTES * 60 * 1000).toISOString();
 
   const data = await fetchSnapshots(adminSupabase, since);
+  const { data: account } = await adminSupabase
+    .from("paper_accounts")
+    .select("user_id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const strategySettingsMap = new Map<
+    string,
+    { strategy_key: string; enabled: boolean; config?: Record<string, unknown> | null }
+  >();
+  if (account?.user_id) {
+    const { data: strategySettingsRows, error: strategySettingsError } = await adminSupabase
+      .from("strategy_settings")
+      .select("strategy_key, enabled, config")
+      .eq("user_id", account.user_id);
+    if (strategySettingsError) throw new Error(strategySettingsError.message);
+    const mapped = buildStrategySettingsMap(
+      (strategySettingsRows ?? []) as Array<{
+        strategy_key: string | null;
+        enabled: boolean | null;
+        config?: Record<string, unknown> | null;
+      }>
+    );
+    for (const [key, value] of mapped.entries()) strategySettingsMap.set(key, value);
+  }
+  const isLaneDetectEnabled = (variant: string) => {
+    const parentState = lanePolicyStateFromSettingsMap(strategySettingsMap, RELATIVE_STRENGTH_PARENT_KEY);
+    const laneState = lanePolicyStateFromSettingsMap(strategySettingsMap, variant);
+    return laneStateAllowsDetection(parentState) && laneStateAllowsDetection(laneState);
+  };
 
   const byHour = new Map<string, Map<string, number>>();
   for (const row of data) {
@@ -309,7 +345,9 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const near_miss_samples: DetectRelativeStrengthResult["near_miss_samples"] = [];
 
   const candidates = ranked.flatMap((row) =>
-    RELATIVE_STRENGTH_LANES.filter((lane) => lane.symbol === row.symbol).map((lane) => ({ row, lane }))
+    RELATIVE_STRENGTH_LANES
+      .filter((lane) => lane.symbol === row.symbol && isLaneDetectEnabled(lane.variant))
+      .map((lane) => ({ row, lane }))
   );
   for (const candidate of candidates) {
     const { row, lane } = candidate;
