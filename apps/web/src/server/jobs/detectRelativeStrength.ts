@@ -15,7 +15,6 @@ const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -75;
 const SOL_SHORT_MIN_SPREAD_BPS = -25;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
-const MIN_ENTRY_SPREAD_BPS = 40;
 const MAX_EXIT_SPREAD_BPS = 25;
 const MIN_CONFIDENCE = 0.58;
 const MAX_SIGNALS = 4;
@@ -247,7 +246,6 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   );
   for (const candidate of candidates) {
     const { row, lane } = candidate;
-    const absSpread = Math.abs(row.spreadBps);
     const direction = lane.direction;
     const meanRevertingNow = Math.abs(row.momentum2hBps) <= MAX_EXIT_SPREAD_BPS;
     const laneReason = lane.evaluate({
@@ -259,18 +257,6 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     if (laneReason) {
       skipped += 1;
       skip_reasons[laneReason] = (skip_reasons[laneReason] ?? 0) + 1;
-      continue;
-    }
-    if (absSpread < MIN_ENTRY_SPREAD_BPS) {
-      skipped += 1;
-      skip_reasons.below_threshold = (skip_reasons.below_threshold ?? 0) + 1;
-      near_miss_samples.push({
-        symbol: row.symbol,
-        spread_bps: Number(row.spreadBps.toFixed(4)),
-        momentum_6h_bps: Number(row.momentum6hBps.toFixed(4)),
-        basket_mean_bps: Number(basketMean.toFixed(4)),
-        reason: "below_threshold"
-      });
       continue;
     }
     if (meanRevertingNow) {
@@ -306,9 +292,9 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
       exchange: EXCHANGE,
       symbol: row.symbol,
       type: "relative_strength",
-      net_edge_bps: Number(absSpread.toFixed(4)),
+      net_edge_bps: Number(Math.abs(row.spreadBps).toFixed(4)),
       expected_daily_bps: null,
-      confidence: Math.max(MIN_CONFIDENCE, Math.min(0.72, 0.58 + absSpread / 1000)),
+      confidence: Math.max(MIN_CONFIDENCE, Math.min(0.72, 0.58 + Math.abs(row.spreadBps) / 1000)),
       status: "new",
       details: {
         exchange: EXCHANGE,
@@ -318,7 +304,12 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         btc_momentum_6h_bps: btcRow ? Number(btcRow.momentum6hBps.toFixed(4)) : null,
         basket_mean_bps: Number(basketMean.toFixed(4)),
         spread_bps: Number(row.spreadBps.toFixed(4)),
-        entry_threshold_bps: MIN_ENTRY_SPREAD_BPS,
+        entry_threshold_bps:
+          lane.variant === "xrp_shadow_short_core"
+            ? xrpShortSpreadFloorForBtcMomentum(btcRow ? btcRow.momentum6hBps : null)
+            : lane.variant === "avax_shadow_short_canary"
+              ? AVAX_SHORT_MIN_SPREAD_BPS
+              : SOL_SHORT_MIN_SPREAD_BPS,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
         hold_seconds: lane.holdSeconds,
         strategy_variant: lane.variant,

@@ -5,7 +5,6 @@ const CONFIG = {
   exchange: "coinbase",
   entryLookbackHours: 6,
   holdHours: 4,
-  entryThresholdBps: 40,
   exitThresholdBps: 25,
   notionalUsd: 100,
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
@@ -107,7 +106,6 @@ function simulate(snapshots) {
       if (insertedThisHour >= LANE_DEFS.length) break;
       const candidate = ranked.find((row) => row.symbol === lane.symbol);
       if (!candidate) continue;
-      if (Math.abs(candidate.spread) < CONFIG.entryThresholdBps) continue;
       if (
         lane.strategyVariant === "xrp_shadow_short_core" &&
         (
