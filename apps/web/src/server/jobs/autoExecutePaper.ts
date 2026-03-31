@@ -104,6 +104,9 @@ const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
 const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
+const XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS = 100;
+const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
+const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
 const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
 const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -75;
@@ -111,6 +114,7 @@ const SOL_SHORT_MIN_SPREAD_BPS = -25;
 
 function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   if (strategyVariant === "xrp_shadow_short_core") return 4 * 60 * 60;
+  if (strategyVariant === "xrp_shadow_short_bull_fade_canary") return 4 * 60 * 60;
   if (strategyVariant === "avax_shadow_short_canary") return 4 * 60 * 60;
   if (strategyVariant === "sol_shadow_short_canary") return 4 * 60 * 60;
   return 4 * 60 * 60;
@@ -1877,6 +1881,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_xrp_short_filter_blocked" });
         continue;
       }
+      const altMomentum2hBps = Number((details as Record<string, unknown>).momentum_2h_bps ?? NaN);
+      if (
+        strategyVariant === "xrp_shadow_short_bull_fade_canary" &&
+        (
+          !(direction === "short") ||
+          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps >= XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS) ||
+          !(Number.isFinite(spreadBps) && spreadBps <= XRP_BULL_FADE_MAX_SPREAD_BPS) ||
+          !(Number.isFinite(altMomentum2hBps) && altMomentum2hBps > XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS)
+        )
+      ) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_xrp_bull_fade_filter_blocked" });
+        continue;
+      }
       if (
         strategyVariant === "avax_shadow_short_canary" &&
         (
@@ -1961,6 +1979,18 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
             xrp_short_min_btc_momentum_6h_bps: symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
             xrp_short_min_spread_bps:
               strategyVariant === "xrp_shadow_short_core" ? xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps) : null,
+            xrp_bull_fade_min_btc_momentum_6h_bps:
+              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS : null,
+            xrp_bull_fade_max_spread_bps:
+              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MAX_SPREAD_BPS : null,
+            xrp_bull_fade_min_alt_momentum_2h_bps:
+              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS : null,
+            entry_threshold_bps:
+              strategyVariant === "xrp_shadow_short_core"
+                ? xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps)
+                : strategyVariant === "xrp_shadow_short_bull_fade_canary"
+                  ? XRP_BULL_FADE_MAX_SPREAD_BPS
+                  : details.entry_threshold_bps,
             avax_short_min_btc_momentum_6h_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
             avax_short_min_spread_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
             sol_short_max_btc_momentum_6h_bps: null,

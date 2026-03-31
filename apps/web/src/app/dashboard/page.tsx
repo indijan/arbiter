@@ -245,12 +245,15 @@ export default async function DashboardPage() {
   const shadowOpen = shadowWithBtcMeta.filter((row) => row.status === "open");
   const shadowPnl = shadowClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowXrpCoreClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
+  const shadowXrpBullFadeClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
   const shadowSolShortClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
   const shadowXrpCoreOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
+  const shadowXrpBullFadeOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
   const shadowSolShortOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_canary");
   const shadowXrpCorePnl = shadowXrpCoreClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowXrpBullFadePnl = shadowXrpBullFadeClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowSolShortPnl = shadowSolShortClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const latestShadowTrade = shadowClosed[0] ?? null;
@@ -300,6 +303,7 @@ export default async function DashboardPage() {
     latestBtcMomentum >= 150
       ? [
           { label: "AVAX canary short", state: "active" },
+          { label: "XRP bull fade canary", state: "active" },
           { label: "XRP core short", state: "standby" },
           { label: "SOL bear canary short", state: "standby" }
         ]
@@ -317,6 +321,7 @@ export default async function DashboardPage() {
             ]
           : [
               { label: "AVAX canary short", state: "watch" },
+              { label: "XRP bull fade canary", state: "watch" },
               { label: "XRP core short", state: "standby" },
               { label: "SOL bear canary short", state: "standby" }
             ];
@@ -329,6 +334,13 @@ export default async function DashboardPage() {
       closed: shadowXrpCoreClosed.length,
       open: shadowXrpCoreOpen.length,
       state: regimeActiveLanes.find((lane) => lane.label === "XRP core short")?.state ?? "standby"
+    },
+    {
+      label: "XRP bull fade canary",
+      pnl: shadowXrpBullFadePnl,
+      closed: shadowXrpBullFadeClosed.length,
+      open: shadowXrpBullFadeOpen.length,
+      state: regimeActiveLanes.find((lane) => lane.label === "XRP bull fade canary")?.state ?? "standby"
     },
     {
       label: "AVAX canary short",
@@ -547,11 +559,16 @@ export default async function DashboardPage() {
                 <p className={`mt-1 text-xl font-semibold ${toneClass(shadowPnl)}`}>{usd(shadowPnl)}</p>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className={pnlCardClass(shadowXrpCorePnl)}>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">XRP core short</p>
                 <p className={`mt-2 ${pnlValueClass(shadowXrpCorePnl, "md")}`}>{usd(shadowXrpCorePnl)}</p>
                 <p className="mt-2 text-sm text-brand-100/70">{shadowXrpCoreClosed.length} zárt · {shadowXrpCoreOpen.length} nyitott</p>
+              </div>
+              <div className={pnlCardClass(shadowXrpBullFadePnl)}>
+                <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">XRP bull fade canary</p>
+                <p className={`mt-2 ${pnlValueClass(shadowXrpBullFadePnl, "md")}`}>{usd(shadowXrpBullFadePnl)}</p>
+                <p className="mt-2 text-sm text-brand-100/70">{shadowXrpBullFadeClosed.length} zárt · {shadowXrpBullFadeOpen.length} nyitott</p>
               </div>
               <div className={pnlCardClass(shadowAvaxPnl)}>
                 <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">AVAX canary short</p>

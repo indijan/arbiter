@@ -10,6 +10,9 @@ const CONFIG = {
   allowlist: new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]),
   denylist: new Set(["LTCUSD", "DOTUSD", "BCHUSD"]),
   xrpShortMinBtcMomentum6hBps: 0,
+  xrpBullFadeMinBtcMomentum6hBps: 100,
+  xrpBullFadeMaxSpreadBps: -50,
+  xrpBullFadeMinAltMomentum2hBps: 25,
   avaxShortMinBtcMomentum6hBps: 0,
   avaxShortMinSpreadBps: 50,
   solShortMinSpreadBps: -25,
@@ -18,6 +21,7 @@ const CONFIG = {
 
 const LANE_DEFS = [
   { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_core" },
+  { symbol: "XRPUSD", direction: "short", strategyVariant: "xrp_shadow_short_bull_fade_canary" },
   { symbol: "AVAXUSD", direction: "short", strategyVariant: "avax_shadow_short_canary" },
   { symbol: "SOLUSD", direction: "short", strategyVariant: "sol_shadow_short_canary" }
 ];
@@ -82,13 +86,20 @@ function simulate(snapshots) {
   for (let i = CONFIG.entryLookbackHours; i + CONFIG.holdHours < hours.length; i += 1) {
     const current = byHour.get(hours[i]);
     const entry = byHour.get(hours[i - CONFIG.entryLookbackHours]);
+    const exitRef = byHour.get(hours[i - 2]);
     if (!current || !entry) continue;
     const allRows = Array.from(current.keys())
       .map((symbol) => {
         const c = current.get(symbol);
         const e = entry.get(symbol);
-        if (!c || !e) return null;
-        return { symbol, momentum: ((c - e) / e) * 10000, current: c };
+        const r = exitRef?.get(symbol);
+        if (!c || !e || !r) return null;
+        return {
+          symbol,
+          momentum: ((c - e) / e) * 10000,
+          momentum2h: ((c - r) / r) * 10000,
+          current: c
+        };
       })
       .filter(Boolean);
     if (allRows.length < 4) continue;
@@ -111,6 +122,14 @@ function simulate(snapshots) {
         (
           !(btcRow && btcRow.momentum < CONFIG.xrpShortMinBtcMomentum6hBps) ||
           !(candidate.spread >= xrpShortSpreadFloorForBtcMomentum(btcRow?.momentum))
+        )
+      ) continue;
+      if (
+        lane.strategyVariant === "xrp_shadow_short_bull_fade_canary" &&
+        (
+          !(btcRow && btcRow.momentum >= CONFIG.xrpBullFadeMinBtcMomentum6hBps) ||
+          !(candidate.spread <= CONFIG.xrpBullFadeMaxSpreadBps) ||
+          !(candidate.momentum2h > CONFIG.xrpBullFadeMinAltMomentum2hBps)
         )
       ) continue;
       if (

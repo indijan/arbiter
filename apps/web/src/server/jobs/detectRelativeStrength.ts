@@ -9,6 +9,9 @@ const SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD", "LINKUSD", "A
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
 const RELATIVE_STRENGTH_DENYLIST = new Set(["LTCUSD", "DOTUSD", "BCHUSD"]);
 const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
+const XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS = 100;
+const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
+const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
 const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
 const SOL_SHORT_MAX_ALT_MOMENTUM_6H_BPS = -75;
@@ -31,7 +34,12 @@ type RelativeStrengthLane = {
     momentum2hBps: number;
     btcMomentum6hBps: number | null;
   }) => string | null;
-  details: (args: { spreadBps: number; momentum6hBps: number; btcMomentum6hBps: number | null }) => Record<string, number | null>;
+  details: (args: {
+    spreadBps: number;
+    momentum6hBps: number;
+    momentum2hBps: number;
+    btcMomentum6hBps: number | null;
+  }) => Record<string, number | null>;
 };
 
 type SnapshotRow = {
@@ -123,6 +131,28 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     details: ({ btcMomentum6hBps }) => ({
       xrp_short_min_btc_momentum_6h_bps: XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS,
       xrp_short_min_spread_bps: xrpShortSpreadFloorForBtcMomentum(btcMomentum6hBps),
+      btc_momentum_6h_bps: btcMomentum6hBps
+    })
+  },
+  {
+    key: "xrp_bull_fade_short",
+    symbol: "XRPUSD",
+    direction: "short",
+    variant: "xrp_shadow_short_bull_fade_canary",
+    holdSeconds: 4 * 60 * 60,
+    evaluate: ({ btcMomentum6hBps, spreadBps, momentum2hBps }) => {
+      if (!(btcMomentum6hBps !== null && btcMomentum6hBps >= XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS)) {
+        return "btc_filter_blocked";
+      }
+      if (!(spreadBps <= XRP_BULL_FADE_MAX_SPREAD_BPS) || !(momentum2hBps > XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS)) {
+        return "xrp_bull_fade_filter_blocked";
+      }
+      return null;
+    },
+    details: ({ btcMomentum6hBps }) => ({
+      xrp_bull_fade_min_btc_momentum_6h_bps: XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS,
+      xrp_bull_fade_max_spread_bps: XRP_BULL_FADE_MAX_SPREAD_BPS,
+      xrp_bull_fade_min_alt_momentum_2h_bps: XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS,
       btc_momentum_6h_bps: btcMomentum6hBps
     })
   },
@@ -307,6 +337,8 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         entry_threshold_bps:
           lane.variant === "xrp_shadow_short_core"
             ? xrpShortSpreadFloorForBtcMomentum(btcRow ? btcRow.momentum6hBps : null)
+            : lane.variant === "xrp_shadow_short_bull_fade_canary"
+              ? XRP_BULL_FADE_MAX_SPREAD_BPS
             : lane.variant === "avax_shadow_short_canary"
               ? AVAX_SHORT_MIN_SPREAD_BPS
               : SOL_SHORT_MIN_SPREAD_BPS,
@@ -316,6 +348,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         ...lane.details({
           spreadBps: row.spreadBps,
           momentum6hBps: row.momentum6hBps,
+          momentum2hBps: row.momentum2hBps,
           btcMomentum6hBps: btcRow ? btcRow.momentum6hBps : null
         }),
         strategy_family: "snapshot_relative_strength"
