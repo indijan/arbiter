@@ -137,6 +137,12 @@ const RELATIVE_STRENGTH_LANE_KEYS = new Set([
   "sol_shadow_short_deep_bear_continuation"
 ]);
 
+function candidateCanaryIdFromVariant(strategyVariant: string) {
+  if (!strategyVariant.startsWith("candidate_canary:")) return null;
+  const id = strategyVariant.slice("candidate_canary:".length).trim();
+  return id || null;
+}
+
 function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   if (strategyVariant === "xrp_shadow_short_core") return 4 * 60 * 60;
   if (strategyVariant === "xrp_shadow_short_bull_fade_canary") return 4 * 60 * 60;
@@ -654,6 +660,15 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const strategyState = (key: string) => lanePolicyStateFromSettingsMap(strategySettingsMap, key);
   const allowsDetect = (key: string) => laneStateAllowsDetection(strategyState(key));
   const allowsExecute = (key: string) => laneStateAllowsExecution(strategyState(key));
+  const { data: canaryCandidateRows, error: canaryCandidatesError } = await adminSupabase
+    .from("candidate_lane_policies")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "canary");
+  if (canaryCandidatesError) {
+    throw new Error(canaryCandidatesError.message);
+  }
+  const activeCanaryCandidateIds = new Set((canaryCandidateRows ?? []).map((row) => String(row.id)));
 
   let policyControllerAction = "none";
   try {
@@ -1352,6 +1367,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           markPrefilter("relative_strength_lane_disabled");
           return false;
         }
+        const candidateCanaryId = candidateCanaryIdFromVariant(strategyVariant);
+        if (candidateCanaryId && !activeCanaryCandidateIds.has(candidateCanaryId)) {
+          markPrefilter("candidate_canary_disabled");
+          return false;
+        }
       }
       return true;
     })
@@ -1917,6 +1937,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant) && !allowsExecute(strategyVariant)) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_lane_disabled" });
+        continue;
+      }
+      const candidateCanaryId = candidateCanaryIdFromVariant(strategyVariant);
+      if (candidateCanaryId && !activeCanaryCandidateIds.has(candidateCanaryId)) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "candidate_canary_disabled" });
         continue;
       }
       if (

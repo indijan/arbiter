@@ -6,7 +6,7 @@ type ReviewRecommendation = {
   recommended_state: "active" | "watch" | "standby" | "paused";
 };
 
-async function applyRecommendationByKeys(strategyKeys: string[] | null) {
+export async function POST(request: Request) {
   const supabase = createServerSupabase();
   if (!supabase) {
     return NextResponse.json({ error: "Missing Supabase env vars." }, { status: 500 });
@@ -15,6 +15,12 @@ async function applyRecommendationByKeys(strategyKeys: string[] | null) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { strategy_key?: string };
+  const strategyKey = String(body.strategy_key ?? "").trim();
+  if (!strategyKey) {
+    return NextResponse.json({ error: "Missing strategy_key." }, { status: 400 });
   }
 
   const { data: review, error: reviewError } = await supabase
@@ -35,39 +41,27 @@ async function applyRecommendationByKeys(strategyKeys: string[] | null) {
   const recommendations = Array.isArray(review.recommendations)
     ? (review.recommendations as ReviewRecommendation[])
     : [];
+  const selected = recommendations.find((row) => row.strategy_key === strategyKey);
 
-  const filteredRecommendations =
-    strategyKeys && strategyKeys.length > 0
-      ? recommendations.filter((row) => strategyKeys.includes(row.strategy_key))
-      : recommendations;
-
-  if (filteredRecommendations.length === 0) {
-    return NextResponse.json({ error: "No recommendations to apply." }, { status: 400 });
+  if (!selected) {
+    return NextResponse.json({ error: "No recommendation found for this lane." }, { status: 404 });
   }
-
-  const rows = filteredRecommendations.map((row) => ({
-    user_id: userData.user.id,
-    strategy_key: row.strategy_key,
-    enabled: row.recommended_state !== "paused",
-    config: { state: row.recommended_state }
-  }));
 
   const { error: upsertError } = await supabase
     .from("strategy_settings")
-    .upsert(rows, { onConflict: "user_id,strategy_key" });
+    .upsert(
+      {
+        user_id: userData.user.id,
+        strategy_key: selected.strategy_key,
+        enabled: selected.recommended_state !== "paused",
+        config: { state: selected.recommended_state }
+      },
+      { onConflict: "user_id,strategy_key" }
+    );
 
   if (upsertError) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  await supabase
-    .from("lane_policy_reviews")
-    .update({ status: "applied" })
-    .eq("id", review.id);
-
-  return NextResponse.json({ ok: true, applied: filteredRecommendations.length });
-}
-
-export async function POST() {
-  return applyRecommendationByKeys(null);
+  return NextResponse.json({ ok: true, applied: 1, strategy_key: selected.strategy_key });
 }

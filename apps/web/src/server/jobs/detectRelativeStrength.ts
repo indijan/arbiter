@@ -60,6 +60,20 @@ type RelativeStrengthLane = {
   }) => Record<string, number | null>;
 };
 
+type CandidateRuleConfig = {
+  symbol?: string;
+  direction?: "long" | "short";
+  hold_seconds?: number;
+  min_btc_6h_bps?: number;
+  max_btc_6h_bps?: number;
+  min_alt_6h_bps?: number;
+  max_alt_6h_bps?: number;
+  min_alt_2h_bps?: number;
+  max_alt_2h_bps?: number;
+  min_spread_bps?: number;
+  max_spread_bps?: number;
+};
+
 type SnapshotRow = {
   ts: string;
   exchange: string;
@@ -244,6 +258,45 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
   }
 ];
 
+function buildCandidateRelativeStrengthLane(candidate: {
+  id: string;
+  symbol: string;
+  rule_config: CandidateRuleConfig | null;
+}): RelativeStrengthLane | null {
+  const cfg = candidate.rule_config ?? {};
+  const symbol = String(cfg.symbol ?? candidate.symbol ?? "").trim();
+  const direction = cfg.direction === "long" ? "long" : "short";
+  if (!symbol) return null;
+
+  return {
+    key: `candidate_${candidate.id}`,
+    symbol,
+    direction,
+    variant: `candidate_canary:${candidate.id}`,
+    holdSeconds: Number(cfg.hold_seconds ?? 4 * 60 * 60),
+    evaluate: ({ spreadBps, momentum6hBps, momentum2hBps, btcMomentum6hBps }) => {
+      if (btcMomentum6hBps === null) return "btc_filter_blocked";
+      if (cfg.min_btc_6h_bps !== undefined && btcMomentum6hBps < cfg.min_btc_6h_bps) return "candidate_filter_blocked";
+      if (cfg.max_btc_6h_bps !== undefined && btcMomentum6hBps >= cfg.max_btc_6h_bps) return "candidate_filter_blocked";
+      if (cfg.min_alt_6h_bps !== undefined && momentum6hBps < cfg.min_alt_6h_bps) return "candidate_filter_blocked";
+      if (cfg.max_alt_6h_bps !== undefined && momentum6hBps > cfg.max_alt_6h_bps) return "candidate_filter_blocked";
+      if (cfg.min_alt_2h_bps !== undefined && momentum2hBps < cfg.min_alt_2h_bps) return "candidate_filter_blocked";
+      if (cfg.max_alt_2h_bps !== undefined && momentum2hBps > cfg.max_alt_2h_bps) return "candidate_filter_blocked";
+      if (cfg.min_spread_bps !== undefined && spreadBps < cfg.min_spread_bps) return "candidate_filter_blocked";
+      if (cfg.max_spread_bps !== undefined && spreadBps >= cfg.max_spread_bps) return "candidate_filter_blocked";
+      return null;
+    },
+    details: ({ spreadBps, momentum6hBps, momentum2hBps, btcMomentum6hBps }) => ({
+      btc_momentum_6h_bps: btcMomentum6hBps,
+      momentum_6h_bps: momentum6hBps,
+      momentum_2h_bps: momentum2hBps,
+      spread_bps: spreadBps,
+      entry_threshold_bps: cfg.min_spread_bps ?? cfg.max_spread_bps ?? null,
+      exit_threshold_bps: MAX_EXIT_SPREAD_BPS
+    })
+  };
+}
+
 export async function detectRelativeStrength(): Promise<DetectRelativeStrengthResult> {
   const adminSupabase = createAdminSupabase();
   if (!adminSupabase) throw new Error("Missing service role key.");
@@ -277,11 +330,29 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     );
     for (const [key, value] of mapped.entries()) strategySettingsMap.set(key, value);
   }
+  const { data: candidatePolicies, error: candidatePoliciesError } = await adminSupabase
+    .from("candidate_lane_policies")
+    .select("id, symbol, rule_config")
+    .eq("user_id", account?.user_id ?? "")
+    .eq("status", "canary");
+  if (candidatePoliciesError) throw new Error(candidatePoliciesError.message);
   const isLaneDetectEnabled = (variant: string) => {
     const parentState = lanePolicyStateFromSettingsMap(strategySettingsMap, RELATIVE_STRENGTH_PARENT_KEY);
     const laneState = lanePolicyStateFromSettingsMap(strategySettingsMap, variant);
     return laneStateAllowsDetection(parentState) && laneStateAllowsDetection(laneState);
   };
+  const runtimeLanes = [
+    ...RELATIVE_STRENGTH_LANES,
+    ...((candidatePolicies ?? [])
+      .map((row) =>
+        buildCandidateRelativeStrengthLane({
+          id: String(row.id),
+          symbol: String(row.symbol ?? ""),
+          rule_config: (row.rule_config ?? {}) as CandidateRuleConfig
+        })
+      )
+      .filter(Boolean) as RelativeStrengthLane[])
+  ];
 
   const byHour = new Map<string, Map<string, number>>();
   for (const row of data) {
@@ -345,7 +416,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const near_miss_samples: DetectRelativeStrengthResult["near_miss_samples"] = [];
 
   const candidates = ranked.flatMap((row) =>
-    RELATIVE_STRENGTH_LANES
+    runtimeLanes
       .filter((lane) => lane.symbol === row.symbol && isLaneDetectEnabled(lane.variant))
       .map((lane) => ({ row, lane }))
   );
@@ -418,7 +489,9 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
               ? AVAX_SHORT_MIN_SPREAD_BPS
               : lane.variant === "sol_shadow_short_soft_bear_laggard"
                 ? SOL_SOFT_BEAR_MAX_SPREAD_BPS
-                : SOL_DEEP_BEAR_MIN_SPREAD_BPS,
+                : lane.variant === "sol_shadow_short_deep_bear_continuation"
+                  ? SOL_DEEP_BEAR_MIN_SPREAD_BPS
+                  : null,
         exit_threshold_bps: MAX_EXIT_SPREAD_BPS,
         hold_seconds: lane.holdSeconds,
         strategy_variant: lane.variant,
