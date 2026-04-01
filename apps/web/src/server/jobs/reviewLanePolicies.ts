@@ -144,7 +144,10 @@ function extractJsonObject(raw: string) {
 
 async function proposeLaneReviewWithAI(input: ReviewPayload) {
   const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_LANE_POLICY_MODEL ?? process.env.OPENAI_POLICY_MODEL ?? "gpt-5.1";
+  const model =
+    process.env.OPENAI_LANE_POLICY_MODEL ??
+    process.env.OPENAI_POLICY_MODEL ??
+    "gpt-5.1-chat-latest";
 
   if (!apiKey) {
     return { used: false, model, raw: "missing_api_key", recommendations: null as ReviewRecommendation[] | null };
@@ -188,7 +191,13 @@ async function proposeLaneReviewWithAI(input: ReviewPayload) {
   });
 
   if (!response.ok) {
-    return { used: true, model, raw: `http_${response.status}`, recommendations: null as ReviewRecommendation[] | null };
+    const errorText = await response.text().catch(() => "");
+    return {
+      used: true,
+      model,
+      raw: `http_${response.status}${errorText ? `: ${errorText.slice(0, 1000)}` : ""}`,
+      recommendations: null as ReviewRecommendation[] | null
+    };
   }
 
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
