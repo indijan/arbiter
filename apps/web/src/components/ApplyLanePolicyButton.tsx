@@ -29,7 +29,7 @@ export default function ApplyLanePolicyButton({ disabled = false }: { disabled?:
   return (
     <div className="flex flex-col items-end gap-2">
       <button className="btn btn-ghost" onClick={handleClick} disabled={disabled || loading}>
-        {loading ? "Applying..." : "Apply Recommendation"}
+        {loading ? "Alkalmazás..." : "Ajánlás alkalmazása"}
       </button>
       {message ? <p className="text-xs text-emerald-200">{message}</p> : null}
       {error ? <p className="text-xs text-rose-200">{error}</p> : null}

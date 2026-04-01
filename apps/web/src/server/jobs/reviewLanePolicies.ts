@@ -45,6 +45,22 @@ type ReviewPayload = {
   lanes: ReviewSummaryLane[];
 };
 
+type ReviewSummary = {
+  market_label: string;
+  opening_expectation: string;
+  operator_message: string;
+  next_action: string;
+  news_risk_message: string | null;
+  active_now_count: number;
+  watch_now_count: number;
+  standby_now_count: number;
+  paused_now_count: number;
+  active_after_apply_count: number;
+  watch_after_apply_count: number;
+  standby_after_apply_count: number;
+  paused_after_apply_count: number;
+};
+
 function asNumber(value: unknown) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -95,6 +111,71 @@ function regimeFromBtcMomentum(bps: number) {
   if (bps >= 150) return "btc_pos_strong";
   if (bps > 0) return "btc_pos";
   return "flat";
+}
+
+function regimeHumanLabel(regime: string) {
+  if (regime === "btc_neg_strong") return "Erősen eső piac";
+  if (regime === "btc_neg") return "Enyhén eső piac";
+  if (regime === "btc_pos") return "Enyhén emelkedő piac";
+  if (regime === "btc_pos_strong") return "Erősen emelkedő piac";
+  return "Oldalazó vagy bizonytalan piac";
+}
+
+function countStates(states: LanePolicyState[]) {
+  return {
+    active: states.filter((state) => state === "active").length,
+    watch: states.filter((state) => state === "watch").length,
+    standby: states.filter((state) => state === "standby").length,
+    paused: states.filter((state) => state === "paused").length
+  };
+}
+
+function buildOperationalSummary(args: {
+  currentBtcRegime: string;
+  currentStates: LanePolicyState[];
+  recommendedStates: LanePolicyState[];
+  newsRiskMessage: string | null;
+}): ReviewSummary {
+  const currentCounts = countStates(args.currentStates);
+  const recommendedCounts = countStates(args.recommendedStates);
+  const marketLabel = regimeHumanLabel(args.currentBtcRegime);
+
+  const openingExpectation =
+    currentCounts.active > 0
+      ? `Igen. Most ${currentCounts.active} lane automatikusan kereskedhet.`
+      : currentCounts.watch > 0
+      ? `Nem. Most nincs automatikus nyitás, ${currentCounts.watch} lane csak figyelő módban van.`
+      : "Nem. Most nincs olyan lane, ami automatikusan nyitna ebben a piaci helyzetben.";
+
+  const operatorMessage =
+    currentCounts.active > 0
+      ? "A rendszer most aktívan kereskedik, de csak a jelenlegi piaci helyzethez illő lane-ekkel."
+      : currentCounts.watch > 0
+      ? "A rendszer most inkább megfigyel: figyeli a setupokat, de még nem nyit automatikusan."
+      : "A rendszer most kivár, mert ebben a piaci helyzetben nincs elég erős automatikus stratégia.";
+
+  const nextAction =
+    recommendedCounts.active > currentCounts.active
+      ? "Ha alkalmazod az ajánlást, több lane kerül automatikus kereskedő módba."
+      : recommendedCounts.active < currentCounts.active
+      ? "Ha alkalmazod az ajánlást, a rendszer visszafog néhány jelenlegi lane-t a kockázat csökkentésére."
+      : "Ha alkalmazod az ajánlást, a rendszer főleg finomhangolni fog, nem teljesen új működési módra vált.";
+
+  return {
+    market_label: marketLabel,
+    opening_expectation: openingExpectation,
+    operator_message: operatorMessage,
+    next_action: nextAction,
+    news_risk_message: args.newsRiskMessage,
+    active_now_count: currentCounts.active,
+    watch_now_count: currentCounts.watch,
+    standby_now_count: currentCounts.standby,
+    paused_now_count: currentCounts.paused,
+    active_after_apply_count: recommendedCounts.active,
+    watch_after_apply_count: recommendedCounts.watch,
+    standby_after_apply_count: recommendedCounts.standby,
+    paused_after_apply_count: recommendedCounts.paused
+  };
 }
 
 function heuristicRecommendation(lane: ReviewSummaryLane): ReviewRecommendation {
@@ -304,7 +385,12 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
   const since30d = new Date(Date.now() - REVIEW_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const since7d = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: positions, error: positionsError }, { data: settingsRows, error: settingsError }] =
+  const recentNewsSince = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const [
+    { data: positions, error: positionsError },
+    { data: settingsRows, error: settingsError },
+    { data: newsRows, error: newsError }
+  ] =
     await Promise.all([
       adminSupabase
         .from("positions")
@@ -316,10 +402,18 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
         .from("strategy_settings")
         .select("strategy_key, enabled, config")
         .eq("user_id", userId)
-        .in("strategy_key", LANE_DEFS.map((lane) => lane.key))
+        .in("strategy_key", LANE_DEFS.map((lane) => lane.key)),
+      adminSupabase
+        .from("news_events")
+        .select("title, action_bias, risk_gate, risk_gate_reason, published_at")
+        .eq("risk_gate", true)
+        .gte("published_at", recentNewsSince)
+        .order("published_at", { ascending: false })
+        .limit(1)
     ]);
   if (positionsError) throw new Error(positionsError.message);
   if (settingsError) throw new Error(settingsError.message);
+  if (newsError) throw new Error(newsError.message);
 
   const settingsMap = new Map(
     ((settingsRows ?? []) as Array<{ strategy_key: string; enabled: boolean; config?: Record<string, unknown> | null }>).map((row) => [
@@ -365,6 +459,22 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
     ai.recommendations && ai.recommendations.length > 0
       ? ai.recommendations
       : laneSummaries.map((lane) => heuristicRecommendation(lane));
+  const latestNewsGate = (newsRows ?? [])[0] as
+    | {
+        title?: string | null;
+        action_bias?: string | null;
+        risk_gate_reason?: string | null;
+      }
+    | undefined;
+  const newsRiskMessage = latestNewsGate
+    ? `Friss hírkockázat aktív: ${latestNewsGate.risk_gate_reason || latestNewsGate.action_bias || latestNewsGate.title || "market risk"}`
+    : null;
+  const summary = buildOperationalSummary({
+    currentBtcRegime,
+    currentStates: laneSummaries.map((lane) => lane.current_state),
+    recommendedStates: recommendations.map((row) => row.recommended_state),
+    newsRiskMessage
+  });
 
   const autoApplyDowngrades =
     (process.env.AUTO_APPLY_LANE_DOWNGRADES ?? "false").toLowerCase() === "true";
@@ -401,7 +511,7 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
       model: ai.model,
       used_ai: ai.used && Boolean(ai.recommendations && ai.recommendations.length > 0),
       status: reviewStatus,
-      summary: input,
+      summary,
       recommendations,
       raw: ai.raw
     })

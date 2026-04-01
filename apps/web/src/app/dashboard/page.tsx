@@ -60,6 +60,21 @@ type LanePolicyReviewRow = {
   current_btc_momentum_6h_bps: number | string;
   model: string | null;
   used_ai: boolean;
+  summary: {
+    market_label?: string;
+    opening_expectation?: string;
+    operator_message?: string;
+    next_action?: string;
+    news_risk_message?: string | null;
+    active_now_count?: number;
+    watch_now_count?: number;
+    standby_now_count?: number;
+    paused_now_count?: number;
+    active_after_apply_count?: number;
+    watch_after_apply_count?: number;
+    standby_after_apply_count?: number;
+    paused_after_apply_count?: number;
+  } | null;
   recommendations: Array<{
     strategy_key: string;
     label: string;
@@ -138,6 +153,41 @@ function policyToneClass(state: LanePolicyState | LaneState) {
   if (state === "watch") return "border-amber-300/20 bg-amber-500/10 text-amber-100";
   if (state === "standby") return "border-sky-300/20 bg-sky-500/10 text-sky-100";
   return "border-rose-300/20 bg-rose-500/10 text-rose-100";
+}
+
+function stateLabel(state: LanePolicyState | LaneState) {
+  if (state === "active") return "Kereskedik";
+  if (state === "watch") return "Figyel";
+  if (state === "standby") return "Várakozik";
+  return "Leállítva";
+}
+
+function regimeHumanLabel(regime: string) {
+  if (regime === "btc_neg_strong") return "Erős eső piac";
+  if (regime === "btc_neg") return "Enyhén eső piac";
+  if (regime === "btc_pos") return "Enyhén emelkedő piac";
+  if (regime === "btc_pos_strong") return "Erősen emelkedő piac";
+  return "Oldalazó / bizonytalan piac";
+}
+
+function simpleRecommendationReason(state: LanePolicyState) {
+  if (state === "active") return "A rendszer szerint ebben a piaci helyzetben érdemes automatikusan kereskednie.";
+  if (state === "watch") return "A rendszer figyelje ezt a setupot, de még ne nyisson rá automatikusan.";
+  if (state === "standby") return "Most nem ez a jó piaci helyzet ehhez a lane-hez, ezért maradjon készenlétben.";
+  return "A rendszer szerint ezt most teljesen ki kell kapcsolni.";
+}
+
+function applyImpactSummary(
+  recommendations: Array<{ recommended_state: LanePolicyState }> | null | undefined
+) {
+  const rows = recommendations ?? [];
+  const counts = {
+    active: rows.filter((row) => row.recommended_state === "active").length,
+    watch: rows.filter((row) => row.recommended_state === "watch").length,
+    standby: rows.filter((row) => row.recommended_state === "standby").length,
+    paused: rows.filter((row) => row.recommended_state === "paused").length
+  };
+  return `${counts.active} kereskedik, ${counts.watch} figyel, ${counts.standby} várakozik, ${counts.paused} leállítva.`;
 }
 
 
@@ -317,7 +367,7 @@ export default async function DashboardPage() {
       .in("strategy_key", Object.values(LANE_LABEL_TO_KEY)),
     supabase
       .from("lane_policy_reviews")
-      .select("id, created_at, current_btc_regime, current_btc_momentum_6h_bps, model, used_ai, recommendations")
+      .select("id, created_at, current_btc_regime, current_btc_momentum_6h_bps, model, used_ai, summary, recommendations")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -555,6 +605,57 @@ export default async function DashboardPage() {
                 </form>
               </div>
             </div>
+
+            {latestLanePolicyReview?.summary ? (
+              <div className="mt-6 rounded-[24px] border border-brand-300/15 bg-brand-950/45 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="max-w-3xl">
+                    <p className="text-xs uppercase tracking-[0.28em] text-brand-300/75">Most mi történik?</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-white">
+                      {latestLanePolicyReview.summary.market_label ?? "Piaci összefoglaló"}
+                    </h2>
+                    <p className="mt-3 text-base text-brand-50">
+                      {latestLanePolicyReview.summary.opening_expectation ?? "Nincs összefoglaló."}
+                    </p>
+                    <p className="mt-2 text-sm text-brand-100/75">
+                      {latestLanePolicyReview.summary.operator_message ?? ""}
+                    </p>
+                    <p className="mt-2 text-sm text-brand-100/75">
+                      {latestLanePolicyReview.summary.next_action ?? ""}
+                    </p>
+                    {latestLanePolicyReview.summary.news_risk_message ? (
+                      <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                        {latestLanePolicyReview.summary.news_risk_message}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3 sm:min-w-[260px]">
+                    <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">Most</p>
+                      <p className="mt-2 text-sm text-white">
+                        {latestLanePolicyReview.summary.active_now_count ?? 0} kereskedik,{" "}
+                        {latestLanePolicyReview.summary.watch_now_count ?? 0} figyel,{" "}
+                        {latestLanePolicyReview.summary.standby_now_count ?? 0} várakozik
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">Ha alkalmazod az ajánlást</p>
+                      <p className="mt-2 text-sm text-white">
+                        {latestLanePolicyReview.summary.active_after_apply_count ?? 0} kereskedik,{" "}
+                        {latestLanePolicyReview.summary.watch_after_apply_count ?? 0} figyel,{" "}
+                        {latestLanePolicyReview.summary.standby_after_apply_count ?? 0} várakozik
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-brand-300/10 bg-brand-900/45 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">Mit tud most az AI?</p>
+                      <p className="mt-2 text-sm text-white">
+                        Be- vagy kikapcsolási állapotot javasol a meglévő lane-ekhez. Új stratégiaszabályt nem ír át automatikusan.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className={pnlCardClass(pnl24h)}>
@@ -878,13 +979,15 @@ export default async function DashboardPage() {
                   <div>
                     <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">AI lane policy review</p>
                     <p className="mt-1 text-sm text-brand-100/70">
-                      Óránkénti rezsim + lane performance review. Egyelőre javasol, nem ír át automatikusan.
+                      Egyszerűen: a rendszer megnézi, milyen piaci helyzet van most, és megmondja, melyik lane kereskedjen, melyik csak figyeljen, és melyik maradjon kikapcsolva.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
                       {latestLanePolicyReview
-                        ? `${latestLanePolicyReview.used_ai ? "AI" : "heuristic"} · ${latestLanePolicyReview.model ?? "-"}`
+                        ? latestLanePolicyReview.used_ai
+                          ? "AI javaslat"
+                          : "Szabály alapú javaslat"
                         : "nincs review"}
                     </div>
                     <ApplyLanePolicyButton disabled={!latestLanePolicyReview || (latestLanePolicyReview.recommendations?.length ?? 0) === 0} />
@@ -892,20 +995,48 @@ export default async function DashboardPage() {
                 </div>
                 {latestLanePolicyReview ? (
                   <>
+                    <div className="mt-3 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
+                      <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">Mit jelent ez most?</p>
+                      <h3 className="mt-2 text-xl font-semibold text-white">
+                        {latestLanePolicyReview.summary?.market_label ?? "Piaci összefoglaló"}
+                      </h3>
+                      <p className="mt-3 text-sm text-brand-100/80">
+                        {latestLanePolicyReview.summary?.opening_expectation ?? "Nincs összefoglaló."}
+                      </p>
+                      <p className="mt-2 text-sm text-brand-100/70">
+                        {latestLanePolicyReview.summary?.operator_message ?? ""}
+                      </p>
+                      <p className="mt-2 text-sm text-brand-100/70">
+                        {latestLanePolicyReview.summary?.next_action ?? ""}
+                      </p>
+                      {latestLanePolicyReview.summary?.news_risk_message ? (
+                        <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                          {latestLanePolicyReview.summary.news_risk_message}
+                        </p>
+                      ) : null}
+                    </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">Review ideje</p>
+                        <p className="text-brand-100/55">Utolsó elemzés</p>
                         <p className="mt-1 text-sm font-semibold text-white">{formatTs(latestLanePolicyReview.created_at)}</p>
                       </div>
                       <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">BTC rezsim</p>
+                        <p className="text-brand-100/55">Mostani piaci helyzet</p>
                         <p className="mt-1 text-sm font-semibold text-white">
-                          {latestLanePolicyReview.current_btc_regime} · {asNumber(latestLanePolicyReview.current_btc_momentum_6h_bps).toFixed(1)} bps
+                          {regimeHumanLabel(latestLanePolicyReview.current_btc_regime)}
+                        </p>
+                        <p className="mt-1 text-xs text-brand-100/55">
+                          BTC 6 órás mozgás: {asNumber(latestLanePolicyReview.current_btc_momentum_6h_bps).toFixed(1)} bps
                         </p>
                       </div>
                       <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">Ajánlások</p>
-                        <p className="mt-1 text-sm font-semibold text-white">{latestLanePolicyReview.recommendations?.length ?? 0}</p>
+                        <p className="text-brand-100/55">Ha most alkalmazod</p>
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {applyImpactSummary(latestLanePolicyReview.recommendations)}
+                        </p>
+                        <p className="mt-1 text-xs text-brand-100/55">
+                          Most: {latestLanePolicyReview.summary?.active_now_count ?? 0} kereskedik, {latestLanePolicyReview.summary?.watch_now_count ?? 0} figyel.
+                        </p>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 xl:grid-cols-2">
@@ -914,20 +1045,21 @@ export default async function DashboardPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-white">{row.label}</p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-100/45">{row.strategy_key}</p>
+                              <p className="mt-1 text-sm text-brand-100/65">
+                                Most: {stateLabel(row.current_state)}. Javaslat: {stateLabel(row.recommended_state)}.
+                              </p>
                             </div>
                             <div className="text-right">
                               <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.current_state)}`}>
-                                now {row.current_state}
+                                most: {stateLabel(row.current_state)}
                               </div>
                               <div className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.recommended_state)}`}>
-                                rec {row.recommended_state}
+                                javaslat: {stateLabel(row.recommended_state)}
                               </div>
                             </div>
                           </div>
-                          <p className="mt-3 text-sm text-brand-100/75">{row.reason}</p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-brand-100/45">
-                            confidence {(Number(row.confidence ?? 0) * 100).toFixed(0)}%
+                          <p className="mt-3 text-sm text-brand-100/75">
+                            {row.reason && row.reason !== "AI recommendation" ? row.reason : simpleRecommendationReason(row.recommended_state)}
                           </p>
                         </div>
                       ))}
