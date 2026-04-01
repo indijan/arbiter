@@ -225,7 +225,20 @@ export type ReviewLanePoliciesResult = {
   recommendations_count: number;
   used_ai: boolean;
   model: string | null;
+  auto_applied_count: number;
+  auto_apply_mode: string;
 };
+
+const LANE_STATE_SEVERITY: Record<LanePolicyState, number> = {
+  active: 3,
+  watch: 2,
+  standby: 1,
+  paused: 0
+};
+
+function isDowngrade(from: LanePolicyState, to: LanePolicyState) {
+  return LANE_STATE_SEVERITY[to] < LANE_STATE_SEVERITY[from];
+}
 
 export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
   const adminSupabase = createAdminSupabase();
@@ -245,7 +258,9 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
       current_btc_momentum_6h_bps: 0,
       recommendations_count: 0,
       used_ai: false,
-      model: null
+      model: null,
+      auto_applied_count: 0,
+      auto_apply_mode: "disabled"
     };
   }
 
@@ -342,6 +357,31 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
       ? ai.recommendations
       : laneSummaries.map((lane) => heuristicRecommendation(lane));
 
+  const autoApplyDowngrades =
+    (process.env.AUTO_APPLY_LANE_DOWNGRADES ?? "false").toLowerCase() === "true";
+  let autoAppliedCount = 0;
+  let reviewStatus = "proposed";
+
+  if (autoApplyDowngrades) {
+    const downgradeRows = recommendations
+      .filter((row) => isDowngrade(row.current_state, row.recommended_state))
+      .map((row) => ({
+        user_id: userId,
+        strategy_key: row.strategy_key,
+        enabled: row.recommended_state !== "paused",
+        config: { state: row.recommended_state }
+      }));
+
+    if (downgradeRows.length > 0) {
+      const { error: downgradeError } = await adminSupabase
+        .from("strategy_settings")
+        .upsert(downgradeRows, { onConflict: "user_id,strategy_key" });
+      if (downgradeError) throw new Error(downgradeError.message);
+      autoAppliedCount = downgradeRows.length;
+      reviewStatus = "auto_applied_downgrades";
+    }
+  }
+
   const { data: inserted, error: insertError } = await adminSupabase
     .from("lane_policy_reviews")
     .insert({
@@ -351,7 +391,7 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
       review_window_days: REVIEW_WINDOW_DAYS,
       model: ai.model,
       used_ai: ai.used && Boolean(ai.recommendations && ai.recommendations.length > 0),
-      status: "proposed",
+      status: reviewStatus,
       summary: input,
       recommendations,
       raw: ai.raw
@@ -367,6 +407,8 @@ export async function reviewLanePolicies(): Promise<ReviewLanePoliciesResult> {
     current_btc_momentum_6h_bps: Number(btcMomentum.toFixed(4)),
     recommendations_count: recommendations.length,
     used_ai: ai.used && Boolean(ai.recommendations && ai.recommendations.length > 0),
-    model: ai.model
+    model: ai.model,
+    auto_applied_count: autoAppliedCount,
+    auto_apply_mode: autoApplyDowngrades ? "downgrades_only" : "disabled"
   };
 }

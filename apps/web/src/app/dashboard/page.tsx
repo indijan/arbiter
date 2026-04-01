@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { lanePolicyStateFromRow, type LanePolicyState } from "@/server/lanes/policy";
+import ApplyLanePolicyButton from "@/components/ApplyLanePolicyButton";
 
 type PositionRow = {
   id: number;
@@ -816,11 +817,26 @@ export default async function DashboardPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">Lane activation matrix</p>
-                    <p className="mt-1 text-sm text-brand-100/70">BTC rezsimenként ajánlott state, mellette a tényleges policy state.</p>
+                    <p className="mt-1 text-sm text-brand-100/70">A táblában a rezsim-ajánlás van. A tényleges live policy külön, az aktuális BTC rezsimhez mutatva.</p>
                   </div>
                   <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
                     current: {currentRegimeMatrix?.label ?? latestBtcRegimeLabel}
                   </div>
+                </div>
+                <div className="mt-4 grid gap-3 xl:grid-cols-5">
+                  {lanePanels.map((lane) => (
+                    <div key={`live-${lane.label}`} className="rounded-2xl border border-brand-300/10 bg-brand-950/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">{lane.label}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(lane.recommendedState)}`}>
+                          rec {lane.recommendedState}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(lane.actualState)}`}>
+                          live {lane.actualState}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
@@ -836,23 +852,18 @@ export default async function DashboardPage() {
                       {BTC_REGIME_MATRIX.map((row) => (
                         <tr
                           key={row.key}
-                          className={`border-b border-brand-300/5 ${row.key === currentRegimeMatrix?.key ? "bg-brand-100/5" : ""}`}
+                          className={`border-b border-brand-300/5 ${
+                            row.key === currentRegimeMatrix?.key ? "bg-brand-100/5" : "opacity-45"
+                          }`}
                         >
                           <td className="px-3 py-3 font-medium text-white">{row.label}</td>
                           {LANE_LABELS.map((label) => {
                             const state = row.states[label];
-                            const actualState =
-                              regimeActiveLanes.find((lane) => lane.label === label)?.actualState ?? "paused";
                             return (
                               <td key={`${row.key}-${label}`} className="px-3 py-3">
-                                <div className="flex flex-col items-start gap-1">
-                                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(state)}`}>
-                                    rec {state}
-                                  </span>
-                                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(actualState)}`}>
-                                    live {actualState}
-                                  </span>
-                                </div>
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(state)}`}>
+                                  {state}
+                                </span>
                               </td>
                             );
                           })}
@@ -870,10 +881,13 @@ export default async function DashboardPage() {
                       Óránkénti rezsim + lane performance review. Egyelőre javasol, nem ír át automatikusan.
                     </p>
                   </div>
-                  <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
-                    {latestLanePolicyReview
-                      ? `${latestLanePolicyReview.used_ai ? "AI" : "heuristic"} · ${latestLanePolicyReview.model ?? "-"}`
-                      : "nincs review"}
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
+                      {latestLanePolicyReview
+                        ? `${latestLanePolicyReview.used_ai ? "AI" : "heuristic"} · ${latestLanePolicyReview.model ?? "-"}`
+                        : "nincs review"}
+                    </div>
+                    <ApplyLanePolicyButton disabled={!latestLanePolicyReview || (latestLanePolicyReview.recommendations?.length ?? 0) === 0} />
                   </div>
                 </div>
                 {latestLanePolicyReview ? (
