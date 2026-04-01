@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { lanePolicyStateFromRow, type LanePolicyState } from "@/server/lanes/policy";
 import ApplyLanePolicyButton from "@/components/ApplyLanePolicyButton";
-import CandidatePolicyStatusButton from "@/components/CandidatePolicyStatusButton";
+import CandidatePolicyActionButton from "@/components/CandidatePolicyActionButton";
 
 type PositionRow = {
   id: number;
@@ -36,6 +36,14 @@ type StrategySettingRow = {
   strategy_key: string;
   enabled: boolean;
   config?: Record<string, unknown> | null;
+};
+
+type OpportunityRow = {
+  id: number;
+  ts: string;
+  type: string;
+  status: string;
+  details: Record<string, unknown> | null;
 };
 
 type LanePolicyReviewRow = {
@@ -86,9 +94,11 @@ type LanePolicyReviewRow = {
 
 type CandidatePolicyRow = {
   id: string;
+  symbol: string;
   label: string;
   regime: string;
   status: "candidate" | "validated" | "canary" | "rejected";
+  status_updated_at?: string | null;
 };
 
 const LANE_LABELS = [
@@ -180,10 +190,20 @@ function candidateStatusTone(status: CandidatePolicyRow["status"] | undefined) {
 }
 
 function candidateStatusLabel(status: CandidatePolicyRow["status"] | undefined) {
-  if (status === "canary") return "Canary";
-  if (status === "validated") return "Validált";
+  if (status === "canary") return "Próbaüzem";
+  if (status === "validated") return "Jóváhagyott";
   if (status === "rejected") return "Elvetve";
   return "Jelölt";
+}
+
+function laneOriginTone(origin: "basic" | "approved") {
+  return origin === "approved"
+    ? "border-fuchsia-300/20 bg-fuchsia-500/10 text-fuchsia-100"
+    : "border-brand-300/15 bg-brand-900/40 text-brand-100/75";
+}
+
+function laneOriginLabel(origin: "basic" | "approved") {
+  return origin === "approved" ? "AI jóváhagyott" : "Alap lane";
 }
 
 function applyImpactSummary(
@@ -297,6 +317,37 @@ function sparklinePath(values: number[], width: number, height: number) {
     .join(" ");
 }
 
+function dayKey(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function buildDailyPnlSeries(rows: PositionRow[], sinceIso: string) {
+  const days: string[] = [];
+  const start = new Date(sinceIso);
+  for (let i = 0; i < 7; i += 1) {
+    const date = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    days.push(date.toISOString().slice(0, 10));
+  }
+  const byDay = new Map(days.map((day) => [day, 0]));
+  for (const row of rows) {
+    if (row.status !== "closed" || !row.exit_ts) continue;
+    const key = dayKey(row.exit_ts);
+    if (!byDay.has(key)) continue;
+    byDay.set(key, (byDay.get(key) ?? 0) + asNumber(row.realized_pnl_usd));
+  }
+  return days.map((day) => Number((byDay.get(day) ?? 0).toFixed(4)));
+}
+
+function formatAgeSince(value: string | null | undefined) {
+  if (!value) return "-";
+  const ms = Date.now() - new Date(value).getTime();
+  const hours = ms / (60 * 60 * 1000);
+  if (!Number.isFinite(hours)) return "-";
+  if (hours < 1) return "kevesebb mint 1 órája";
+  if (hours < 24) return `${hours.toFixed(1)} órája`;
+  return `${(hours / 24).toFixed(1)} napja`;
+}
+
 
 export default async function DashboardPage() {
   async function signOutAction() {
@@ -340,7 +391,8 @@ export default async function DashboardPage() {
     btcSnapshotsResult,
     strategySettingsResult,
     lanePolicyReviewResult,
-    candidatePoliciesResult
+    candidatePoliciesResult,
+    candidateOpportunitiesResult
   ] = await Promise.all([
     supabase
       .from("paper_accounts")
@@ -388,9 +440,16 @@ export default async function DashboardPage() {
       .maybeSingle(),
     supabase
       .from("candidate_lane_policies")
-      .select("id, label, regime, status")
+      .select("id, symbol, label, regime, status, status_updated_at")
       .order("updated_at", { ascending: false })
-      .limit(100)
+      .limit(100),
+    supabase
+      .from("opportunities")
+      .select("id, ts, type, status, details")
+      .eq("type", "relative_strength")
+      .gte("ts", since30d)
+      .order("ts", { ascending: false })
+      .limit(500)
   ]);
 
   const balanceUsd = asNumber(paperAccountResult.data?.balance_usd ?? 10000);
@@ -480,6 +539,7 @@ export default async function DashboardPage() {
   );
   const latestLanePolicyReview = (lanePolicyReviewResult.data ?? null) as LanePolicyReviewRow | null;
   const candidatePolicyRows = (candidatePoliciesResult.data ?? []) as CandidatePolicyRow[];
+  const candidateOpportunityRows = (candidateOpportunitiesResult.data ?? []) as OpportunityRow[];
   const candidatePolicyMap = new Map(
     candidatePolicyRows.map((row) => [`${row.label}::${row.regime}`, row])
   );
@@ -492,7 +552,9 @@ export default async function DashboardPage() {
       pnl: shadowXrpCorePnl,
       closed: shadowXrpCoreClosed.length,
       open: shadowXrpCoreOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_core"))
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_core")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowXrpCoreClosed, since7d)
     },
     {
       key: "xrp_shadow_short_bull_fade_canary",
@@ -500,7 +562,9 @@ export default async function DashboardPage() {
       pnl: shadowXrpBullFadePnl,
       closed: shadowXrpBullFadeClosed.length,
       open: shadowXrpBullFadeOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_bull_fade_canary"))
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_bull_fade_canary")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowXrpBullFadeClosed, since7d)
     },
     {
       key: "avax_shadow_short_canary",
@@ -508,7 +572,9 @@ export default async function DashboardPage() {
       pnl: shadowAvaxPnl,
       closed: shadowAvaxClosed.length,
       open: shadowAvaxOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("avax_shadow_short_canary"))
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("avax_shadow_short_canary")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowAvaxClosed, since7d)
     },
     {
       key: "sol_shadow_short_soft_bear_laggard",
@@ -516,7 +582,9 @@ export default async function DashboardPage() {
       pnl: shadowSolSoftBearPnl,
       closed: shadowSolSoftBearClosed.length,
       open: shadowSolSoftBearOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_soft_bear_laggard"))
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_soft_bear_laggard")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowSolSoftBearClosed, since7d)
     },
     {
       key: "sol_shadow_short_deep_bear_continuation",
@@ -524,9 +592,65 @@ export default async function DashboardPage() {
       pnl: shadowSolDeepBearPnl,
       closed: shadowSolDeepBearClosed.length,
       open: shadowSolDeepBearOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_deep_bear_continuation"))
-    }
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_deep_bear_continuation")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowSolDeepBearClosed, since7d)
+    },
+    ...candidatePolicyRows
+      .filter((row) => row.status === "validated")
+      .map((row) => {
+        const variant = `candidate_canary:${row.id}`;
+        const closed = shadowClosed.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
+        const open = shadowOpen.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
+        return {
+          key: variant,
+          label: row.label,
+          pnl: closed.reduce((sum, position) => sum + asNumber(position.realized_pnl_usd), 0),
+          closed: closed.length,
+          open: open.length,
+          actualState: "active" as LanePolicyState,
+          origin: "approved" as const,
+          trend7d: buildDailyPnlSeries(closed, since7d)
+        };
+      })
   ];
+  const sandboxPolicies = candidatePolicyRows
+    .filter((row) => row.status === "canary")
+    .map((row) => {
+      const variant = `candidate_canary:${row.id}`;
+      const signals = candidateOpportunityRows.filter(
+        (opp) => String(opp.details?.strategy_variant ?? "") === variant
+      );
+      const positions = positions30d.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
+      const openCount = positions.filter((position) => position.status === "open").length;
+      const closedRows = positions.filter((position) => position.status === "closed");
+      const pnl = closedRows.reduce((sum, position) => sum + asNumber(position.realized_pnl_usd), 0);
+      const latestSignalTs = signals[0]?.ts ?? null;
+      const liveLabel =
+        openCount > 0
+          ? "Nyitott"
+          : signals.length > 0
+            ? "Jel érkezett"
+            : "Még nincs jel";
+      const liveTone =
+        openCount > 0
+          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+          : signals.length > 0
+            ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
+            : "border-sky-300/20 bg-sky-500/10 text-sky-100";
+      return {
+        ...row,
+        variant,
+        signals: signals.length,
+        latestSignalTs,
+        openCount,
+        closedCount: closedRows.length,
+        pnl,
+        liveLabel,
+        liveTone,
+        runningSince: row.status_updated_at ?? null
+      };
+    });
 
   const byExchange = new Map<string, ExchangeStats>();
   for (const row of positions30d) {
@@ -756,10 +880,18 @@ export default async function DashboardPage() {
                   </div>
                   <div className="grid min-w-0 gap-3">
                     {lanePanels.map((lane) => (
-                      <div key={lane.label} className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)}`}>
+                      <div
+                        key={lane.label}
+                        className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)} ${lane.origin === "approved" ? "ring-1 ring-fuchsia-300/20" : ""}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">{lane.label}</p>
+                            <div className="mt-2">
+                              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] ${laneOriginTone(lane.origin)}`}>
+                                {laneOriginLabel(lane.origin)}
+                              </span>
+                            </div>
                             <p className={`mt-2 text-2xl font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -772,11 +904,94 @@ export default async function DashboardPage() {
                           <span>{lane.closed} zárt</span>
                           <span>{lane.open} nyitott</span>
                         </div>
+                        {lane.origin === "approved" ? (
+                          <div className="mt-3 rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] uppercase tracking-[0.22em] text-brand-100/45">7 napos mini trend</span>
+                              <span className="text-[10px] text-brand-100/45">AI lane</span>
+                            </div>
+                            <svg viewBox="0 0 120 28" className="mt-2 h-7 w-full" preserveAspectRatio="none">
+                              <path d="M 0 14 H 120" stroke="rgba(148,163,184,0.1)" strokeWidth="1" fill="none" />
+                              <path
+                                d={sparklinePath(lane.trend7d, 120, 24)}
+                                fill="none"
+                                stroke={lane.pnl >= 0 ? "#c084fc" : "#fda4af"}
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
+              {sandboxPolicies.length > 0 ? (
+                <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Sandbox</p>
+                      <p className="mt-1 text-sm text-brand-100/65">Próbaüzemben futó új policy-jelöltek. Itt látod, kapnak-e jelet és nyitnak-e.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                    {sandboxPolicies.map((policy) => (
+                      <div key={policy.id} className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-white">{policy.label}</p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-100/45">{policy.symbol} · Próbaüzem</p>
+                          </div>
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policy.liveTone}`}>
+                            {policy.liveLabel}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
+                            <p className="text-brand-100/50">Jelek</p>
+                            <p className="mt-1 font-semibold text-white">{policy.signals}</p>
+                          </div>
+                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
+                            <p className="text-brand-100/50">Nyitott</p>
+                            <p className="mt-1 font-semibold text-white">{policy.openCount}</p>
+                          </div>
+                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
+                            <p className="text-brand-100/50">Zárt</p>
+                            <p className="mt-1 font-semibold text-white">{policy.closedCount}</p>
+                          </div>
+                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
+                            <p className="text-brand-100/50">PnL</p>
+                            <p className={`mt-1 font-semibold ${toneClass(policy.pnl)}`}>{usd(policy.pnl)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-brand-100/55">
+                          <span>Utolsó jel: {formatCompactTs(policy.latestSignalTs)}</span>
+                          <span>Próbaüzem: {formatAgeSince(policy.runningSince)}</span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                          <CandidatePolicyActionButton
+                            id={policy.id}
+                            kind="status"
+                            status="validated"
+                            label="Jóváhagyom"
+                            confirmText="A próbaüzem sikeresnek tűnik. Jóváhagyod ezt a policy-t?"
+                            compact
+                          />
+                          <CandidatePolicyActionButton
+                            id={policy.id}
+                            kind="delete"
+                            label="Törlöm"
+                            confirmText="Biztosan törlöd ezt a sandbox policy-t?"
+                            compact
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
                 <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Lane performance</p>
                 <div className="mt-4 space-y-3">
@@ -784,7 +999,12 @@ export default async function DashboardPage() {
                   <div key={`perf-${lane.key}`} className="rounded-xl border border-brand-300/10 bg-brand-900/30 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">{lane.label}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">{lane.label}</p>
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${laneOriginTone(lane.origin)}`}>
+                            {laneOriginLabel(lane.origin)}
+                          </span>
+                        </div>
                         <div className="mt-1 flex items-center gap-3">
                           <p className={`text-lg font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
                           <p className="text-xs text-brand-100/55">{lane.closed} zárt · {lane.open} nyitott</p>
@@ -800,6 +1020,19 @@ export default async function DashboardPage() {
                         style={{ width: `${Math.max(8, (Math.abs(lane.pnl) / lanePnlScale) * 100)}%` }}
                       />
                     </div>
+                    {lane.origin === "approved" ? (
+                      <svg viewBox="0 0 140 24" className="mt-2 h-6 w-full" preserveAspectRatio="none">
+                        <path d="M 0 12 H 140" stroke="rgba(148,163,184,0.08)" strokeWidth="1" fill="none" />
+                        <path
+                          d={sparklinePath(lane.trend7d, 140, 20)}
+                          fill="none"
+                          stroke={lane.pnl >= 0 ? "#c084fc" : "#fda4af"}
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : null}
                   </div>
                 ))}
                 </div>
@@ -943,13 +1176,43 @@ export default async function DashboardPage() {
                               {saved?.id ? (
                                 <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
                                   {saved.status !== "validated" ? (
-                                    <CandidatePolicyStatusButton id={saved.id} nextStatus="validated" label="Validált" compact />
+                                    <CandidatePolicyActionButton
+                                      id={saved.id}
+                                      kind="status"
+                                      status="validated"
+                                      label="Jóváhagyom"
+                                      confirmText="Jóváhagyod ezt a policy-jelöltet?"
+                                      compact
+                                    />
                                   ) : null}
                                   {saved.status !== "canary" ? (
-                                    <CandidatePolicyStatusButton id={saved.id} nextStatus="canary" label="Canary" compact />
+                                    <CandidatePolicyActionButton
+                                      id={saved.id}
+                                      kind="status"
+                                      status="canary"
+                                      label="Próbaüzem"
+                                      confirmText="Próbaüzembe teszed ezt a policy-t?"
+                                      compact
+                                    />
                                   ) : null}
                                   {saved.status !== "rejected" ? (
-                                    <CandidatePolicyStatusButton id={saved.id} nextStatus="rejected" label="Elvetem" compact />
+                                    <CandidatePolicyActionButton
+                                      id={saved.id}
+                                      kind="status"
+                                      status="rejected"
+                                      label="Elvetem"
+                                      confirmText="Elveted ezt a policy-jelöltet?"
+                                      compact
+                                    />
+                                  ) : null}
+                                  {saved.status !== "rejected" ? (
+                                    <CandidatePolicyActionButton
+                                      id={saved.id}
+                                      kind="delete"
+                                      label="Törlöm"
+                                      confirmText="Biztosan törlöd ezt a policy-jelöltet?"
+                                      compact
+                                    />
                                   ) : null}
                                 </div>
                               ) : null}

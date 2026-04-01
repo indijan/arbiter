@@ -664,7 +664,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     .from("candidate_lane_policies")
     .select("id")
     .eq("user_id", userId)
-    .eq("status", "canary");
+    .in("status", ["canary", "validated"]);
   if (canaryCandidatesError) {
     throw new Error(canaryCandidatesError.message);
   }

@@ -334,7 +334,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     .from("candidate_lane_policies")
     .select("id, symbol, rule_config")
     .eq("user_id", account?.user_id ?? "")
-    .eq("status", "canary");
+    .in("status", ["canary", "validated"]);
   if (candidatePoliciesError) throw new Error(candidatePoliciesError.message);
   const isLaneDetectEnabled = (variant: string) => {
     const parentState = lanePolicyStateFromSettingsMap(strategySettingsMap, RELATIVE_STRENGTH_PARENT_KEY);
