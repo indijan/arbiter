@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type ExecuteButtonProps = {
   opportunityId: number;
 };
 
 export default function ExecuteButton({ opportunityId }: ExecuteButtonProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -38,7 +36,7 @@ export default function ExecuteButton({ opportunityId }: ExecuteButtonProps) {
         : "Paper position created."
     );
     setLoading(false);
-    router.refresh();
+    window.location.reload();
   };
 
   return (

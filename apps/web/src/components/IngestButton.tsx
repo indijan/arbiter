@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type IngestButtonProps = {
   endpoint: string;
@@ -14,7 +13,6 @@ export default function IngestButton({
   label,
   variant = "primary"
 }: IngestButtonProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +30,7 @@ export default function IngestButton({
     }
 
     setLoading(false);
-    router.refresh();
+    window.location.reload();
   };
 
   return (

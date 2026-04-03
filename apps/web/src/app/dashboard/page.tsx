@@ -348,6 +348,12 @@ function formatAgeSince(value: string | null | undefined) {
   return `${(hours / 24).toFixed(1)} napja`;
 }
 
+function candidateIdFromVariant(variant: string) {
+  if (!variant.startsWith("candidate_canary:")) return null;
+  const id = variant.slice("candidate_canary:".length).trim();
+  return id || null;
+}
+
 
 export default async function DashboardPage() {
   async function signOutAction() {
@@ -458,9 +464,23 @@ export default async function DashboardPage() {
   const reserveRatio = balanceUsd > 0 ? (reservedUsd / balanceUsd) * 100 : 0;
   const absoluteProfitUsd = balanceUsd - 10000;
 
-  const positions30d = (positions30dResult.data ?? []) as PositionRow[];
-  const openPositions = (openPositionsResult.data ?? []) as PositionRow[];
-  const recentClosed = (recentClosedResult.data ?? []) as PositionRow[];
+  const positions30dAll = (positions30dResult.data ?? []) as PositionRow[];
+  const openPositionsAll = (openPositionsResult.data ?? []) as PositionRow[];
+  const recentClosedAll = (recentClosedResult.data ?? []) as PositionRow[];
+
+  const candidatePolicyRows = (candidatePoliciesResult.data ?? []) as CandidatePolicyRow[];
+  const candidateStatusById = new Map(candidatePolicyRows.map((row) => [row.id, row.status]));
+  const isSandboxRow = (row: PositionRow) => {
+    const variant = String(row.meta?.strategy_variant ?? "");
+    const id = candidateIdFromVariant(variant);
+    if (!id) return false;
+    const status = candidateStatusById.get(id);
+    return status !== "validated";
+  };
+
+  const positions30d = positions30dAll.filter((row) => !isSandboxRow(row));
+  const openPositions = openPositionsAll.filter((row) => !isSandboxRow(row));
+  const recentClosed = recentClosedAll.filter((row) => !isSandboxRow(row));
   const capitalDial = Math.round(reserveRatio * 3.6);
 
   const closed24h = positions30d.filter((row) => row.status === "closed" && row.exit_ts && row.exit_ts >= since24h);
@@ -538,7 +558,6 @@ export default async function DashboardPage() {
     ((strategySettingsResult.data ?? []) as StrategySettingRow[]).map((row) => [row.strategy_key, row])
   );
   const latestLanePolicyReview = (lanePolicyReviewResult.data ?? null) as LanePolicyReviewRow | null;
-  const candidatePolicyRows = (candidatePoliciesResult.data ?? []) as CandidatePolicyRow[];
   const candidateOpportunityRows = (candidateOpportunitiesResult.data ?? []) as OpportunityRow[];
   const candidatePolicyMap = new Map(
     candidatePolicyRows.map((row) => [`${row.label}::${row.regime}`, row])
@@ -1147,6 +1166,7 @@ export default async function DashboardPage() {
                             <div key={`${candidate.symbol}-${candidate.label}`} className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
                               {(() => {
                                 const saved = candidatePolicyMap.get(`${candidate.label}::${candidate.regime}`);
+                                if (saved?.status === "rejected") return null;
                                 return (
                                   <>
                               <div className="flex items-center justify-between gap-3">
@@ -1195,25 +1215,21 @@ export default async function DashboardPage() {
                                       compact
                                     />
                                   ) : null}
-                                  {saved.status !== "rejected" ? (
-                                    <CandidatePolicyActionButton
-                                      id={saved.id}
-                                      kind="status"
-                                      status="rejected"
-                                      label="Elvetem"
-                                      confirmText="Elveted ezt a policy-jelöltet?"
-                                      compact
-                                    />
-                                  ) : null}
-                                  {saved.status !== "rejected" ? (
-                                    <CandidatePolicyActionButton
-                                      id={saved.id}
-                                      kind="delete"
-                                      label="Törlöm"
-                                      confirmText="Biztosan törlöd ezt a policy-jelöltet?"
-                                      compact
-                                    />
-                                  ) : null}
+                                  <CandidatePolicyActionButton
+                                    id={saved.id}
+                                    kind="status"
+                                    status="rejected"
+                                    label="Elvetem"
+                                    confirmText="Elveted ezt a policy-jelöltet?"
+                                    compact
+                                  />
+                                  <CandidatePolicyActionButton
+                                    id={saved.id}
+                                    kind="delete"
+                                    label="Törlöm"
+                                    confirmText="Biztosan törlöd ezt a policy-jelöltet?"
+                                    compact
+                                  />
                                 </div>
                               ) : null}
                                   </>

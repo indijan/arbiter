@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type CloseAllButtonProps = {
   positionIds: string[];
 };
 
 export default function CloseAllButton({ positionIds }: CloseAllButtonProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -48,7 +46,7 @@ export default function CloseAllButton({ positionIds }: CloseAllButtonProps) {
     }
     setLoading(false);
     setConfirmOpen(false);
-    router.refresh();
+    window.location.reload();
   };
 
   return (

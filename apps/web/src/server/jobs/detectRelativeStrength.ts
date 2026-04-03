@@ -57,7 +57,7 @@ type RelativeStrengthLane = {
     momentum6hBps: number;
     momentum2hBps: number;
     btcMomentum6hBps: number | null;
-  }) => Record<string, number | null>;
+  }) => Record<string, number | string | null>;
 };
 
 type CandidateRuleConfig = {
@@ -261,12 +261,23 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
 function buildCandidateRelativeStrengthLane(candidate: {
   id: string;
   symbol: string;
+  regime: string;
   rule_config: CandidateRuleConfig | null;
 }): RelativeStrengthLane | null {
   const cfg = candidate.rule_config ?? {};
   const symbol = String(cfg.symbol ?? candidate.symbol ?? "").trim();
   const direction = cfg.direction === "long" ? "long" : "short";
   if (!symbol) return null;
+
+  // Match the regime bucketing used by lane-policy review, so candidate lanes
+  // can't leak outside the BTC regime they were discovered/optimized for.
+  const regimeFromBtcMomentum = (bps: number) => {
+    if (bps <= -100) return "btc_neg_strong";
+    if (bps < 0) return "btc_neg";
+    if (bps >= 150) return "btc_pos_strong";
+    if (bps > 0) return "btc_pos";
+    return "flat";
+  };
 
   return {
     key: `candidate_${candidate.id}`,
@@ -276,6 +287,8 @@ function buildCandidateRelativeStrengthLane(candidate: {
     holdSeconds: Number(cfg.hold_seconds ?? 4 * 60 * 60),
     evaluate: ({ spreadBps, momentum6hBps, momentum2hBps, btcMomentum6hBps }) => {
       if (btcMomentum6hBps === null) return "btc_filter_blocked";
+      const currentRegime = regimeFromBtcMomentum(btcMomentum6hBps);
+      if (candidate.regime && currentRegime !== candidate.regime) return "candidate_regime_blocked";
       if (cfg.min_btc_6h_bps !== undefined && btcMomentum6hBps < cfg.min_btc_6h_bps) return "candidate_filter_blocked";
       if (cfg.max_btc_6h_bps !== undefined && btcMomentum6hBps >= cfg.max_btc_6h_bps) return "candidate_filter_blocked";
       if (cfg.min_alt_6h_bps !== undefined && momentum6hBps < cfg.min_alt_6h_bps) return "candidate_filter_blocked";
@@ -287,6 +300,7 @@ function buildCandidateRelativeStrengthLane(candidate: {
       return null;
     },
     details: ({ spreadBps, momentum6hBps, momentum2hBps, btcMomentum6hBps }) => ({
+      candidate_regime: candidate.regime,
       btc_momentum_6h_bps: btcMomentum6hBps,
       momentum_6h_bps: momentum6hBps,
       momentum_2h_bps: momentum2hBps,
@@ -332,7 +346,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   }
   const { data: candidatePolicies, error: candidatePoliciesError } = await adminSupabase
     .from("candidate_lane_policies")
-    .select("id, symbol, rule_config")
+    .select("id, symbol, regime, rule_config")
     .eq("user_id", account?.user_id ?? "")
     .in("status", ["canary", "validated"]);
   if (candidatePoliciesError) throw new Error(candidatePoliciesError.message);
@@ -348,6 +362,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
         buildCandidateRelativeStrengthLane({
           id: String(row.id),
           symbol: String(row.symbol ?? ""),
+          regime: String((row as { regime?: string | null }).regime ?? ""),
           rule_config: (row.rule_config ?? {}) as CandidateRuleConfig
         })
       )

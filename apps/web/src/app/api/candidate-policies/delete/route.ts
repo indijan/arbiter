@@ -20,7 +20,11 @@ export async function POST(request: Request) {
 
   const { error } = await supabase
     .from("candidate_lane_policies")
-    .delete()
+    .update({
+      status: "rejected",
+      status_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
     .eq("id", id)
     .eq("user_id", userData.user.id);
 
@@ -28,5 +32,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id, status: "rejected" });
 }

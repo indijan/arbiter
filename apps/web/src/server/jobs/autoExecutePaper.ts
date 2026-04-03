@@ -662,13 +662,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   const allowsExecute = (key: string) => laneStateAllowsExecution(strategyState(key));
   const { data: canaryCandidateRows, error: canaryCandidatesError } = await adminSupabase
     .from("candidate_lane_policies")
-    .select("id")
+    .select("id, regime")
     .eq("user_id", userId)
     .in("status", ["canary", "validated"]);
   if (canaryCandidatesError) {
     throw new Error(canaryCandidatesError.message);
   }
   const activeCanaryCandidateIds = new Set((canaryCandidateRows ?? []).map((row) => String(row.id)));
+  const canaryCandidateRegimeById = new Map(
+    (canaryCandidateRows ?? []).map((row) => [String(row.id), String((row as { regime?: string | null }).regime ?? "")])
+  );
 
   let policyControllerAction = "none";
   try {
@@ -1943,6 +1946,32 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       if (candidateCanaryId && !activeCanaryCandidateIds.has(candidateCanaryId)) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "candidate_canary_disabled" });
+        continue;
+      }
+      // Extra safety: candidate lanes are discovered for a specific BTC regime. Even if a bug or stale
+      // opportunity leaks through, do not open outside the intended regime.
+      const candidateRegime =
+        String((details as Record<string, unknown>).candidate_regime ?? "") ||
+        (candidateCanaryId ? String(canaryCandidateRegimeById.get(candidateCanaryId) ?? "") : "");
+      const regimeFromBtcMomentum = (bps: number) => {
+        if (bps <= -100) return "btc_neg_strong";
+        if (bps < 0) return "btc_neg";
+        if (bps >= 150) return "btc_pos_strong";
+        if (bps > 0) return "btc_pos";
+        return "flat";
+      };
+      if (candidateCanaryId && candidateRegime && Number.isFinite(btcMomentum6hBps)) {
+        const currentRegime = regimeFromBtcMomentum(btcMomentum6hBps);
+        if (currentRegime !== candidateRegime) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "candidate_regime_blocked" });
+          continue;
+        }
+      }
+      if (candidateCanaryId && !candidateRegime) {
+        // Treat missing regime as unsafe: candidate lanes must be tied to a regime to prevent leaking.
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "candidate_regime_missing" });
         continue;
       }
       if (

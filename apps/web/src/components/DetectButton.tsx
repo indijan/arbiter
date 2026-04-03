@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type EvaluatedRow = {
   exchange: string;
@@ -22,7 +21,6 @@ type DetectResponse = {
 };
 
 export default function DetectButton() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DetectResponse | null>(null);
@@ -43,7 +41,7 @@ export default function DetectButton() {
 
     setResult(payload);
     setLoading(false);
-    router.refresh();
+    window.location.reload();
   };
 
   return (

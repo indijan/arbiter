@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 type ClosePositionButtonProps = {
   positionId: string;
 };
 
 export default function ClosePositionButton({ positionId }: ClosePositionButtonProps) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -34,7 +32,7 @@ export default function ClosePositionButton({ positionId }: ClosePositionButtonP
 
     setSuccess(`Lezarva: ${payload.realized_pnl_usd ?? "?"} USD`);
     setLoading(false);
-    router.refresh();
+    window.location.reload();
   };
 
   return (
