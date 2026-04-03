@@ -1960,7 +1960,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         if (bps > 0) return "btc_pos";
         return "flat";
       };
-      if (candidateCanaryId && candidateRegime && Number.isFinite(btcMomentum6hBps)) {
+      if (candidateCanaryId && candidateRegime) {
+        if (!Number.isFinite(btcMomentum6hBps)) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "candidate_regime_unknown" });
+          continue;
+        }
         const currentRegime = regimeFromBtcMomentum(btcMomentum6hBps);
         if (currentRegime !== candidateRegime) {
           skipped += 1;
