@@ -1932,6 +1932,11 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       }
       const btcMomentum6hBps = Number((details as Record<string, unknown>).btc_momentum_6h_bps ?? NaN);
       const strategyVariant = String((details as Record<string, unknown>).strategy_variant ?? "relative_strength");
+      if (strategyVariant.startsWith("candidate_canary:")) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "candidate_workflow_disabled" });
+        continue;
+      }
       if (!allowsExecute("relative_strength")) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_disabled" });
@@ -2023,7 +2028,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         strategyVariant === "avax_shadow_short_canary" &&
         (
           !(direction === "short") ||
-          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps >= AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS) ||
+          // Prevent AVAX short from firing in bull regimes.
+          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps >= -250 && btcMomentum6hBps < 0) ||
           !(Number.isFinite(spreadBps) && spreadBps >= AVAX_SHORT_MIN_SPREAD_BPS)
         )
       ) {
@@ -2058,6 +2064,20 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       ) {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_sol_deep_bear_filter_blocked" });
+        continue;
+      }
+      if (
+        strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" &&
+        (
+          !(direction === "short") ||
+          !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps > 0 && btcMomentum6hBps < 150) ||
+          !(Number.isFinite(spreadBps) && spreadBps >= -25 && spreadBps < 20) ||
+          !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps < 100) ||
+          !(Number.isFinite(altMomentum2hBps) && altMomentum2hBps >= 25)
+        )
+      ) {
+        skipped += 1;
+        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_sol_soft_bull_filter_blocked" });
         continue;
       }
 

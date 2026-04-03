@@ -21,8 +21,10 @@ const XRP_SHORT_MAX_SPREAD_BPS = 40;
 const XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS = 100;
 const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
 const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
-const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
+// Restrict AVAX short lane to bear regimes only (btc < 0).
+const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -250;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
+const AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS = 0;
 const SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -50;
 const SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS = 0;
 const SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS = -100;
@@ -33,6 +35,13 @@ const SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS = -25;
 const SOL_DEEP_BEAR_MIN_SPREAD_BPS = -25;
+// New base lane: "SOL soft-bull reversal probe" (was a candidate lane, now promoted to a basic lane).
+const SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS = 0;
+const SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS = 150;
+const SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS = 100;
+const SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS = 25;
+const SOL_SOFT_BULL_MIN_SPREAD_BPS = -25;
+const SOL_SOFT_BULL_MAX_SPREAD_BPS = 20;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
 const MAX_EXIT_SPREAD_BPS = 25;
@@ -191,8 +200,13 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     variant: "avax_shadow_short_canary",
     holdSeconds: 4 * 60 * 60,
     evaluate: ({ btcMomentum6hBps, spreadBps }) => {
-      if (!(btcMomentum6hBps !== null && btcMomentum6hBps >= 0)) return "btc_filter_blocked";
-      if (!(btcMomentum6hBps >= AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS) || !(spreadBps >= AVAX_SHORT_MIN_SPREAD_BPS)) {
+      // Prevent this AVAX short lane from firing in bull regimes (it caused consistent losses in btc_pos).
+      if (!(btcMomentum6hBps !== null && btcMomentum6hBps < AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS)) return "btc_filter_blocked";
+      if (
+        !(btcMomentum6hBps >= AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS) ||
+        !(btcMomentum6hBps < AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS) ||
+        !(spreadBps >= AVAX_SHORT_MIN_SPREAD_BPS)
+      ) {
         return "avax_short_filter_blocked";
       }
       if (!(spreadBps >= 0)) return "direction_blocked";
@@ -200,6 +214,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     },
     details: ({ btcMomentum6hBps }) => ({
       avax_short_min_btc_momentum_6h_bps: AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS,
+      avax_short_max_btc_momentum_6h_bps: AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS,
       avax_short_min_spread_bps: AVAX_SHORT_MIN_SPREAD_BPS,
       btc_momentum_6h_bps: btcMomentum6hBps
     })
@@ -253,6 +268,35 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
       sol_deep_bear_max_alt_momentum_6h_bps: SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS,
       sol_deep_bear_max_alt_momentum_2h_bps: SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS,
       sol_deep_bear_min_spread_bps: SOL_DEEP_BEAR_MIN_SPREAD_BPS,
+      btc_momentum_6h_bps: btcMomentum6hBps
+    })
+  }
+  ,
+  {
+    key: "sol_soft_bull_reversal_probe",
+    symbol: "SOLUSD",
+    direction: "short",
+    variant: "sol_shadow_short_soft_bull_reversal_probe",
+    holdSeconds: 4 * 60 * 60,
+    evaluate: ({ btcMomentum6hBps, spreadBps, momentum6hBps, momentum2hBps }) => {
+      if (
+        !(btcMomentum6hBps !== null && btcMomentum6hBps >= SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS && btcMomentum6hBps < SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS)
+      ) {
+        return "btc_filter_blocked";
+      }
+      // Tightening based on last 36h buckets: avoid sol6h >= 100.
+      if (!(momentum6hBps < SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS)) return "sol_soft_bull_filter_blocked";
+      if (!(momentum2hBps >= SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS)) return "sol_soft_bull_filter_blocked";
+      if (!(spreadBps >= SOL_SOFT_BULL_MIN_SPREAD_BPS && spreadBps < SOL_SOFT_BULL_MAX_SPREAD_BPS)) return "sol_soft_bull_filter_blocked";
+      return null;
+    },
+    details: ({ btcMomentum6hBps }) => ({
+      sol_soft_bull_min_btc_momentum_6h_bps: SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS,
+      sol_soft_bull_max_btc_momentum_6h_bps: SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS,
+      sol_soft_bull_max_alt_momentum_6h_bps: SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS,
+      sol_soft_bull_min_alt_momentum_2h_bps: SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS,
+      sol_soft_bull_min_spread_bps: SOL_SOFT_BULL_MIN_SPREAD_BPS,
+      sol_soft_bull_max_spread_bps: SOL_SOFT_BULL_MAX_SPREAD_BPS,
       btc_momentum_6h_bps: btcMomentum6hBps
     })
   }
@@ -344,29 +388,15 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     );
     for (const [key, value] of mapped.entries()) strategySettingsMap.set(key, value);
   }
-  const { data: candidatePolicies, error: candidatePoliciesError } = await adminSupabase
-    .from("candidate_lane_policies")
-    .select("id, symbol, regime, rule_config")
-    .eq("user_id", account?.user_id ?? "")
-    .in("status", ["canary", "validated"]);
-  if (candidatePoliciesError) throw new Error(candidatePoliciesError.message);
+  // Candidate/AI lane workflow is intentionally disabled: it was too noisy operationally.
+  const candidatePolicies: Array<{ id: string; symbol: string; regime: string; rule_config: CandidateRuleConfig | null }> = [];
   const isLaneDetectEnabled = (variant: string) => {
     const parentState = lanePolicyStateFromSettingsMap(strategySettingsMap, RELATIVE_STRENGTH_PARENT_KEY);
     const laneState = lanePolicyStateFromSettingsMap(strategySettingsMap, variant);
     return laneStateAllowsDetection(parentState) && laneStateAllowsDetection(laneState);
   };
   const runtimeLanes = [
-    ...RELATIVE_STRENGTH_LANES,
-    ...((candidatePolicies ?? [])
-      .map((row) =>
-        buildCandidateRelativeStrengthLane({
-          id: String(row.id),
-          symbol: String(row.symbol ?? ""),
-          regime: String((row as { regime?: string | null }).regime ?? ""),
-          rule_config: (row.rule_config ?? {}) as CandidateRuleConfig
-        })
-      )
-      .filter(Boolean) as RelativeStrengthLane[])
+    ...RELATIVE_STRENGTH_LANES
   ];
 
   const byHour = new Map<string, Map<string, number>>();

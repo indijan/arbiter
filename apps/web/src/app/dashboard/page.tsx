@@ -106,7 +106,8 @@ const LANE_LABELS = [
   "XRP bull fade canary",
   "AVAX canary short",
   "SOL soft-bear laggard",
-  "SOL deep-bear continuation"
+  "SOL deep-bear continuation",
+  "SOL soft-bull reversal probe"
 ] as const;
 
 const LANE_LABEL_TO_KEY: Record<(typeof LANE_LABELS)[number], string> = {
@@ -114,7 +115,8 @@ const LANE_LABEL_TO_KEY: Record<(typeof LANE_LABELS)[number], string> = {
   "XRP bull fade canary": "xrp_shadow_short_bull_fade_canary",
   "AVAX canary short": "avax_shadow_short_canary",
   "SOL soft-bear laggard": "sol_shadow_short_soft_bear_laggard",
-  "SOL deep-bear continuation": "sol_shadow_short_deep_bear_continuation"
+  "SOL deep-bear continuation": "sol_shadow_short_deep_bear_continuation",
+  "SOL soft-bull reversal probe": "sol_shadow_short_soft_bull_reversal_probe"
 };
 
 function policyToneClass(state: LanePolicyState | LaneState) {
@@ -502,16 +504,19 @@ export default async function DashboardPage() {
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
   const shadowSolSoftBearClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bear_laggard");
   const shadowSolDeepBearClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_deep_bear_continuation");
+  const shadowSolSoftBullProbeClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bull_reversal_probe");
   const shadowXrpCoreOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowXrpBullFadeOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
   const shadowSolSoftBearOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bear_laggard");
   const shadowSolDeepBearOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_deep_bear_continuation");
+  const shadowSolSoftBullProbeOpen = shadowOpen.filter((row) => String(row.meta?.strategy_variant ?? "") === "sol_shadow_short_soft_bull_reversal_probe");
   const shadowXrpCorePnl = shadowXrpCoreClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowXrpBullFadePnl = shadowXrpBullFadeClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowAvaxPnl = shadowAvaxClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowSolSoftBearPnl = shadowSolSoftBearClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const shadowSolDeepBearPnl = shadowSolDeepBearClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const shadowSolSoftBullProbePnl = shadowSolSoftBullProbeClosed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
   const btcSnapshots = (btcSnapshotsResult.data ?? []) as SnapshotRow[];
   const btcHourly = new Map<string, number>();
   for (const row of btcSnapshots) {
@@ -615,61 +620,19 @@ export default async function DashboardPage() {
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowSolDeepBearClosed, since7d)
     },
-    ...candidatePolicyRows
-      .filter((row) => row.status === "validated")
-      .map((row) => {
-        const variant = `candidate_canary:${row.id}`;
-        const closed = shadowClosed.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
-        const open = shadowOpen.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
-        return {
-          key: variant,
-          label: row.label,
-          pnl: closed.reduce((sum, position) => sum + asNumber(position.realized_pnl_usd), 0),
-          closed: closed.length,
-          open: open.length,
-          actualState: "active" as LanePolicyState,
-          origin: "approved" as const,
-          trend7d: buildDailyPnlSeries(closed, since7d)
-        };
-      })
+    {
+      key: "sol_shadow_short_soft_bull_reversal_probe",
+      label: "SOL soft-bull reversal probe",
+      pnl: shadowSolSoftBullProbePnl,
+      closed: shadowSolSoftBullProbeClosed.length,
+      open: shadowSolSoftBullProbeOpen.length,
+      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_soft_bull_reversal_probe")),
+      origin: "basic" as const,
+      trend7d: buildDailyPnlSeries(shadowSolSoftBullProbeClosed, since7d)
+    }
   ];
-  const sandboxPolicies = candidatePolicyRows
-    .filter((row) => row.status === "canary")
-    .map((row) => {
-      const variant = `candidate_canary:${row.id}`;
-      const signals = candidateOpportunityRows.filter(
-        (opp) => String(opp.details?.strategy_variant ?? "") === variant
-      );
-      const positions = positions30d.filter((position) => String(position.meta?.strategy_variant ?? "") === variant);
-      const openCount = positions.filter((position) => position.status === "open").length;
-      const closedRows = positions.filter((position) => position.status === "closed");
-      const pnl = closedRows.reduce((sum, position) => sum + asNumber(position.realized_pnl_usd), 0);
-      const latestSignalTs = signals[0]?.ts ?? null;
-      const liveLabel =
-        openCount > 0
-          ? "Nyitott"
-          : signals.length > 0
-            ? "Jel érkezett"
-            : "Még nincs jel";
-      const liveTone =
-        openCount > 0
-          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
-          : signals.length > 0
-            ? "border-amber-300/20 bg-amber-500/10 text-amber-100"
-            : "border-sky-300/20 bg-sky-500/10 text-sky-100";
-      return {
-        ...row,
-        variant,
-        signals: signals.length,
-        latestSignalTs,
-        openCount,
-        closedCount: closedRows.length,
-        pnl,
-        liveLabel,
-        liveTone,
-        runningSince: row.status_updated_at ?? null
-      };
-    });
+  // Candidate/AI sandbox workflow intentionally disabled.
+  const sandboxPolicies: any[] = [];
 
   const byExchange = new Map<string, ExchangeStats>();
   for (const row of positions30d) {
@@ -901,7 +864,7 @@ export default async function DashboardPage() {
                     {lanePanels.map((lane) => (
                       <div
                         key={lane.label}
-                        className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)} ${lane.origin === "approved" ? "ring-1 ring-fuchsia-300/20" : ""}`}
+                        className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -923,25 +886,7 @@ export default async function DashboardPage() {
                           <span>{lane.closed} zárt</span>
                           <span>{lane.open} nyitott</span>
                         </div>
-                        {lane.origin === "approved" ? (
-                          <div className="mt-3 rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-[10px] uppercase tracking-[0.22em] text-brand-100/45">7 napos mini trend</span>
-                              <span className="text-[10px] text-brand-100/45">AI lane</span>
-                            </div>
-                            <svg viewBox="0 0 120 28" className="mt-2 h-7 w-full" preserveAspectRatio="none">
-                              <path d="M 0 14 H 120" stroke="rgba(148,163,184,0.1)" strokeWidth="1" fill="none" />
-                              <path
-                                d={sparklinePath(lane.trend7d, 120, 24)}
-                                fill="none"
-                                stroke={lane.pnl >= 0 ? "#c084fc" : "#fda4af"}
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                        ) : null}
+                        {/* AI candidate workflow disabled; no separate approved lanes rendered here. */}
                       </div>
                     ))}
                   </div>
@@ -1039,19 +984,7 @@ export default async function DashboardPage() {
                         style={{ width: `${Math.max(8, (Math.abs(lane.pnl) / lanePnlScale) * 100)}%` }}
                       />
                     </div>
-                    {lane.origin === "approved" ? (
-                      <svg viewBox="0 0 140 24" className="mt-2 h-6 w-full" preserveAspectRatio="none">
-                        <path d="M 0 12 H 140" stroke="rgba(148,163,184,0.08)" strokeWidth="1" fill="none" />
-                        <path
-                          d={sparklinePath(lane.trend7d, 140, 20)}
-                          fill="none"
-                          stroke={lane.pnl >= 0 ? "#c084fc" : "#fda4af"}
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    ) : null}
+                    {/* AI candidate workflow disabled; no extra approved-only chart. */}
                   </div>
                 ))}
                 </div>

@@ -12,7 +12,8 @@ const LANE_DEFS = [
   { key: "xrp_shadow_short_bull_fade_canary", label: "XRP bull fade canary" },
   { key: "avax_shadow_short_canary", label: "AVAX canary short" },
   { key: "sol_shadow_short_soft_bear_laggard", label: "SOL soft-bear laggard" },
-  { key: "sol_shadow_short_deep_bear_continuation", label: "SOL deep-bear continuation" }
+  { key: "sol_shadow_short_deep_bear_continuation", label: "SOL deep-bear continuation" },
+  { key: "sol_shadow_short_soft_bull_reversal_probe", label: "SOL soft-bull reversal probe" }
 ] as const;
 
 type LaneKey = (typeof LANE_DEFS)[number]["key"];
@@ -114,16 +115,18 @@ function currentRegimeStateForLane(label: string, regime: string): LanePolicySta
     btc_pos: {
       "XRP core short": "standby",
       "XRP bull fade canary": "watch",
-      "AVAX canary short": "watch",
+      "AVAX canary short": "standby",
       "SOL soft-bear laggard": "standby",
-      "SOL deep-bear continuation": "standby"
+      "SOL deep-bear continuation": "standby",
+      "SOL soft-bull reversal probe": "active"
     },
     btc_pos_strong: {
       "XRP core short": "standby",
       "XRP bull fade canary": "active",
-      "AVAX canary short": "active",
+      "AVAX canary short": "standby",
       "SOL soft-bear laggard": "standby",
-      "SOL deep-bear continuation": "standby"
+      "SOL deep-bear continuation": "standby",
+      "SOL soft-bull reversal probe": "standby"
     }
   };
 

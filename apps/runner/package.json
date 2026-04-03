@@ -1,0 +1,14 @@
+{
+  "name": "arbiter-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "once": "RUN_ONCE=1 tsx src/index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "server-only": "workspace:*",
+    "tsx": "^4.19.2"
+  }
+}
