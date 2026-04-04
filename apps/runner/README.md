@@ -13,7 +13,8 @@ pnpm install
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `CRON_SECRET` (optional; runner calls jobs directly, but some jobs may still read it)
+- `CRON_SECRET` (required; runner calls the local `/api/cron/*` endpoints)
+- `RUNNER_BASE_URL=http://localhost:3000` (optional; defaults to this)
 
 If you use OpenAI/news features:
 - `OPENAI_API_KEY`
@@ -31,5 +32,8 @@ pnpm runner
 ## Notes
 
 - Your machine must stay awake (no sleep/hibernate). Display off is fine.
+- You must run the web server locally in parallel:
+```bash
+pnpm -C apps/web dev
+```
 - To reduce Vercel GB-Hrs, disable Vercel crons in `apps/web/vercel.json` and redeploy.
-

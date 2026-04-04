@@ -3,19 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import dotenv from "dotenv";
 
-import { ingestBinance } from "@/server/jobs/ingestBinance";
-import { ingestCoinbase } from "@/server/jobs/ingestCoinbase";
-import { ingestKraken } from "@/server/jobs/ingestKraken";
-import { ingestBinanceSpotRemote } from "@/server/jobs/ingestBinanceSpotRemote";
-import { detectCrossExchangeSpot } from "@/server/jobs/detectCrossExchangeSpot";
-import { detectSpreadReversion } from "@/server/jobs/detectSpreadReversion";
-import { detectRelativeStrength } from "@/server/jobs/detectRelativeStrength";
-import { detectTriArb } from "@/server/jobs/detectTriArb";
-import { autoExecutePaper } from "@/server/jobs/autoExecutePaper";
-import { autoClosePaper } from "@/server/jobs/autoClosePaper";
-import { reviewLanePolicies } from "@/server/jobs/reviewLanePolicies";
-import { ingestNews } from "@/server/jobs/ingestNews";
-import { reactToNews } from "@/server/jobs/reactToNews";
+// This runner calls the local Next.js cron endpoints over HTTP.
+// Advantage: no TS path alias issues, and the runtime matches production logic.
 
 function loadEnvFile(filePath: string) {
   if (!fs.existsSync(filePath)) return false;
@@ -48,6 +37,21 @@ function nextBoundaryMs(stepMinutes: number) {
   return now + (stepMs - (now % stepMs));
 }
 
+async function callCron(pathname: string) {
+  const base = process.env.RUNNER_BASE_URL ?? "http://localhost:3000";
+  const secret = process.env.CRON_SECRET ?? "";
+  const url = new URL(pathname, base);
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: secret ? { "x-cron-secret": secret } : {}
+  });
+  const payloadText = await response.text();
+  if (!response.ok) {
+    throw new Error(`${pathname} -> ${response.status} ${payloadText.slice(0, 300)}`);
+  }
+  return payloadText;
+}
+
 async function runTick() {
   const started = Date.now();
   const errors: string[] = [];
@@ -68,25 +72,11 @@ async function runTick() {
     }
   };
 
-  // Ingest
-  await run("ingest.binance", () => ingestBinance());
-  await run("ingest.binance_spot_remote", () => ingestBinanceSpotRemote());
-  await run("ingest.coinbase", () => ingestCoinbase());
-  await run("ingest.kraken", () => ingestKraken());
-
-  // Detect
-  await run("detect.cross_exchange_spot", () => detectCrossExchangeSpot());
-  await run("detect.spread_reversion", () => detectSpreadReversion());
-  await run("detect.relative_strength", () => detectRelativeStrength());
-  await run("detect.tri_arb", () => detectTriArb());
-
-  // News (optional; if env missing it will fail but won't block trading)
-  await run("news.ingest", () => ingestNews());
-  await run("news.react", () => reactToNews());
-
-  // Execute/Close
-  await run("auto.execute", () => autoExecutePaper());
-  await run("auto.close", () => autoClosePaper());
+  await run("cron.ingest", () => callCron("/api/cron/ingest"));
+  await run("cron.detect", () => callCron("/api/cron/detect"));
+  await run("cron.news", () => callCron("/api/cron/news"));
+  await run("cron.execute", () => callCron("/api/cron/execute"));
+  await run("cron.close", () => callCron("/api/cron/close"));
 
   const dt = ((Date.now() - started) / 1000).toFixed(1);
   console.log(`[${isoNow()}] tick done (${dt}s) errors=${errors.length}`);
@@ -108,11 +98,11 @@ async function main() {
     if (now - lastLanePolicyAt >= lanePolicyHours * 60 * 60_000) {
       lastLanePolicyAt = now;
       try {
-        await reviewLanePolicies();
-        console.log(`[${isoNow()}] lane_policy: ok`);
+        await callCron("/api/cron/lane-policy");
+        console.log(`[${isoNow()}] cron.lane_policy: ok`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[${isoNow()}] lane_policy: FAIL ${msg}`);
+        console.log(`[${isoNow()}] cron.lane_policy: FAIL ${msg}`);
       }
     }
 
