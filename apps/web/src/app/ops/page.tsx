@@ -26,6 +26,17 @@ export default async function OpsPage() {
     redirect("/login");
   }
 
+  // Read-only "server cockpit" data from Supabase (portable across Air/Mini).
+  const { data: latestTick } = await supabase
+    .from("system_ticks")
+    .select("ts, ingest_errors, detect_summary")
+    .order("ts", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const autoExecute = (latestTick?.detect_summary as any)?.auto_execute ?? null;
+  const reasonsTop = Array.isArray(autoExecute?.reasons_top) ? autoExecute.reasons_top : [];
+
   const { data: snapshots, error: snapshotsError } = await supabase
     .from("market_snapshots")
     .select("id, ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask, funding_rate")
@@ -77,11 +88,53 @@ export default async function OpsPage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header>
           <p className="text-sm uppercase tracking-[0.3em] text-brand-300">Ops</p>
-          <h1 className="text-3xl font-semibold">Operational view</h1>
-          <p className="mt-2 text-sm text-brand-100/70">
-            Raw snapshots, opportunities, and positions.
-          </p>
+          <h1 className="text-3xl font-semibold">Server cockpit</h1>
+          <p className="mt-2 text-sm text-brand-100/70">Legutóbbi tick + nyitási okok + raw listák.</p>
         </header>
+
+        <section className="card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-semibold">Állapot</h2>
+            <p className="text-xs text-brand-100/60">
+              Utolsó tick:{" "}
+              {latestTick?.ts ? new Date(latestTick.ts).toLocaleString("hu-HU") : "-"}
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
+              <p className="text-xs text-brand-100/60">Ingest hibák</p>
+              <p className="mt-1 text-2xl font-semibold">{Number(latestTick?.ingest_errors ?? 0)}</p>
+            </div>
+            <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
+              <p className="text-xs text-brand-100/60">Próbálkozás</p>
+              <p className="mt-1 text-2xl font-semibold">{Number(autoExecute?.attempted ?? 0)}</p>
+            </div>
+            <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
+              <p className="text-xs text-brand-100/60">Átjutott</p>
+              <p className="mt-1 text-2xl font-semibold">{Number(autoExecute?.diagnostics?.passed_filters ?? 0)}</p>
+            </div>
+            <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
+              <p className="text-xs text-brand-100/60">Nyitás</p>
+              <p className="mt-1 text-2xl font-semibold">{Number(autoExecute?.created ?? 0)}</p>
+            </div>
+          </div>
+
+          {reasonsTop.length > 0 ? (
+            <div className="mt-4">
+              <p className="text-sm text-brand-100/70">Top okok (miért nem nyitott):</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {reasonsTop.slice(0, 3).map((row: any) => (
+                  <div key={String(row.reason ?? "")} className="rounded-xl border border-brand-300/15 bg-brand-900/50 p-3">
+                    <p className="text-sm font-semibold">{String(row.reason ?? "-")}</p>
+                    <p className="mt-2 text-xs text-brand-100/60">Esetszám: {Number(row.count ?? 0)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-brand-100/70">Nincs reject ok (vagy nincs auto_execute diagnosztika).</p>
+          )}
+        </section>
 
         <section className="card">
           <h2 className="text-xl font-semibold">Market snapshots</h2>

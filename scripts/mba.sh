@@ -9,6 +9,12 @@ STATE_DIR="${STATE_DIR:-$HOME/.arbiter}"
 PID_DIR="$STATE_DIR/pids"
 LOG_DIR="$STATE_DIR/logs"
 
+ensure_path() {
+  # When started via nohup / non-login shells, macOS often misses Homebrew paths.
+  # This makes `node`, `pnpm`, etc. reliably available.
+  export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+}
+
 WEB_PID="$PID_DIR/web.pid"
 RUNNER_PID="$PID_DIR/runner.pid"
 CAFF_PID="$PID_DIR/caffeinate.pid"
@@ -37,6 +43,7 @@ write_pid() {
 }
 
 start_web() {
+  ensure_path
   local pid
   pid="$(read_pid "$WEB_PID")"
   if is_running "$pid"; then
@@ -54,6 +61,7 @@ start_web() {
 }
 
 start_runner() {
+  ensure_path
   local pid
   pid="$(read_pid "$RUNNER_PID")"
   if is_running "$pid"; then
@@ -70,6 +78,7 @@ start_runner() {
 }
 
 start_caffeinate() {
+  ensure_path
   local pid
   pid="$(read_pid "$CAFF_PID")"
   if is_running "$pid"; then
@@ -134,6 +143,7 @@ cmd_status() {
 }
 
 cmd_update() {
+  ensure_path
   echo "updating repo..."
   cd "$ROOT_DIR"
   git pull
