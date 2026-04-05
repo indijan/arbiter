@@ -69,6 +69,11 @@ Then you need to ensure the corresponding strategy key is ACTIVE in `strategy_se
 
 If these are PAUSED/STANDBY, the evaluator rejects their opportunities before ranking/execution.
 
+## 3b) If prefilter_reasons says "symbol_not_allowed"
+
+This means `PAPER_ALLOWED_SYMBOLS` is set and the opportunity symbol is not on the allowlist.
+This is intentional: it prevents "random new symbols" (eg `DOTUSD`) from opening without an explicit lane/plan.
+
 ## 4) No open positions but "reserved capital" shows non-zero
 
 This usually means:
@@ -79,4 +84,3 @@ This usually means:
 We debug by:
 - checking latest `paper_accounts` row for the runner user,
 - validating `positions` status counts by user_id and mode.
-

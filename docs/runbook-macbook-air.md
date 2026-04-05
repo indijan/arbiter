@@ -33,6 +33,16 @@ Copy these two files to the MacBook Air:
 - `apps/web/.env.local`
 - `apps/runner/.env.local`
 
+These files are intentionally **not committed** to Git (they contain secrets). They live only on the server machine.
+
+### Non-secret safety guardrail
+
+Add this to both `.env.local` files (web + runner) to prevent opening unexpected symbols (eg `DOTUSD`) outside your controlled lane scope:
+
+```bash
+PAPER_ALLOWED_SYMBOLS=SOLUSD,XRPUSD,AVAXUSD
+```
+
 From your main machine (repo root):
 
 ```bash
@@ -102,4 +112,3 @@ Then restart the processes (web + runner). If you're running them in foreground 
   - something else is on 3000. Find it: `lsof -nP -iTCP:3000 -sTCP:LISTEN`
 - `Invalid project directory ... /-p`:
   - happens when passing args through pnpm incorrectly; use `./node_modules/.bin/next dev -p 3000`.
-
