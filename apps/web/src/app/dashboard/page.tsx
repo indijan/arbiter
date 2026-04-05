@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { lanePolicyStateFromRow, type LanePolicyState } from "@/server/lanes/policy";
 import { laneRegimeState, type BtcRegime } from "@/server/lanes/regimePolicy";
+import { rejectReasonHu } from "@/server/ops/rejectReasonsHu";
 
 type PositionRow = {
   id: number;
@@ -90,16 +91,6 @@ function simpleRecommendationReason(state: LanePolicyState) {
   if (state === "watch") return "A rendszer figyelje ezt a setupot, de még ne nyisson rá automatikusan.";
   if (state === "standby") return "Most nem ez a jó piaci helyzet ehhez a lane-hez, ezért maradjon készenlétben.";
   return "A rendszer szerint ezt most teljesen ki kell kapcsolni.";
-}
-
-function laneOriginTone(origin: "basic" | "approved") {
-  return origin === "approved"
-    ? "border-fuchsia-300/20 bg-fuchsia-500/10 text-fuchsia-100"
-    : "border-brand-300/15 bg-brand-900/40 text-brand-100/75";
-}
-
-function laneOriginLabel(origin: "basic" | "approved") {
-  return origin === "approved" ? "AI jóváhagyott" : "Alap lane";
 }
 
 function asNumber(value: unknown) {
@@ -277,7 +268,8 @@ export default async function DashboardPage() {
     openPositionsResult,
     recentClosedResult,
     btcSnapshotsResult,
-    strategySettingsResult
+    strategySettingsResult,
+    latestTickResult
   ] = await Promise.all([
     supabase
       .from("paper_accounts")
@@ -315,7 +307,13 @@ export default async function DashboardPage() {
     supabase
       .from("strategy_settings")
       .select("strategy_key, enabled, config")
-      .in("strategy_key", Object.values(LANE_LABEL_TO_KEY))
+      .in("strategy_key", Object.values(LANE_LABEL_TO_KEY)),
+    supabase
+      .from("system_ticks")
+      .select("ts, detect_summary")
+      .order("ts", { ascending: false })
+      .limit(1)
+      .maybeSingle()
   ]);
 
   const balanceUsd = asNumber(paperAccountResult.data?.balance_usd ?? 10000);
@@ -520,6 +518,18 @@ export default async function DashboardPage() {
 
   const lanePnlScale = Math.max(1, ...lanePanels.map((lane) => Math.abs(lane.pnl)));
 
+  const latestTick = latestTickResult.data as { ts?: string | null; detect_summary?: any } | null;
+  const autoExecute = latestTick?.detect_summary?.auto_execute ?? null;
+  const reasonsTop = Array.isArray(autoExecute?.reasons_top) ? autoExecute.reasons_top : [];
+  const prefilterReasons =
+    autoExecute?.diagnostics?.prefilter_reasons && typeof autoExecute.diagnostics.prefilter_reasons === "object"
+      ? (autoExecute.diagnostics.prefilter_reasons as Record<string, number>)
+      : null;
+  const liveRejectSamples = Array.isArray(autoExecute?.diagnostics?.live_reject_samples)
+    ? autoExecute.diagnostics.live_reject_samples
+    : [];
+  const latestTickLabel = latestTick?.ts ? new Date(latestTick.ts).toLocaleString("hu-HU") : "-";
+
   return (
     <div className="min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -544,21 +554,21 @@ export default async function DashboardPage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">24h PnL</p>
                   <p className={`mt-2 ${pnlValueClass(pnl24h)}`}>{usd(pnl24h)}</p>
-                  <p className="mt-2 text-sm text-brand-100/70">{closed24h.length} zárás, {opened24h.length} nyitás</p>
+                  <p className="mt-2 text-sm text-brand-100/70">{closed24h.length} zárás · {opened24h.length} nyitás</p>
                 </div>
               </div>
               <div className={pnlCardClass(pnl7d)}>
                 <div>
                   <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">7d PnL</p>
                   <p className={`mt-2 ${pnlValueClass(pnl7d)}`}>{usd(pnl7d)}</p>
-                  <p className="mt-2 text-sm text-brand-100/70">{closed7d.length} zárás, {opened7d.length} nyitás</p>
+                  <p className="mt-2 text-sm text-brand-100/70">{closed7d.length} zárás · {opened7d.length} nyitás</p>
                 </div>
               </div>
               <div className={pnlCardClass(pnl30d)}>
                 <div>
                   <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">30d PnL</p>
                   <p className={`mt-2 ${pnlValueClass(pnl30d)}`}>{usd(pnl30d)}</p>
-                  <p className="mt-2 text-sm text-brand-100/70">Összes zárt trade a 30 napos ablakban</p>
+                  <p className="mt-2 text-sm text-brand-100/70">Zárt trade-ek (30 nap)</p>
                 </div>
                 <div className="mt-4 flex items-end justify-between text-sm text-brand-100/70">
                   <span>Nyitott: {openPositions.length}</span>
@@ -569,9 +579,109 @@ export default async function DashboardPage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">Összesített eredmény</p>
                   <p className={`mt-2 ${pnlValueClass(absoluteProfitUsd)}`}>{usd(absoluteProfitUsd)}</p>
-                  <p className="mt-2 text-sm text-brand-100/70">Paper egyenleg a 10,000 USD induló tőkéhez képest</p>
+                  <p className="mt-2 text-sm text-brand-100/70">10,000 USD induló tőkéhez képest</p>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-6 rounded-[24px] border border-brand-300/10 bg-brand-900/35 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.28em] text-brand-100/55">Nyitási diagnózis</p>
+                  <h2 className="mt-1 text-xl font-semibold text-white">Miért nem nyit?</h2>
+                </div>
+                <p className="text-xs text-brand-100/60">Utolsó tick: {latestTickLabel}</p>
+              </div>
+
+              {autoExecute ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-brand-300/10 bg-brand-900/40 p-3 text-sm">
+                    <p className="text-brand-100/55">Próbálkozás</p>
+                    <p className="mt-1 text-2xl font-semibold text-white">{Number(autoExecute.attempted ?? 0)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-brand-300/10 bg-brand-900/40 p-3 text-sm">
+                    <p className="text-brand-100/55">Átjutott (szűrés után)</p>
+                    <p className="mt-1 text-2xl font-semibold text-white">
+                      {Number(autoExecute.diagnostics?.passed_filters ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-brand-300/10 bg-brand-900/40 p-3 text-sm">
+                    <p className="text-brand-100/55">Nyitás</p>
+                    <p className="mt-1 text-2xl font-semibold text-white">{Number(autoExecute.created ?? 0)}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-brand-100/70">Nincs auto_execute diagnosztika.</p>
+              )}
+
+              {reasonsTop.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-sm text-brand-100/70">Top okok (miért nem nyitott):</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                    {reasonsTop.slice(0, 3).map((row: any) => {
+                      const reason = String(row.reason ?? "");
+                      const count = Number(row.count ?? 0);
+                      const hu = rejectReasonHu(reason);
+                      return (
+                        <div key={reason} className="rounded-2xl border border-brand-300/10 bg-brand-900/45 p-3">
+                          <p className="text-sm font-semibold text-white">{hu.title}</p>
+                          <p className="mt-1 text-xs text-brand-100/70">{hu.detail}</p>
+                          <p className="mt-2 text-xs text-brand-100/55">Esetszám: {count}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {liveRejectSamples.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-sm text-brand-100/70">Minták (élő ár ellenőrzés):</p>
+                  <div className="mt-2 space-y-2 text-xs">
+                    {liveRejectSamples.slice(0, 2).map((sample: any, idx: number) => {
+                      const reason = String(sample.reason ?? "");
+                      const hu = rejectReasonHu(reason);
+                      return (
+                        <div key={`${reason}-${idx}`} className="rounded-2xl border border-brand-300/10 bg-brand-900/45 p-3">
+                          <p className="font-semibold text-white">{hu.title}</p>
+                          <p className="mt-1 text-brand-100/70">{hu.detail}</p>
+                          <p className="mt-2 text-brand-100/70">
+                            {String(sample.symbol ?? "-")} | {String(sample.exchange_pair ?? "-")}
+                          </p>
+                          <p className="text-brand-100/55">
+                            Live gross: {Number(sample.live_gross_bps ?? 0).toFixed(2)} bps | Live net:{" "}
+                            {Number(sample.live_net_bps ?? 0).toFixed(2)} bps | Küszöb:{" "}
+                            {Number(sample.threshold_bps ?? 0).toFixed(2)} bps
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {prefilterReasons ? (
+                <details className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-900/30 p-3">
+                  <summary className="cursor-pointer text-sm text-brand-100/70">
+                    Mi esett ki a szűrésen? (összesítés)
+                  </summary>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    {Object.entries(prefilterReasons)
+                      .sort((a, b) => Number(b[1]) - Number(a[1]))
+                      .slice(0, 8)
+                      .map(([code, count]) => {
+                        const hu = rejectReasonHu(code);
+                        return (
+                          <div key={code} className="rounded-xl border border-brand-300/10 bg-brand-900/40 p-2">
+                            <p className="text-xs font-semibold text-white">{hu.title}</p>
+                            <p className="text-[11px] text-brand-100/60">{hu.detail}</p>
+                            <p className="mt-1 text-[11px] text-brand-100/55">Esetszám: {count}</p>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </details>
+              ) : null}
             </div>
 
             <div className="mt-6 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
@@ -650,8 +760,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
               <div className="mt-4 overflow-hidden rounded-[24px] border border-brand-300/10 bg-brand-950/40 p-3 sm:p-4">
-                <div className="grid min-w-0 gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-                  <div className="min-w-0 rounded-[20px] border border-brand-300/10 bg-brand-900/45 p-3 sm:p-4">
+                <div className="min-w-0 rounded-[20px] border border-brand-300/10 bg-brand-900/45 p-3 sm:p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">BTC motion</p>
@@ -713,37 +822,6 @@ export default async function DashboardPage() {
                         <span>now</span>
                       </div>
                     </div>
-                  </div>
-                  <div className="grid min-w-0 gap-3">
-                    {lanePanels.map((lane) => (
-                      <div
-                        key={lane.label}
-                        className={`rounded-[20px] border p-4 ${toneSurfaceClass(lane.pnl)}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">{lane.label}</p>
-                            <div className="mt-2">
-                              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] ${laneOriginTone(lane.origin)}`}>
-                                {laneOriginLabel(lane.origin)}
-                              </span>
-                            </div>
-                            <p className={`mt-2 text-2xl font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <div className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(lane.actualState)}`}>
-                              {stateLabel(lane.actualState)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between text-sm text-brand-100/65">
-                          <span>{lane.closed} zárt</span>
-                          <span>{lane.open} nyitott</span>
-                        </div>
-                        {/* AI candidate workflow disabled; no separate approved lanes rendered here. */}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
               <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
@@ -755,9 +833,6 @@ export default async function DashboardPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">{lane.label}</p>
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${laneOriginTone(lane.origin)}`}>
-                            {laneOriginLabel(lane.origin)}
-                          </span>
                         </div>
                         <div className="mt-1 flex items-center gap-3">
                           <p className={`text-lg font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>

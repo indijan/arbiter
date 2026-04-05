@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { rejectReasonHu } from "@/server/ops/rejectReasonsHu";
 
 export default async function SimpleDashboardPage() {
   const supabase = createServerSupabase();
@@ -24,7 +25,7 @@ export default async function SimpleDashboardPage() {
 
   const { data: latestTick } = await supabase
     .from("system_ticks")
-    .select("ts, ingest_errors")
+    .select("ts, ingest_errors, detect_summary")
     .order("ts", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -34,6 +35,12 @@ export default async function SimpleDashboardPage() {
     : "N/A";
 
   const ingestErrors = latestTick?.ingest_errors ?? 0;
+  const autoExecute = (latestTick?.detect_summary as any)?.auto_execute ?? null;
+  const reasonsTop = Array.isArray(autoExecute?.reasons_top) ? autoExecute.reasons_top : [];
+  const prefilterReasons = autoExecute?.diagnostics?.prefilter_reasons ?? null;
+  const liveRejectSamples = Array.isArray(autoExecute?.diagnostics?.live_reject_samples)
+    ? autoExecute.diagnostics.live_reject_samples
+    : [];
 
   const { data: signals } = await supabase
     .from("opportunities")
@@ -121,6 +128,103 @@ export default async function SimpleDashboardPage() {
               <p className="text-sm text-brand-100/70">Nincs még jelzés.</p>
             )}
           </div>
+        </section>
+
+        <section className="card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-semibold">Miért nem nyit?</h2>
+            <p className="text-xs text-brand-100/60">
+              Utolsó tick: {lastTick}
+            </p>
+          </div>
+
+          {autoExecute ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3 text-sm">
+                <p className="text-brand-100/60">Próbálkozás</p>
+                <p className="mt-1 text-xl font-semibold">{Number(autoExecute.attempted ?? 0)}</p>
+              </div>
+              <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3 text-sm">
+                <p className="text-brand-100/60">Átjutott (szűrés után)</p>
+                <p className="mt-1 text-xl font-semibold">{Number(autoExecute.diagnostics?.passed_filters ?? 0)}</p>
+              </div>
+              <div className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3 text-sm">
+                <p className="text-brand-100/60">Nyitás</p>
+                <p className="mt-1 text-xl font-semibold">{Number(autoExecute.created ?? 0)}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-brand-100/70">Nincs auto_execute diagnosztika.</p>
+          )}
+
+          {reasonsTop.length > 0 ? (
+            <div className="mt-4">
+              <p className="text-sm text-brand-100/70">Top okok (miért nem nyitott):</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {reasonsTop.slice(0, 3).map((row: any) => {
+                  const reason = String(row.reason ?? "");
+                  const count = Number(row.count ?? 0);
+                  const hu = rejectReasonHu(reason);
+                  return (
+                    <div key={reason} className="rounded-xl border border-brand-300/15 bg-brand-900/50 p-3">
+                      <p className="text-sm font-semibold">{hu.title}</p>
+                      <p className="mt-1 text-xs text-brand-100/70">{hu.detail}</p>
+                      <p className="mt-2 text-xs text-brand-100/60">Esetszám: {count}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {liveRejectSamples.length > 0 ? (
+            <div className="mt-4">
+              <p className="text-sm text-brand-100/70">Minták (élő ár ellenőrzés):</p>
+              <div className="mt-2 space-y-2 text-xs">
+                {liveRejectSamples.slice(0, 2).map((sample: any, idx: number) => {
+                  const reason = String(sample.reason ?? "");
+                  const hu = rejectReasonHu(reason);
+                  return (
+                    <div key={`${reason}-${idx}`} className="rounded-xl border border-brand-300/15 bg-brand-900/50 p-3">
+                      <p className="font-semibold">{hu.title}</p>
+                      <p className="mt-1 text-brand-100/70">{hu.detail}</p>
+                      <p className="mt-2 text-brand-100/70">
+                        {String(sample.symbol ?? "-")} | {String(sample.exchange_pair ?? "-")}
+                      </p>
+                      <p className="text-brand-100/60">
+                        Live gross: {Number(sample.live_gross_bps ?? 0).toFixed(2)} bps | Live net:{" "}
+                        {Number(sample.live_net_bps ?? 0).toFixed(2)} bps | Küszöb:{" "}
+                        {Number(sample.threshold_bps ?? 0).toFixed(2)} bps
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {prefilterReasons ? (
+            <details className="mt-4 rounded-xl border border-brand-300/15 bg-brand-900/30 p-3">
+              <summary className="cursor-pointer text-sm text-brand-100/70">
+                Mi esett ki a szűrésen? (összesítés)
+              </summary>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {Object.entries(prefilterReasons as Record<string, number>)
+                  .sort((a, b) => Number(b[1]) - Number(a[1]))
+                  .slice(0, 8)
+                  .map(([code, count]) => {
+                    const hu = rejectReasonHu(code);
+                    return (
+                      <div key={code} className="rounded-lg border border-brand-300/10 bg-brand-900/40 p-2">
+                        <p className="text-xs font-semibold">{hu.title}</p>
+                        <p className="text-[11px] text-brand-100/60">{hu.detail}</p>
+                        <p className="mt-1 text-[11px] text-brand-100/60">Esetszám: {count}</p>
+                      </div>
+                    );
+                  })}
+              </div>
+            </details>
+          ) : null}
         </section>
 
         <section className="card">
