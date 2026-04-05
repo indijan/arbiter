@@ -151,9 +151,51 @@ cmd_logs() {
   tail -n 60 "$RUNNER_LOG_OUT" 2>/dev/null || true
 }
 
+required_vars() {
+  cat <<'EOF'
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+CRON_SECRET
+EOF
+}
+
+check_env_file() {
+  local file="$1" label="$2"
+  echo "$label: $file"
+  if [[ ! -f "$file" ]]; then
+    echo "  MISSING"
+    return 1
+  fi
+
+  local missing=0
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+    if ! grep -Eq "^${key}=" "$file"; then
+      echo "  missing: $key"
+      missing=1
+    fi
+  done < <(required_vars)
+
+  if ! grep -Eq "^PAPER_ALLOWED_SYMBOLS=" "$file"; then
+    echo "  missing: PAPER_ALLOWED_SYMBOLS (recommended)"
+  fi
+
+  if [[ "$missing" -eq 0 ]]; then
+    echo "  OK (required keys present)"
+  fi
+}
+
+cmd_envcheck() {
+  echo "envcheck (does not print secret values)"
+  check_env_file "$ROOT_DIR/apps/web/.env.local" "web"
+  check_env_file "$ROOT_DIR/apps/runner/.env.local" "runner"
+  echo "done"
+}
+
 usage() {
   cat <<EOF
-Usage: $0 <start|stop|status|update|logs>
+Usage: $0 <start|stop|status|update|logs|envcheck>
 
 Env:
   ROOT_DIR=/Users/indijan/Projects/arbiter   (override if your repo is elsewhere)
@@ -166,6 +208,6 @@ case "${1:-}" in
   status) cmd_status ;;
   update) cmd_update ;;
   logs) cmd_logs ;;
+  envcheck) cmd_envcheck ;;
   *) usage; exit 2 ;;
 esac
-
