@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { lanePolicyStateFromRow, type LanePolicyState } from "@/server/lanes/policy";
-import ApplyLanePolicyButton from "@/components/ApplyLanePolicyButton";
-import CandidatePolicyActionButton from "@/components/CandidatePolicyActionButton";
+import { laneRegimeState, type BtcRegime } from "@/server/lanes/regimePolicy";
 
 type PositionRow = {
   id: number;
@@ -44,61 +43,6 @@ type OpportunityRow = {
   type: string;
   status: string;
   details: Record<string, unknown> | null;
-};
-
-type LanePolicyReviewRow = {
-  id: string;
-  created_at: string;
-  current_btc_regime: string;
-  current_btc_momentum_6h_bps: number | string;
-  model: string | null;
-  used_ai: boolean;
-  summary: {
-    market_label?: string;
-    opening_expectation?: string;
-    operator_message?: string;
-    next_action?: string;
-    news_risk_message?: string | null;
-    active_now_count?: number;
-    watch_now_count?: number;
-    standby_now_count?: number;
-    paused_now_count?: number;
-    active_after_apply_count?: number;
-    watch_after_apply_count?: number;
-    standby_after_apply_count?: number;
-    paused_after_apply_count?: number;
-    candidate_policies?: Array<{
-      id?: string;
-      symbol: string;
-      label: string;
-      regime: string;
-      why: string;
-      rule_hint: string;
-      rule_config?: Record<string, unknown>;
-      priority: "high" | "medium";
-      trade_count: number;
-      pnl_30d_usd: number;
-      expectancy_30d_usd: number;
-      status?: "candidate" | "validated" | "canary" | "rejected";
-    }>;
-  } | null;
-  recommendations: Array<{
-    strategy_key: string;
-    label: string;
-    current_state: LanePolicyState;
-    recommended_state: LanePolicyState;
-    reason: string;
-    confidence: number;
-  }> | null;
-};
-
-type CandidatePolicyRow = {
-  id: string;
-  symbol: string;
-  label: string;
-  regime: string;
-  status: "candidate" | "validated" | "canary" | "rejected";
-  status_updated_at?: string | null;
 };
 
 const LANE_LABELS = [
@@ -148,56 +92,6 @@ function simpleRecommendationReason(state: LanePolicyState) {
   return "A rendszer szerint ezt most teljesen ki kell kapcsolni.";
 }
 
-function humanRecommendationReason(reason: string, recommendedState: LanePolicyState) {
-  const normalized = reason.trim().toLowerCase();
-  if (!normalized) return simpleRecommendationReason(recommendedState);
-  if (normalized.includes("recent 7d underperformance")) {
-    return "Az utóbbi 7 napban ez a lane gyengén teljesített ebben a piaci helyzetben, ezért a rendszer visszavenné.";
-  }
-  if (normalized.includes("30d lane expectancy is negative")) {
-    return "Az utóbbi 30 nap összképe alapján ez a lane most nem megbízható, ezért a rendszer kivenné az aktív körből.";
-  }
-  if (normalized.includes("historical lane performance suggests observation-worthy candidate")) {
-    return "A múltbeli adatok alapján ezt érdemes figyelni, de még nem elég erős az automatikus kereskedéshez.";
-  }
-  if (normalized.includes("best historical candidate for this regime")) {
-    return "Ebben a piaci helyzetben ez a legjobb történelmi jelölt, ezért a rendszer ezt emelné aktív kereskedésre.";
-  }
-  if (normalized.startsWith("regime baseline")) {
-    return simpleRecommendationReason(recommendedState);
-  }
-  return reason;
-}
-
-function recommendationStrength(confidence: number) {
-  if (confidence >= 0.8) return { label: "Erős javaslat", bars: 5 };
-  if (confidence >= 0.65) return { label: "Jó javaslat", bars: 4 };
-  if (confidence >= 0.5) return { label: "Közepes javaslat", bars: 3 };
-  if (confidence >= 0.35) return { label: "Gyenge javaslat", bars: 2 };
-  return { label: "Bizonytalan javaslat", bars: 1 };
-}
-
-function recommendationStrengthColor(confidence: number) {
-  const bars = recommendationStrength(confidence).bars;
-  if (bars <= 2) return "bg-rose-300";
-  if (bars === 3) return "bg-amber-300";
-  return "bg-emerald-300";
-}
-
-function candidateStatusTone(status: CandidatePolicyRow["status"] | undefined) {
-  if (status === "canary") return "border-emerald-300/20 bg-emerald-500/10 text-emerald-100";
-  if (status === "validated") return "border-amber-300/20 bg-amber-500/10 text-amber-100";
-  if (status === "rejected") return "border-rose-300/20 bg-rose-500/10 text-rose-100";
-  return "border-sky-300/20 bg-sky-500/10 text-sky-100";
-}
-
-function candidateStatusLabel(status: CandidatePolicyRow["status"] | undefined) {
-  if (status === "canary") return "Próbaüzem";
-  if (status === "validated") return "Jóváhagyott";
-  if (status === "rejected") return "Elvetve";
-  return "Jelölt";
-}
-
 function laneOriginTone(origin: "basic" | "approved") {
   return origin === "approved"
     ? "border-fuchsia-300/20 bg-fuchsia-500/10 text-fuchsia-100"
@@ -207,20 +101,6 @@ function laneOriginTone(origin: "basic" | "approved") {
 function laneOriginLabel(origin: "basic" | "approved") {
   return origin === "approved" ? "AI jóváhagyott" : "Alap lane";
 }
-
-function applyImpactSummary(
-  recommendations: Array<{ recommended_state: LanePolicyState }> | null | undefined
-) {
-  const rows = recommendations ?? [];
-  const counts = {
-    active: rows.filter((row) => row.recommended_state === "active").length,
-    watch: rows.filter((row) => row.recommended_state === "watch").length,
-    standby: rows.filter((row) => row.recommended_state === "standby").length,
-    paused: rows.filter((row) => row.recommended_state === "paused").length
-  };
-  return `${counts.active} kereskedik, ${counts.watch} figyel, ${counts.standby} várakozik, ${counts.paused} leállítva.`;
-}
-
 
 function asNumber(value: unknown) {
   const n = Number(value ?? 0);
@@ -397,10 +277,7 @@ export default async function DashboardPage() {
     openPositionsResult,
     recentClosedResult,
     btcSnapshotsResult,
-    strategySettingsResult,
-    lanePolicyReviewResult,
-    candidatePoliciesResult,
-    candidateOpportunitiesResult
+    strategySettingsResult
   ] = await Promise.all([
     supabase
       .from("paper_accounts")
@@ -438,26 +315,7 @@ export default async function DashboardPage() {
     supabase
       .from("strategy_settings")
       .select("strategy_key, enabled, config")
-      .in("strategy_key", Object.values(LANE_LABEL_TO_KEY)),
-    supabase
-      .from("lane_policy_reviews")
-      .select("id, created_at, current_btc_regime, current_btc_momentum_6h_bps, model, used_ai, summary, recommendations")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("candidate_lane_policies")
-      .select("id, symbol, label, regime, status, status_updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(100),
-    supabase
-      .from("opportunities")
-      .select("id, ts, type, status, details")
-      .eq("type", "relative_strength")
-      .gte("ts", since30d)
-      .order("ts", { ascending: false })
-      .limit(500)
+      .in("strategy_key", Object.values(LANE_LABEL_TO_KEY))
   ]);
 
   const balanceUsd = asNumber(paperAccountResult.data?.balance_usd ?? 10000);
@@ -470,14 +328,9 @@ export default async function DashboardPage() {
   const openPositionsAll = (openPositionsResult.data ?? []) as PositionRow[];
   const recentClosedAll = (recentClosedResult.data ?? []) as PositionRow[];
 
-  const candidatePolicyRows = (candidatePoliciesResult.data ?? []) as CandidatePolicyRow[];
-  const candidateStatusById = new Map(candidatePolicyRows.map((row) => [row.id, row.status]));
   const isSandboxRow = (row: PositionRow) => {
     const variant = String(row.meta?.strategy_variant ?? "");
-    const id = candidateIdFromVariant(variant);
-    if (!id) return false;
-    const status = candidateStatusById.get(id);
-    return status !== "validated";
+    return variant.startsWith("candidate_canary:");
   };
 
   const positions30d = positions30dAll.filter((row) => !isSandboxRow(row));
@@ -542,6 +395,13 @@ export default async function DashboardPage() {
           : latestBtcMomentum > 0
             ? "btc_pos"
           : "flat/unknown";
+  const currentBtcRegime: BtcRegime =
+    latestBtcRegime === "btc_neg_strong" ||
+    latestBtcRegime === "btc_neg" ||
+    latestBtcRegime === "btc_pos" ||
+    latestBtcRegime === "btc_pos_strong"
+      ? (latestBtcRegime as BtcRegime)
+      : "flat";
   const latestBtcRegimeLabel =
     latestBtcMomentum <= -100
       ? "Bear"
@@ -562,11 +422,13 @@ export default async function DashboardPage() {
   const lanePolicyMap = new Map(
     ((strategySettingsResult.data ?? []) as StrategySettingRow[]).map((row) => [row.strategy_key, row])
   );
-  const latestLanePolicyReview = (lanePolicyReviewResult.data ?? null) as LanePolicyReviewRow | null;
-  const candidateOpportunityRows = (candidateOpportunitiesResult.data ?? []) as OpportunityRow[];
-  const candidatePolicyMap = new Map(
-    candidatePolicyRows.map((row) => [`${row.label}::${row.regime}`, row])
-  );
+  const effectiveLaneState = (strategyKey: string): LanePolicyState => {
+    const base = lanePolicyStateFromRow(lanePolicyMap.get(strategyKey));
+    if (base === "paused") return "paused";
+    // Show the real, regime-based state (what the server will actually allow right now).
+    const regimeState = laneRegimeState(strategyKey, currentBtcRegime);
+    return regimeState ?? base;
+  };
   const btcSparklineValues = btcHours.map((hour) => btcHourly.get(hour) ?? 0).filter((value) => value > 0);
   const btcSparklinePath = sparklinePath(btcSparklineValues, 560, 120);
   const lanePanels = [
@@ -576,7 +438,7 @@ export default async function DashboardPage() {
       pnl: shadowXrpCorePnl,
       closed: shadowXrpCoreClosed.length,
       open: shadowXrpCoreOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_core")),
+      actualState: effectiveLaneState("xrp_shadow_short_core"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowXrpCoreClosed, since7d)
     },
@@ -586,7 +448,7 @@ export default async function DashboardPage() {
       pnl: shadowXrpBullFadePnl,
       closed: shadowXrpBullFadeClosed.length,
       open: shadowXrpBullFadeOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("xrp_shadow_short_bull_fade_canary")),
+      actualState: effectiveLaneState("xrp_shadow_short_bull_fade_canary"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowXrpBullFadeClosed, since7d)
     },
@@ -596,7 +458,7 @@ export default async function DashboardPage() {
       pnl: shadowAvaxPnl,
       closed: shadowAvaxClosed.length,
       open: shadowAvaxOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("avax_shadow_short_canary")),
+      actualState: effectiveLaneState("avax_shadow_short_canary"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowAvaxClosed, since7d)
     },
@@ -606,7 +468,7 @@ export default async function DashboardPage() {
       pnl: shadowSolSoftBearPnl,
       closed: shadowSolSoftBearClosed.length,
       open: shadowSolSoftBearOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_soft_bear_laggard")),
+      actualState: effectiveLaneState("sol_shadow_short_soft_bear_laggard"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowSolSoftBearClosed, since7d)
     },
@@ -616,7 +478,7 @@ export default async function DashboardPage() {
       pnl: shadowSolDeepBearPnl,
       closed: shadowSolDeepBearClosed.length,
       open: shadowSolDeepBearOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_deep_bear_continuation")),
+      actualState: effectiveLaneState("sol_shadow_short_deep_bear_continuation"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowSolDeepBearClosed, since7d)
     },
@@ -626,13 +488,11 @@ export default async function DashboardPage() {
       pnl: shadowSolSoftBullProbePnl,
       closed: shadowSolSoftBullProbeClosed.length,
       open: shadowSolSoftBullProbeOpen.length,
-      actualState: lanePolicyStateFromRow(lanePolicyMap.get("sol_shadow_short_soft_bull_reversal_probe")),
+      actualState: effectiveLaneState("sol_shadow_short_soft_bull_reversal_probe"),
       origin: "basic" as const,
       trend7d: buildDailyPnlSeries(shadowSolSoftBullProbeClosed, since7d)
     }
   ];
-  // Candidate/AI sandbox workflow intentionally disabled.
-  const sandboxPolicies: any[] = [];
 
   const byExchange = new Map<string, ExchangeStats>();
   for (const row of positions30d) {
@@ -659,12 +519,6 @@ export default async function DashboardPage() {
 
 
   const lanePnlScale = Math.max(1, ...lanePanels.map((lane) => Math.abs(lane.pnl)));
-  const displayRecommendations = (latestLanePolicyReview?.recommendations ?? [])
-    .map((row) => {
-      const liveState = lanePolicyStateFromRow(lanePolicyMap.get(row.strategy_key));
-      return { ...row, current_state: liveState };
-    })
-    .filter((row) => row.current_state !== row.recommended_state);
 
   return (
     <div className="min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -892,70 +746,6 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               </div>
-              {sandboxPolicies.length > 0 ? (
-                <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Sandbox</p>
-                      <p className="mt-1 text-sm text-brand-100/65">Próbaüzemben futó új policy-jelöltek. Itt látod, kapnak-e jelet és nyitnak-e.</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                    {sandboxPolicies.map((policy) => (
-                      <div key={policy.id} className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-white">{policy.label}</p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.22em] text-brand-100/45">{policy.symbol} · Próbaüzem</p>
-                          </div>
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policy.liveTone}`}>
-                            {policy.liveLabel}
-                          </span>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
-                            <p className="text-brand-100/50">Jelek</p>
-                            <p className="mt-1 font-semibold text-white">{policy.signals}</p>
-                          </div>
-                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
-                            <p className="text-brand-100/50">Nyitott</p>
-                            <p className="mt-1 font-semibold text-white">{policy.openCount}</p>
-                          </div>
-                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
-                            <p className="text-brand-100/50">Zárt</p>
-                            <p className="mt-1 font-semibold text-white">{policy.closedCount}</p>
-                          </div>
-                          <div className="rounded-xl border border-brand-300/10 bg-brand-950/40 px-3 py-2">
-                            <p className="text-brand-100/50">PnL</p>
-                            <p className={`mt-1 font-semibold ${toneClass(policy.pnl)}`}>{usd(policy.pnl)}</p>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-brand-100/55">
-                          <span>Utolsó jel: {formatCompactTs(policy.latestSignalTs)}</span>
-                          <span>Próbaüzem: {formatAgeSince(policy.runningSince)}</span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                          <CandidatePolicyActionButton
-                            id={policy.id}
-                            kind="status"
-                            status="validated"
-                            label="Jóváhagyom"
-                            confirmText="A próbaüzem sikeresnek tűnik. Jóváhagyod ezt a policy-t?"
-                            compact
-                          />
-                          <CandidatePolicyActionButton
-                            id={policy.id}
-                            kind="delete"
-                            label="Törlöm"
-                            confirmText="Biztosan törlöd ezt a sandbox policy-t?"
-                            compact
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
               <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
                 <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Lane performance</p>
                 <div className="mt-4 space-y-3">
@@ -988,195 +778,6 @@ export default async function DashboardPage() {
                   </div>
                 ))}
                 </div>
-              </div>
-              <div className="mt-3 rounded-2xl border border-brand-300/10 bg-brand-900/45 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-brand-100/55">AI lane policy review</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-full border border-brand-300/10 bg-brand-900/50 px-3 py-1 text-xs uppercase tracking-[0.22em] text-brand-100/60">
-                      {latestLanePolicyReview
-                        ? latestLanePolicyReview.used_ai
-                          ? "AI javaslat"
-                          : "Szabály alapú javaslat"
-                        : "nincs review"}
-                    </div>
-                    <ApplyLanePolicyButton disabled={!latestLanePolicyReview || displayRecommendations.length === 0} />
-                  </div>
-                </div>
-                {latestLanePolicyReview ? (
-                  <>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">Utolsó elemzés</p>
-                        <p className="mt-1 text-sm font-semibold text-white">{formatTs(latestLanePolicyReview.created_at)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">Mostani piaci helyzet</p>
-                        <p className="mt-1 text-sm font-semibold text-white">
-                          {regimeHumanLabel(latestLanePolicyReview.current_btc_regime)}
-                        </p>
-                        <p className="mt-1 text-xs text-brand-100/55">
-                          BTC 6 órás mozgás: {asNumber(latestLanePolicyReview.current_btc_momentum_6h_bps).toFixed(1)} bps
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-brand-300/10 bg-brand-950/40 px-3 py-3">
-                        <p className="text-brand-100/55">Összes alkalmazás hatása</p>
-                        <p className="mt-1 text-sm font-semibold text-white">
-                          {applyImpactSummary(displayRecommendations)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                      {displayRecommendations.map((row) => (
-                        <div key={row.strategy_key} className="rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{row.label}</p>
-                              <p className="mt-1 text-sm text-brand-100/65">
-                                Most: {stateLabel(row.current_state)}. Javaslat: {stateLabel(row.recommended_state)}.
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.current_state)}`}>
-                                most: {stateLabel(row.current_state)}
-                              </div>
-                              <div className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${policyToneClass(row.recommended_state)}`}>
-                                javaslat: {stateLabel(row.recommended_state)}
-                              </div>
-                            </div>
-                          </div>
-                          <p className="mt-3 text-sm text-brand-100/75">
-                            {humanRecommendationReason(row.reason, row.recommended_state)}
-                          </p>
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <div>
-                              {row.recommended_state === "active" ? (
-                                <>
-                                  <p className="text-xs uppercase tracking-[0.18em] text-brand-100/50">Aktiválás ereje</p>
-                                  <div className="mt-2 flex items-center gap-1.5">
-                                    {Array.from({ length: 5 }).map((_, index) => {
-                                      const active = index < recommendationStrength(row.confidence).bars;
-                                      return (
-                                        <span
-                                          key={`${row.strategy_key}-bar-${index}`}
-                                          className={`h-2.5 w-6 rounded-full ${active ? recommendationStrengthColor(row.confidence) : "bg-brand-100/10"}`}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                  <p className="mt-1 text-xs text-brand-100/55">{recommendationStrength(row.confidence).label}</p>
-                                </>
-                              ) : (
-                                <p className="text-xs text-brand-100/55">Ehhez a javaslathoz nem kell erősségjelző, mert nem aktivál kereskedést.</p>
-                              )}
-                            </div>
-                            <ApplyLanePolicyButton
-                              compact
-                              strategyKey={row.strategy_key}
-                              disabled={row.current_state === row.recommended_state}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {displayRecommendations.length === 0 ? (
-                      <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 px-4 py-4 text-sm text-brand-100/65">
-                        Nincs függő AI ajánlás. Ami változatlan vagy már alkalmazva lett, azt a felület nem mutatja.
-                      </div>
-                    ) : null}
-                    {(latestLanePolicyReview.summary?.candidate_policies?.length ?? 0) > 0 ? (
-                      <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Következő policy-jelöltek</p>
-                            <p className="mt-1 text-sm text-brand-100/65">Ha a meglévő lane-ek nem elég jók ebben a rezsimben, innen érdemes továbbfejleszteni.</p>
-                          </div>
-                        </div>
-                        <div className="mt-4 grid gap-3 xl:grid-cols-3">
-                          {latestLanePolicyReview.summary?.candidate_policies?.map((candidate) => (
-                            <div key={`${candidate.symbol}-${candidate.label}`} className="rounded-2xl border border-brand-300/10 bg-brand-900/35 p-4">
-                              {(() => {
-                                const saved = candidatePolicyMap.get(`${candidate.label}::${candidate.regime}`);
-                                if (saved?.status === "rejected") return null;
-                                return (
-                                  <>
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold text-white">{candidate.label}</p>
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${candidate.priority === "high" ? "border-amber-300/20 bg-amber-500/10 text-amber-100" : "border-sky-300/20 bg-sky-500/10 text-sky-100"}`}>
-                                      {candidate.priority === "high" ? "fontos" : "figyelni"}
-                                    </span>
-                                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.22em] ${candidateStatusTone(saved?.status)}`}>
-                                      {candidateStatusLabel(saved?.status)}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                              <p className="mt-2 text-sm text-brand-100/75">{candidate.why}</p>
-                              <div className="mt-3 flex items-center gap-3 text-xs text-brand-100/60">
-                                <span>{candidate.trade_count} minta</span>
-                                <span className={toneClass(candidate.pnl_30d_usd)}>{usd(candidate.pnl_30d_usd)}</span>
-                                <span className={toneClass(candidate.expectancy_30d_usd)}>
-                                  átlag {usd(candidate.expectancy_30d_usd)}
-                                </span>
-                              </div>
-                              <div className="mt-3 rounded-xl border border-brand-300/10 bg-brand-950/50 px-3 py-2 text-xs text-brand-100/60">
-                                {candidate.rule_hint}
-                              </div>
-                              {saved?.id ? (
-                                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                                  {saved.status !== "validated" ? (
-                                    <CandidatePolicyActionButton
-                                      id={saved.id}
-                                      kind="status"
-                                      status="validated"
-                                      label="Jóváhagyom"
-                                      confirmText="Jóváhagyod ezt a policy-jelöltet?"
-                                      compact
-                                    />
-                                  ) : null}
-                                  {saved.status !== "canary" ? (
-                                    <CandidatePolicyActionButton
-                                      id={saved.id}
-                                      kind="status"
-                                      status="canary"
-                                      label="Próbaüzem"
-                                      confirmText="Próbaüzembe teszed ezt a policy-t?"
-                                      compact
-                                    />
-                                  ) : null}
-                                  <CandidatePolicyActionButton
-                                    id={saved.id}
-                                    kind="status"
-                                    status="rejected"
-                                    label="Elvetem"
-                                    confirmText="Elveted ezt a policy-jelöltet?"
-                                    compact
-                                  />
-                                  <CandidatePolicyActionButton
-                                    id={saved.id}
-                                    kind="delete"
-                                    label="Törlöm"
-                                    confirmText="Biztosan törlöd ezt a policy-jelöltet?"
-                                    compact
-                                  />
-                                </div>
-                              ) : null}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="mt-3 text-sm text-brand-100/60">Még nincs lane policy review futás.</p>
-                )}
               </div>
             </div>
           </div>

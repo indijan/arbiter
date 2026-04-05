@@ -37,3 +37,33 @@ pnpm runner
 pnpm -C apps/web dev
 ```
 - To reduce Vercel GB-Hrs, disable Vercel crons in `apps/web/vercel.json` and redeploy.
+
+## macOS: Run 24/7 with launchd (Recommended)
+
+1. Build the web app once:
+```bash
+pnpm -C apps/web build
+```
+
+2. Copy the launch agents:
+```bash
+mkdir -p ~/Library/LaunchAgents
+cp apps/runner/launchd/hu.arbiter.web.plist ~/Library/LaunchAgents/
+cp apps/runner/launchd/hu.arbiter.runner.plist ~/Library/LaunchAgents/
+```
+
+3. Load them (newer macOS):
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/hu.arbiter.web.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/hu.arbiter.runner.plist
+```
+
+4. Logs:
+- `~/Library/Logs/arbiter-web.log`
+- `~/Library/Logs/arbiter-runner.log`
+
+To stop:
+```bash
+launchctl bootout gui/$(id -u) hu.arbiter.runner
+launchctl bootout gui/$(id -u) hu.arbiter.web
+```

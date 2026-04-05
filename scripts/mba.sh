@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# MacBook Air helper for running arbiter "headless" without keeping SSH tabs open.
+# Uses nohup + PID files under ~/.arbiter.
+
+ROOT_DIR="${ROOT_DIR:-/Users/indijan/Projects/arbiter}"
+STATE_DIR="${STATE_DIR:-$HOME/.arbiter}"
+PID_DIR="$STATE_DIR/pids"
+LOG_DIR="$STATE_DIR/logs"
+
+WEB_PID="$PID_DIR/web.pid"
+RUNNER_PID="$PID_DIR/runner.pid"
+CAFF_PID="$PID_DIR/caffeinate.pid"
+
+WEB_LOG_OUT="$LOG_DIR/web.out.log"
+WEB_LOG_ERR="$LOG_DIR/web.err.log"
+RUNNER_LOG_OUT="$LOG_DIR/runner.out.log"
+RUNNER_LOG_ERR="$LOG_DIR/runner.err.log"
+
+mkdir -p "$PID_DIR" "$LOG_DIR"
+
+is_running() {
+  local pid="$1"
+  if [[ -z "${pid}" ]]; then return 1; fi
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+read_pid() {
+  local file="$1"
+  if [[ -f "$file" ]]; then cat "$file" 2>/dev/null || true; fi
+}
+
+write_pid() {
+  local file="$1" pid="$2"
+  printf "%s" "$pid" >"$file"
+}
+
+start_web() {
+  local pid
+  pid="$(read_pid "$WEB_PID")"
+  if is_running "$pid"; then
+    echo "web already running pid=$pid"
+    return 0
+  fi
+  echo "starting web..."
+  (
+    cd "$ROOT_DIR/apps/web"
+    # Use direct next invocation (pnpm arg forwarding is error-prone).
+    nohup ./node_modules/.bin/next dev -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
+    write_pid "$WEB_PID" "$!"
+  )
+  echo "web started pid=$(read_pid "$WEB_PID")"
+}
+
+start_runner() {
+  local pid
+  pid="$(read_pid "$RUNNER_PID")"
+  if is_running "$pid"; then
+    echo "runner already running pid=$pid"
+    return 0
+  fi
+  echo "starting runner..."
+  (
+    cd "$ROOT_DIR/apps/runner"
+    nohup node --experimental-strip-types src/index.ts >"$RUNNER_LOG_OUT" 2>"$RUNNER_LOG_ERR" &
+    write_pid "$RUNNER_PID" "$!"
+  )
+  echo "runner started pid=$(read_pid "$RUNNER_PID")"
+}
+
+start_caffeinate() {
+  local pid
+  pid="$(read_pid "$CAFF_PID")"
+  if is_running "$pid"; then
+    echo "caffeinate already running pid=$pid"
+    return 0
+  fi
+  echo "starting caffeinate..."
+  nohup caffeinate -dimsu >/dev/null 2>&1 &
+  write_pid "$CAFF_PID" "$!"
+  echo "caffeinate started pid=$(read_pid "$CAFF_PID")"
+}
+
+stop_one() {
+  local name="$1" file="$2"
+  local pid
+  pid="$(read_pid "$file")"
+  if ! is_running "$pid"; then
+    echo "$name not running"
+    rm -f "$file" 2>/dev/null || true
+    return 0
+  fi
+  echo "stopping $name pid=$pid"
+  kill "$pid" >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ! is_running "$pid"; then break; fi
+    sleep 0.2
+  done
+  if is_running "$pid"; then
+    echo "$name still running, sending SIGKILL"
+    kill -9 "$pid" >/dev/null 2>&1 || true
+  fi
+  rm -f "$file" 2>/dev/null || true
+}
+
+cmd_start() {
+  start_caffeinate
+  start_web
+  start_runner
+  echo "ok"
+}
+
+cmd_stop() {
+  stop_one "runner" "$RUNNER_PID"
+  stop_one "web" "$WEB_PID"
+  stop_one "caffeinate" "$CAFF_PID"
+  echo "ok"
+}
+
+cmd_status() {
+  local wp rp cp
+  wp="$(read_pid "$WEB_PID")"
+  rp="$(read_pid "$RUNNER_PID")"
+  cp="$(read_pid "$CAFF_PID")"
+
+  if is_running "$wp"; then echo "web: running pid=$wp"; else echo "web: stopped"; fi
+  if is_running "$rp"; then echo "runner: running pid=$rp"; else echo "runner: stopped"; fi
+  if is_running "$cp"; then echo "caffeinate: running pid=$cp"; else echo "caffeinate: stopped"; fi
+
+  echo "logs:"
+  echo "  $WEB_LOG_ERR"
+  echo "  $RUNNER_LOG_OUT"
+}
+
+cmd_update() {
+  echo "updating repo..."
+  cd "$ROOT_DIR"
+  git pull
+  pnpm install
+  echo "restart..."
+  cmd_stop || true
+  cmd_start
+}
+
+cmd_logs() {
+  echo "web.err (tail):"
+  tail -n 40 "$WEB_LOG_ERR" 2>/dev/null || true
+  echo
+  echo "runner.out (tail):"
+  tail -n 60 "$RUNNER_LOG_OUT" 2>/dev/null || true
+}
+
+usage() {
+  cat <<EOF
+Usage: $0 <start|stop|status|update|logs>
+
+Env:
+  ROOT_DIR=/Users/indijan/Projects/arbiter   (override if your repo is elsewhere)
+EOF
+}
+
+case "${1:-}" in
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  update) cmd_update ;;
+  logs) cmd_logs ;;
+  *) usage; exit 2 ;;
+esac
+

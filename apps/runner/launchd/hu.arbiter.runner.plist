@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>hu.arbiter.runner</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/indijanmac/Projects/arbiter</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/indijanmac/Projects/arbiter/apps/runner/bin/start-runner.sh</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/indijanmac/Library/Logs/arbiter-runner.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/indijanmac/Library/Logs/arbiter-runner.err.log</string>
+  </dict>
+</plist>
+

@@ -86,26 +86,11 @@ async function main() {
   loadEnv();
 
   const runOnce = process.env.RUN_ONCE === "1";
-  const stepMinutes = Number(process.env.RUNNER_STEP_MINUTES ?? 10);
-  const lanePolicyHours = Number(process.env.LANE_POLICY_HOURS ?? 1);
+  const stepMinutes = Number(process.env.RUNNER_STEP_MINUTES ?? 2);
 
   console.log(`[${isoNow()}] runner starting step=${stepMinutes}m runOnce=${runOnce}`);
 
-  let lastLanePolicyAt = 0;
-
   while (true) {
-    const now = Date.now();
-    if (now - lastLanePolicyAt >= lanePolicyHours * 60 * 60_000) {
-      lastLanePolicyAt = now;
-      try {
-        await callCron("/api/cron/lane-policy");
-        console.log(`[${isoNow()}] cron.lane_policy: ok`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[${isoNow()}] cron.lane_policy: FAIL ${msg}`);
-      }
-    }
-
     await runTick();
     if (runOnce) break;
 

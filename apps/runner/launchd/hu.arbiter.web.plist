@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>hu.arbiter.web</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/indijanmac/Projects/arbiter</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PORT</key>
+      <string>3000</string>
+      <key>NODE_ENV</key>
+      <string>production</string>
+    </dict>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/indijanmac/Projects/arbiter/apps/runner/bin/start-web.sh</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/indijanmac/Library/Logs/arbiter-web.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/indijanmac/Library/Logs/arbiter-web.err.log</string>
+  </dict>
+</plist>
+

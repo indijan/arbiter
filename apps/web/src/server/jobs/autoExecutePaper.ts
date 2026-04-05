@@ -2,13 +2,12 @@ import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { paperFill } from "@/lib/execution/paperFill";
+import { trainWeights } from "@/server/ai/opportunityScoring";
 import {
-  buildFeatureBundle,
-  predictScore,
-  trainWeights,
-  variantForOpportunity
-} from "@/server/ai/opportunityScoring";
-import { scoreWithOpenAI } from "@/server/ai/openaiRanker";
+  selectPaperOpportunities,
+  type OpportunityRow,
+  type ScoredOpportunity
+} from "@/server/engine/evaluator/selectPaperOpportunities";
 import { loadEffectivePolicy } from "@/server/policy/store";
 import { runStrategyPolicyController } from "@/server/policy/controller";
 import {
@@ -17,6 +16,10 @@ import {
   laneStateAllowsDetection,
   laneStateAllowsExecution
 } from "@/server/lanes/policy";
+import { laneAllowsExecutionByRegime, regimeFromBtcMomentum6hBps } from "@/server/lanes/regimePolicy";
+import { openRelativeStrengthPaperPosition } from "@/server/engine/execution/paper/openRelativeStrength";
+import { openSpreadReversionPaperPosition } from "@/server/engine/execution/paper/openSpreadReversion";
+import { openXarbSpotPaperPosition } from "@/server/engine/execution/paper/openXarbSpot";
 
 const DEFAULT_NOTIONAL = 100;
 const DEFAULT_MIN_NOTIONAL = 100;
@@ -108,6 +111,9 @@ const SPREAD_REVERSION_TOTAL_COSTS_BPS = 11;
 const SPREAD_REVERSION_MIN_NET_EDGE_BPS = 0.1;
 const SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS = 1.5;
 const SPREAD_REVERSION_MIN_CONFIDENCE = 0.56;
+const RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS = Number(
+  process.env.RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS ?? "8"
+);
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
 const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -75;
 const XRP_SHORT_MAX_BTC_MOMENTUM_6H_BPS = 0;
@@ -227,25 +233,6 @@ type KrakenResponse = {
 type CoinbaseTicker = {
   bid?: string;
   ask?: string;
-};
-
-type OpportunityRow = {
-  id: number;
-  ts: string;
-  exchange: string;
-  symbol: string;
-  type: string;
-  net_edge_bps: number | null;
-  confidence: number | null;
-  details: Record<string, unknown> | null;
-};
-
-type ScoredOpportunity = OpportunityRow & {
-  score: number;
-  features: ReturnType<typeof buildFeatureBundle>;
-  variant: "A" | "B";
-  aiScore: number | null;
-  effectiveScore: number;
 };
 
 type AutoExecuteResult = {
@@ -1240,170 +1227,44 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     Number.isFinite(Date.parse(CONTRARIAN_UNTIL)) &&
     Date.now() < Date.parse(CONTRARIAN_UNTIL);
 
-  let scored: ScoredOpportunity[] = (opportunities ?? [])
-    // Keep only the newest opportunity per (type, symbol, exchange) key to avoid retrying stale snapshots.
-    .filter((opp, idx, arr) => {
-      const typed = opp as OpportunityRow;
-      const key = `${typed.type}|${typed.symbol}|${typed.exchange}`;
-      const firstIdx = arr.findIndex((x) => {
-        const row = x as OpportunityRow;
-        return `${row.type}|${row.symbol}|${row.exchange}` === key;
-      });
-      return firstIdx === idx;
-    })
-    .filter((opp) => {
-      const symbol = (opp as { symbol?: string }).symbol ?? "";
-      if (!symbol) {
-        markPrefilter("missing_symbol");
-        return false;
-      }
-      if ((openBySymbol.get(symbol) ?? 0) >= MAX_OPEN_PER_SYMBOL) {
-        markPrefilter("max_open_per_symbol");
-        return false;
-      }
-
-      const typed = opp as OpportunityRow;
-      const netEdge = Number(typed.net_edge_bps ?? 0);
-      const confidence = Number(typed.confidence ?? 0);
-      const details = typed.details ?? {};
-      const breakEven = Number((details as Record<string, unknown>).break_even_hours ?? NaN);
-      if (typed.type === "tri_arb") {
-        markPrefilter("tri_arb_disabled");
-        return false;
-      }
-      if (typed.type === "spot_perp_carry") {
-        markPrefilter("carry_auto_open_disabled");
-        return false;
-      }
-      if (typed.type === "spread_reversion") {
-        markPrefilter("spread_reversion_auto_open_disabled");
-        return false;
-      }
-      if (typed.type === "xarb_spot") {
-        markPrefilter("xarb_auto_open_disabled");
-        return false;
-      }
-      if (typed.type === "xarb_spot" && blockedSymbolSet.has(typed.symbol)) {
-        markPrefilter("blocked_symbol");
-        return false;
-      }
-      const relaxedXarbPrefilter = false;
-      const effectiveMinNetEdgeBps = relaxedXarbPrefilter ? -5 : minNetEdgeBps;
-      const effectiveMinXarbNetEdgeBps = relaxedXarbPrefilter
-        ? Math.min(-3, minXarbNetEdgeBps)
-        : minXarbNetEdgeBps;
-      const effectiveXarbMaxSignalAgeHours = relaxedXarbPrefilter
-        ? Math.max(24, xarbMaxSignalAgeHours)
-        : Math.min(xarbMaxSignalAgeHours, 2);
-
-      const typeMinNetEdge =
-        typed.type === "spread_reversion"
-          ? SPREAD_REVERSION_MIN_NET_EDGE_BPS
-          : effectiveMinNetEdgeBps;
-      if (netEdge < typeMinNetEdge) {
-        markPrefilter("below_min_net_edge");
-        return false;
-      }
-      const typeConfidenceMin =
-        typed.type === "xarb_spot"
-          ? relaxedXarbPrefilter
-            ? 0.42
-            : Math.max(0.54, minConfidence - 0.08)
-          : typed.type === "spread_reversion"
-            ? SPREAD_REVERSION_MIN_CONFIDENCE
-          : typed.type === "relative_strength"
-            ? 0.58
-          : typed.type === "tri_arb"
-            ? Math.max(0.54, minConfidence - 0.08)
-            : minConfidence;
-      if (confidence < typeConfidenceMin) {
-        markPrefilter("below_min_confidence");
-        return false;
-      }
-      if (Number.isFinite(breakEven) && breakEven > MAX_BREAK_EVEN_HOURS) {
-        markPrefilter("break_even_too_long");
-        return false;
-      }
-      if (typed.type === "spot_perp_carry") {
-        const fundingDailyBps = Number(
-          (details as Record<string, unknown>).funding_daily_bps ?? NaN
-        );
-        if (Number.isFinite(fundingDailyBps) && fundingDailyBps < MIN_CARRY_FUNDING_DAILY_BPS) {
-          markPrefilter("carry_funding_too_low");
-          return false;
-        }
-      }
-      if (typed.type === "xarb_spot" && netEdge < effectiveMinXarbNetEdgeBps) {
-        markPrefilter("xarb_below_min_edge");
-        return false;
-      }
-      if (typed.type === "xarb_spot") {
-        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
-        if (!Number.isFinite(ageHours) || ageHours > effectiveXarbMaxSignalAgeHours) {
-          markPrefilter("stale_xarb_signal");
-          return false;
-        }
-      }
-      if (typed.type === "spread_reversion") {
-        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
-        if (!Number.isFinite(ageHours) || ageHours > SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS) {
-          markPrefilter("stale_spread_reversion_signal");
-          return false;
-        }
-      }
-      if (typed.type === "relative_strength") {
-        if (!allowsDetect("relative_strength")) {
-          markPrefilter("relative_strength_disabled");
-          return false;
-        }
-        const ageHours = (Date.now() - Date.parse(typed.ts)) / (60 * 60 * 1000);
-        if (!Number.isFinite(ageHours) || ageHours > 2.5) {
-          markPrefilter("stale_relative_strength_signal");
-          return false;
-        }
-        if (!RELATIVE_STRENGTH_ALLOWLIST.has(typed.symbol)) {
-          markPrefilter("relative_strength_symbol_blocked");
-          return false;
-        }
-        const strategyVariant = String((typed.details as Record<string, unknown> | null)?.strategy_variant ?? "");
-        if (strategyVariant && RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant) && !allowsDetect(strategyVariant)) {
-          markPrefilter("relative_strength_lane_disabled");
-          return false;
-        }
-        const candidateCanaryId = candidateCanaryIdFromVariant(strategyVariant);
-        if (candidateCanaryId && !activeCanaryCandidateIds.has(candidateCanaryId)) {
-          markPrefilter("candidate_canary_disabled");
-          return false;
-        }
-      }
-      return true;
-    })
-    .map((opp) => ({
-      ...(opp as OpportunityRow),
-      score: scoreOpportunity(opp as OpportunityRow),
-      features: buildFeatureBundle({
-        type: (opp as OpportunityRow).type,
-        net_edge_bps: (opp as OpportunityRow).net_edge_bps,
-        confidence: (opp as OpportunityRow).confidence,
-        details: (opp as OpportunityRow).details
-      })
-    }))
-    .map((opp) => {
-      const variant = variantForOpportunity(opp.id);
-      const aiScore = predictScore(weights, opp.features.vector);
-      let effectiveScore = variant === "B" && aiScore !== null ? aiScore : opp.score;
-      if (HIGH_THROUGHPUT_POSITIVE_MODE) {
-        const symbolBias = symbolExpectancyBias[opp.symbol] ?? 0;
-        // favor symbols with better realized expectancy and demote chronic losers
-        effectiveScore += Math.max(-0.25, Math.min(0.25, symbolBias / 4));
-      }
-      if (variant === "B" && contrarianActive) {
-        effectiveScore = -effectiveScore;
-      }
-      return { ...opp, variant, aiScore, effectiveScore };
-    })
-    .sort((a, b) => b.effectiveScore - a.effectiveScore)
-    .slice(0, candidateLimit);
+  let scored: ScoredOpportunity[] = [];
+  {
+    const selection = await selectPaperOpportunities({
+      opportunities: (opportunities ?? []) as OpportunityRow[],
+      candidateLimit,
+      contrarianActive,
+      highThroughputPositiveMode: HIGH_THROUGHPUT_POSITIVE_MODE,
+      openBySymbol,
+      maxOpenPerSymbol: MAX_OPEN_PER_SYMBOL,
+      minNetEdgeBps,
+      minConfidence,
+      minXarbNetEdgeBps,
+      maxBreakEvenHours: MAX_BREAK_EVEN_HOURS,
+      xarbMaxSignalAgeHours,
+      spreadReversionMaxSignalAgeHours: SPREAD_REVERSION_MAX_SIGNAL_AGE_HOURS,
+      relativeStrengthMaxSignalAgeHours: RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS,
+      relativeStrengthAllowlist: RELATIVE_STRENGTH_ALLOWLIST,
+      relativeStrengthLaneKeys: RELATIVE_STRENGTH_LANE_KEYS,
+      activeCanaryCandidateIds,
+      blockedSymbolSet,
+      spreadReversionMinNetEdgeBps: SPREAD_REVERSION_MIN_NET_EDGE_BPS,
+      spreadReversionMinConfidence: SPREAD_REVERSION_MIN_CONFIDENCE,
+      allowsDetect,
+      allowsExecute,
+      candidateCanaryIdFromVariant,
+      scoreOpportunity,
+      weights,
+      symbolExpectancyBias,
+      remainingLlmCalls,
+      maxLlmCallsPerTick: MAX_LLM_CALLS_PER_TICK,
+      maxLlmRerank: MAX_LLM_RERANK,
+      markPrefilter
+    });
+    scored = selection.scored;
+    remainingLlmCalls = selection.remainingLlmCalls;
+    // LLM usage accounting stays in this job (writes ai_usage_daily).
+    // We'll compute llmCallsUsed below from the delta.
+  }
 
   const diagnostics = {
     opportunities_lookback: (opportunities ?? []).length,
@@ -1465,35 +1326,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }>
   };
 
-  let llmCallsUsed = 0;
-  const scoredWithLlm: ScoredOpportunity[] = [];
-  const rerankCandidates = scored.slice(0, MAX_LLM_RERANK);
-  for (const opp of scored) {
-    if (
-      opp.variant === "B" &&
-      rerankCandidates.includes(opp) &&
-      remainingLlmCalls > 0 &&
-      llmCallsUsed < MAX_LLM_CALLS_PER_TICK
-    ) {
-      const llm = await scoreWithOpenAI({
-        type: opp.type,
-        net_edge_bps: opp.net_edge_bps,
-        confidence: opp.confidence,
-        details: opp.details
-      });
-
-      llmCallsUsed += 1;
-      remainingLlmCalls -= 1;
-
-      if (llm.score !== null) {
-        const adjusted = { ...opp, aiScore: llm.score, effectiveScore: llm.score };
-        scoredWithLlm.push(adjusted);
-        continue;
-      }
-    }
-    scoredWithLlm.push(opp);
-  }
-
+  // Count LLM calls by checking which scored items ended up using aiScore as effectiveScore.
+  // This is robust against the selector's internal logic.
+  const llmCallsUsed = scored.filter((x) => x.aiScore !== null && x.effectiveScore === x.aiScore).length;
   if (llmCallsUsed > 0) {
     await adminSupabase
       .from("ai_usage_daily")
@@ -1506,8 +1341,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         { onConflict: "day" }
       );
   }
-
-  scored = scoredWithLlm.sort((a, b) => b.effectiveScore - a.effectiveScore);
+  scored = scored.sort((a, b) => b.effectiveScore - a.effectiveScore);
 
   let attempted = 0;
   let created = 0;
@@ -1789,127 +1623,35 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         continue;
       }
 
-      const buyFill = paperFill({
-        side: "buy",
-        price: buyQuote.ask,
-        notional_usd,
-        slippage_bps: SLIPPAGE_BPS,
-        fee_bps: FEE_BPS
+      const openRes = await openSpreadReversionPaperPosition(adminSupabase, reservedCurrent, available, {
+        userId,
+        accountId: account.id,
+        opportunityId: opp.id,
+        symbol: opp.symbol,
+        buyExchange,
+        sellExchange,
+        buySymbol,
+        sellSymbol,
+        buyQuote,
+        sellQuote,
+        notionalUsd: notional_usd,
+        feeBps: FEE_BPS,
+        slippageBps: SLIPPAGE_BPS,
+        roundtripCostsBps: SPREAD_REVERSION_TOTAL_COSTS_BPS,
+        targetExitGrossBps,
+        stopLossGrossBps,
+        liveGrossSpreadBps,
+        liveExpectedNetBps,
+        notionalReason: derived.reason
       });
 
-      const sellFill = paperFill({
-        side: "sell",
-        price: sellQuote.bid,
-        notional_usd,
-        slippage_bps: SLIPPAGE_BPS,
-        fee_bps: FEE_BPS
-      });
-
-      const { data: position, error: positionError } = await adminSupabase
-        .from("positions")
-        .insert({
-          user_id: userId,
-          opportunity_id: opp.id,
-          symbol: opp.symbol,
-          mode: "paper",
-          status: "open",
-          entry_spot_price: buyFill.fill_price,
-          entry_perp_price: sellFill.fill_price,
-          spot_qty: buyFill.qty,
-          perp_qty: -sellFill.qty,
-          meta: {
-            opportunity_id: opp.id,
-            type: "spread_reversion",
-            buy_exchange: buyExchange,
-            sell_exchange: sellExchange,
-            buy_symbol: buySymbol,
-            sell_symbol: sellSymbol,
-            buy_entry_price: buyFill.fill_price,
-            sell_entry_price: sellFill.fill_price,
-            buy_qty: buyFill.qty,
-            sell_qty: sellFill.qty,
-            fee_bps: FEE_BPS,
-            slippage_bps: SLIPPAGE_BPS,
-            roundtrip_costs_bps: SPREAD_REVERSION_TOTAL_COSTS_BPS,
-            target_exit_gross_bps: Number(targetExitGrossBps.toFixed(4)),
-            stop_loss_gross_bps: Number(stopLossGrossBps.toFixed(4)),
-            entry_gross_spread_bps: Number(liveGrossSpreadBps.toFixed(4)),
-            entry_expected_net_bps: Number(liveExpectedNetBps.toFixed(4)),
-            notional_usd,
-            notional_reason: derived.reason,
-            auto_execute: true,
-            spread_reversion_open: true
-          }
-        })
-        .select("id")
-        .single();
-
-      if (positionError || !position) {
-        throw new Error(positionError?.message ?? "Failed to create paper position");
-      }
-
-      const executionsPayload = [
-        {
-          position_id: position.id,
-          leg: "spot_buy",
-          requested_qty: buyFill.qty,
-          filled_qty: buyFill.qty,
-          avg_price: buyFill.fill_price,
-          fee: buyFill.fee_usd,
-          raw: {
-            side: "buy",
-            price: buyQuote.ask,
-            fill_price: buyFill.fill_price,
-            slippage_bps: SLIPPAGE_BPS,
-            fee_bps: FEE_BPS,
-            notional_usd
-          }
-        },
-        {
-          position_id: position.id,
-          leg: "spot_sell",
-          requested_qty: sellFill.qty,
-          filled_qty: sellFill.qty,
-          avg_price: sellFill.fill_price,
-          fee: sellFill.fee_usd,
-          raw: {
-            side: "sell",
-            price: sellQuote.bid,
-            fill_price: sellFill.fill_price,
-            slippage_bps: SLIPPAGE_BPS,
-            fee_bps: FEE_BPS,
-            notional_usd
-          }
-        }
-      ];
-
-      const { error: executionError } = await adminSupabase
-        .from("executions")
-        .insert(executionsPayload);
-
-      if (executionError) {
-        throw new Error(executionError.message);
-      }
-
-      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
-      const { error: reserveError } = await adminSupabase
-        .from("paper_accounts")
-        .update({
-          reserved_usd: reservedCurrent,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", account.id);
-
-      if (reserveError) {
-        throw new Error(reserveError.message);
-      }
-
-      available = Number((available - notional_usd).toFixed(2));
+      reservedCurrent = openRes.reservedUsd;
+      available = openRes.availableUsd;
       created += 1;
       if (decisionRow?.id) {
         await adminSupabase
           .from("opportunity_decisions")
-          .update({ chosen: true, position_id: position.id })
+          .update({ chosen: true, position_id: openRes.positionId })
           .eq("id", decisionRow.id);
       }
       continue;
@@ -1942,10 +1684,24 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_disabled" });
         continue;
       }
-      if (RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant) && !allowsExecute(strategyVariant)) {
-        skipped += 1;
-        reasons.push({ opportunity_id: opp.id, reason: "relative_strength_lane_disabled" });
-        continue;
+      if (RELATIVE_STRENGTH_LANE_KEYS.has(strategyVariant)) {
+        if (!Number.isFinite(btcMomentum6hBps)) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "missing_btc_regime" });
+          continue;
+        }
+        const regime = regimeFromBtcMomentum6hBps(btcMomentum6hBps);
+        if (!laneAllowsExecutionByRegime(strategyVariant, regime)) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "lane_regime_standby" });
+          continue;
+        }
+        // Still respect manual per-lane disable as a kill-switch.
+        if (!allowsExecute(strategyVariant)) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "relative_strength_lane_disabled" });
+          continue;
+        }
       }
       const candidateCanaryId = candidateCanaryIdFromVariant(strategyVariant);
       if (candidateCanaryId && !activeCanaryCandidateIds.has(candidateCanaryId)) {
@@ -2096,142 +1852,71 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         continue;
       }
 
-      const side = direction === "long" ? "buy" : "sell";
-      const fill = paperFill({
-        side,
-        price: direction === "long" ? quote.ask : quote.bid,
-        notional_usd,
-        slippage_bps: SLIPPAGE_BPS,
-        fee_bps: FEE_BPS
+      const openRes = await openRelativeStrengthPaperPosition(adminSupabase, reservedCurrent, available, {
+        userId,
+        accountId: account.id,
+        opportunityId: opp.id,
+        symbol: opp.symbol,
+        direction: direction === "long" ? "long" : "short",
+        quote,
+        notionalUsd: notional_usd,
+        feeBps: FEE_BPS,
+        slippageBps: SLIPPAGE_BPS,
+        strategyVariant,
+        holdSeconds: Number(details.hold_seconds ?? relativeStrengthHoldSecondsForVariant(strategyVariant)),
+        details: details as Record<string, unknown>,
+        metaExtra: {
+          notional_reason: derived.reason,
+          xrp_short_min_btc_momentum_6h_bps: symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
+          xrp_short_max_btc_momentum_6h_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_BTC_MOMENTUM_6H_BPS : null,
+          xrp_short_min_spread_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MIN_SPREAD_BPS : null,
+          xrp_short_max_spread_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_SPREAD_BPS : null,
+          xrp_short_max_alt_momentum_2h_bps:
+            strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_ALT_MOMENTUM_2H_BPS : null,
+          xrp_bull_fade_min_btc_momentum_6h_bps:
+            strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS : null,
+          xrp_bull_fade_max_spread_bps:
+            strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MAX_SPREAD_BPS : null,
+          xrp_bull_fade_min_alt_momentum_2h_bps:
+            strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS : null,
+          entry_threshold_bps:
+            strategyVariant === "xrp_shadow_short_core"
+              ? XRP_SHORT_MAX_SPREAD_BPS
+              : strategyVariant === "xrp_shadow_short_bull_fade_canary"
+                ? XRP_BULL_FADE_MAX_SPREAD_BPS
+                : (details as any).entry_threshold_bps,
+          avax_short_min_btc_momentum_6h_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
+          avax_short_min_spread_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
+          sol_soft_bear_min_btc_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS : null,
+          sol_soft_bear_max_btc_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS : null,
+          sol_soft_bear_min_alt_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS : null,
+          sol_soft_bear_max_alt_momentum_2h_bps:
+            strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_ALT_MOMENTUM_2H_BPS : null,
+          sol_soft_bear_max_spread_bps:
+            strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_SPREAD_BPS : null,
+          sol_deep_bear_min_btc_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_BTC_MOMENTUM_6H_BPS : null,
+          sol_deep_bear_max_btc_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS : null,
+          sol_deep_bear_max_alt_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS : null,
+          sol_deep_bear_max_alt_momentum_2h_bps:
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS : null,
+          sol_deep_bear_min_spread_bps:
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_SPREAD_BPS : null
+        }
       });
 
-      const { data: position, error: positionError } = await adminSupabase
-        .from("positions")
-        .insert({
-          user_id: userId,
-          opportunity_id: opp.id,
-          symbol: opp.symbol,
-          mode: "paper",
-          status: "open",
-          entry_spot_price: fill.fill_price,
-          entry_perp_price: null,
-          spot_qty: direction === "long" ? fill.qty : -fill.qty,
-          perp_qty: 0,
-          meta: {
-            opportunity_id: opp.id,
-            type: "relative_strength",
-            exchange: "coinbase",
-            symbol: opp.symbol,
-            direction,
-            entry_price: fill.fill_price,
-            qty: fill.qty,
-            fee_bps: FEE_BPS,
-            slippage_bps: SLIPPAGE_BPS,
-            notional_usd,
-            notional_reason: derived.reason,
-            auto_execute: true,
-            relative_strength_open: true,
-            strategy_variant: strategyVariant,
-            hold_seconds: Number(details.hold_seconds ?? relativeStrengthHoldSecondsForVariant(strategyVariant)),
-            momentum_6h_bps: details.momentum_6h_bps,
-            momentum_2h_bps: details.momentum_2h_bps,
-            btc_momentum_6h_bps: details.btc_momentum_6h_bps,
-            spread_bps: details.spread_bps,
-            xrp_short_min_btc_momentum_6h_bps: symbol === "XRPUSD" ? XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
-            xrp_short_max_btc_momentum_6h_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_BTC_MOMENTUM_6H_BPS : null,
-            xrp_short_min_spread_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MIN_SPREAD_BPS : null,
-            xrp_short_max_spread_bps: strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_SPREAD_BPS : null,
-            xrp_short_max_alt_momentum_2h_bps:
-              strategyVariant === "xrp_shadow_short_core" ? XRP_SHORT_MAX_ALT_MOMENTUM_2H_BPS : null,
-            xrp_bull_fade_min_btc_momentum_6h_bps:
-              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS : null,
-            xrp_bull_fade_max_spread_bps:
-              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MAX_SPREAD_BPS : null,
-            xrp_bull_fade_min_alt_momentum_2h_bps:
-              strategyVariant === "xrp_shadow_short_bull_fade_canary" ? XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS : null,
-            entry_threshold_bps:
-              strategyVariant === "xrp_shadow_short_core"
-                ? XRP_SHORT_MAX_SPREAD_BPS
-                : strategyVariant === "xrp_shadow_short_bull_fade_canary"
-                  ? XRP_BULL_FADE_MAX_SPREAD_BPS
-                  : details.entry_threshold_bps,
-            avax_short_min_btc_momentum_6h_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS : null,
-            avax_short_min_spread_bps: symbol === "AVAXUSD" ? AVAX_SHORT_MIN_SPREAD_BPS : null,
-            sol_soft_bear_min_btc_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS : null,
-            sol_soft_bear_max_btc_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS : null,
-            sol_soft_bear_min_alt_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS : null,
-            sol_soft_bear_max_alt_momentum_2h_bps:
-              strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_ALT_MOMENTUM_2H_BPS : null,
-            sol_soft_bear_max_spread_bps:
-              strategyVariant === "sol_shadow_short_soft_bear_laggard" ? SOL_SOFT_BEAR_MAX_SPREAD_BPS : null,
-            sol_deep_bear_min_btc_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_BTC_MOMENTUM_6H_BPS : null,
-            sol_deep_bear_max_btc_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS : null,
-            sol_deep_bear_max_alt_momentum_6h_bps:
-              strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS : null,
-            sol_deep_bear_max_alt_momentum_2h_bps:
-              strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS : null,
-            sol_deep_bear_min_spread_bps:
-              strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_SPREAD_BPS : null,
-            sol_long_min_btc_momentum_6h_bps: null,
-            sol_long_min_spread_bps: null,
-            sol_long_max_alt_momentum_6h_bps: null,
-            exit_threshold_bps: details.exit_threshold_bps
-          }
-        })
-        .select("id")
-        .single();
-
-      if (positionError || !position) {
-        throw new Error(positionError?.message ?? "Failed to create relative strength position");
-      }
-
-      const { error: executionError } = await adminSupabase
-        .from("executions")
-        .insert({
-          position_id: position.id,
-          leg: direction === "long" ? "spot_buy" : "spot_sell",
-          requested_qty: fill.qty,
-          filled_qty: fill.qty,
-          avg_price: fill.fill_price,
-          fee: fill.fee_usd,
-          raw: {
-            side,
-            price: direction === "long" ? quote.ask : quote.bid,
-            fill_price: fill.fill_price,
-            slippage_bps: SLIPPAGE_BPS,
-            fee_bps: FEE_BPS,
-            notional_usd
-          }
-        });
-
-      if (executionError) {
-        throw new Error(executionError.message);
-      }
-
-      reservedCurrent = Number((reservedCurrent + notional_usd).toFixed(2));
-      const { error: reserveError } = await adminSupabase
-        .from("paper_accounts")
-        .update({
-          reserved_usd: reservedCurrent,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", account.id);
-
-      if (reserveError) {
-        throw new Error(reserveError.message);
-      }
-
-      available = Number((available - notional_usd).toFixed(2));
+      reservedCurrent = openRes.reservedUsd;
+      available = openRes.availableUsd;
       created += 1;
       if (decisionRow?.id) {
         await adminSupabase
           .from("opportunity_decisions")
-          .update({ chosen: true, position_id: position.id })
+          .update({ chosen: true, position_id: openRes.positionId })
           .eq("id", decisionRow.id);
       }
       continue;

@@ -3,9 +3,11 @@ import "server-only";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 import { paperFill } from "@/lib/execution/paperFill";
 import { CARRY_CONFIG } from "@/lib/strategy/spotPerpCarry";
+import { laneAllowsExecutionByRegime, regimeFromBtcMomentum6hBps, type BtcRegime } from "@/server/lanes/regimePolicy";
 
 const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
+const REGIME_FORCE_CLOSE_MIN_PROFIT_USD = Number(process.env.REGIME_FORCE_CLOSE_MIN_PROFIT_USD ?? "0.5");
 
 const TP_PCT_CARRY = 0.008;
 const SL_PCT_CARRY = 0.006;
@@ -161,6 +163,41 @@ function okxSpotInstId(symbol: string) {
 
 function okxSwapInstId(symbol: string) {
   return `${okxSpotInstId(symbol)}-SWAP`;
+}
+
+async function fetchBtcMomentum6hBps(
+  adminSupabase: NonNullable<ReturnType<typeof createAdminSupabase>>
+): Promise<number | null> {
+  const nowIso = new Date().toISOString();
+  const sinceIso = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await adminSupabase
+    .from("market_snapshots")
+    .select("ts, spot_bid, spot_ask")
+    .eq("exchange", "coinbase")
+    .eq("symbol", "BTCUSD")
+    .gte("ts", sinceIso)
+    .lte("ts", nowIso)
+    .order("ts", { ascending: true })
+    .limit(2000);
+
+  if (error) return null;
+
+  const rows = (data ?? []) as Array<{ ts: string; spot_bid: number | null; spot_ask: number | null }>;
+  const mids = rows
+    .map((r) => {
+      const bid = Number(r.spot_bid ?? NaN);
+      const ask = Number(r.spot_ask ?? NaN);
+      if (!Number.isFinite(bid) || !Number.isFinite(ask) || ask <= bid) return null;
+      return (bid + ask) / 2;
+    })
+    .filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+
+  if (mids.length < 2) return null;
+  const first = mids[0];
+  const last = mids[mids.length - 1];
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) return null;
+  return ((last - first) / first) * 10000;
 }
 
 async function fetchSpotTicker(exchange: string, symbol: string) {
@@ -334,6 +371,13 @@ export async function autoClosePaper(): Promise<CloseResult> {
     throw new Error("Missing service role key.");
   }
 
+  // Used for "regime change" exits for relative-strength lanes.
+  const btcMomentum6hBps = await fetchBtcMomentum6hBps(adminSupabase);
+  const currentRegime: BtcRegime | null =
+    btcMomentum6hBps !== null && Number.isFinite(btcMomentum6hBps)
+      ? regimeFromBtcMomentum6hBps(btcMomentum6hBps)
+      : null;
+
   let { data: account, error: accountError } = await adminSupabase
     .from("paper_accounts")
     .select("id, user_id, balance_usd, reserved_usd")
@@ -389,6 +433,25 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
   if (positionsError) {
     throw new Error(positionsError.message);
+  }
+
+  // Reconcile reserved capital even when there are no closes.
+  // If a previous run crashed between opening and accounting updates, reserved_usd can get stuck > 0.
+  const reservedFromPositions = Number(
+    (positions ?? [])
+      .reduce((sum, p) => {
+        const meta = (p.meta ?? {}) as Record<string, unknown>;
+        const n = Number(meta.notional_usd ?? 0);
+        return sum + (Number.isFinite(n) && n > 0 ? n : 0);
+      }, 0)
+      .toFixed(2)
+  );
+  if (Number.isFinite(reservedFromPositions) && reservedFromPositions !== Number(reservedCurrent.toFixed(2))) {
+    reservedCurrent = reservedFromPositions;
+    await adminSupabase
+      .from("paper_accounts")
+      .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+      .eq("id", account.id);
   }
 
   const opportunityIds = (positions ?? [])
@@ -586,6 +649,71 @@ export async function autoClosePaper(): Promise<CloseResult> {
       const mark = direction === "long" ? quote.bid : quote.ask;
       const unrealized =
         direction === "long" ? qty * (mark - entryPrice) : qty * (entryPrice - mark);
+
+      // Regime-change profit take: if the current BTC regime no longer allows this lane, take profit immediately.
+      if (
+        currentRegime &&
+        strategyVariant &&
+        !laneAllowsExecutionByRegime(strategyVariant, currentRegime) &&
+        Number.isFinite(unrealized) &&
+        unrealized >= REGIME_FORCE_CLOSE_MIN_PROFIT_USD
+      ) {
+        const closeSide = direction === "long" ? "sell" : "buy";
+        const closeFill = paperFill({
+          side: closeSide,
+          price: direction === "long" ? quote.bid : quote.ask,
+          notional_usd: qty * mark,
+          slippage_bps: SLIPPAGE_BPS,
+          fee_bps: FEE_BPS
+        });
+        const realized =
+          direction === "long"
+            ? qty * (closeFill.fill_price - entryPrice) - closeFill.fee_usd
+            : qty * (entryPrice - closeFill.fill_price) - closeFill.fee_usd;
+
+        const { error: closeError } = await adminSupabase
+          .from("positions")
+          .update({
+            status: "closed",
+            exit_ts: new Date().toISOString(),
+            exit_spot_price: closeFill.fill_price,
+            realized_pnl_usd: Number(realized.toFixed(4))
+          })
+          .eq("id", position.id)
+          .eq("status", "open");
+        if (closeError) throw new Error(closeError.message);
+
+        const { error: execError } = await adminSupabase.from("executions").insert({
+          position_id: position.id,
+          leg: closeSide === "sell" ? "spot_sell" : "spot_buy",
+          requested_qty: qty,
+          filled_qty: qty,
+          avg_price: closeFill.fill_price,
+          fee: closeFill.fee_usd,
+          raw: {
+            side: closeSide,
+            price: direction === "long" ? quote.bid : quote.ask,
+            fill_price: closeFill.fill_price,
+            slippage_bps: SLIPPAGE_BPS,
+            fee_bps: FEE_BPS,
+            notional_usd: notionalUsd,
+            regime_force_close: true,
+            btc_momentum_6h_bps: btcMomentum6hBps,
+            regime: currentRegime,
+            min_profit_usd: REGIME_FORCE_CLOSE_MIN_PROFIT_USD
+          }
+        });
+        if (execError) throw new Error(execError.message);
+
+        reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+        await adminSupabase
+          .from("paper_accounts")
+          .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+          .eq("id", account.id);
+
+        closed += 1;
+        continue;
+      }
       const ageSec = secondsSince(position.entry_ts ?? null);
       const holdSeconds = Number(meta.hold_seconds ?? relativeStrengthHoldSecondsForVariant(strategyVariant, opp.symbol));
       const shouldClose = ageSec !== null && ageSec >= holdSeconds;

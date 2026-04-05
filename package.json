@@ -10,6 +10,7 @@
     "build": "pnpm -C apps/web build",
     "lint": "pnpm -C apps/web lint",
     "runner": "pnpm -C apps/runner start",
-    "runner:once": "pnpm -C apps/runner once"
+    "runner:once": "pnpm -C apps/runner once",
+    "ops:reload": "zsh scripts/ops-reload-local.sh"
   }
 }

@@ -6,6 +6,7 @@ import {
   lanePolicyStateFromSettingsMap,
   laneStateAllowsDetection
 } from "@/server/lanes/policy";
+import { laneAllowsDetectionByRegime, regimeFromBtcMomentum6hBps, type BtcRegime } from "@/server/lanes/regimePolicy";
 
 const LOOKBACK_HOURS = 24;
 const IDEMPOTENT_MINUTES = 10;
@@ -390,10 +391,19 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   }
   // Candidate/AI lane workflow is intentionally disabled: it was too noisy operationally.
   const candidatePolicies: Array<{ id: string; symbol: string; regime: string; rule_config: CandidateRuleConfig | null }> = [];
+  let currentRegime: BtcRegime | null = null;
   const isLaneDetectEnabled = (variant: string) => {
     const parentState = lanePolicyStateFromSettingsMap(strategySettingsMap, RELATIVE_STRENGTH_PARENT_KEY);
+    if (!laneStateAllowsDetection(parentState)) return false;
+    if (currentRegime) {
+      if (laneAllowsDetectionByRegime(variant, currentRegime)) return true;
+      // If it's a known lane and it's not allowed in this regime, block it.
+      if (["xrp_shadow_short_core","xrp_shadow_short_bull_fade_canary","avax_shadow_short_canary","sol_shadow_short_soft_bear_laggard","sol_shadow_short_deep_bear_continuation","sol_shadow_short_soft_bull_reversal_probe"].includes(variant)) {
+        return false;
+      }
+    }
     const laneState = lanePolicyStateFromSettingsMap(strategySettingsMap, variant);
-    return laneStateAllowsDetection(parentState) && laneStateAllowsDetection(laneState);
+    return laneStateAllowsDetection(laneState);
   };
   const runtimeLanes = [
     ...RELATIVE_STRENGTH_LANES
@@ -454,6 +464,10 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
   const ranked = tradableRows
     .map((row) => ({ ...row, spreadBps: row.momentum6hBps - basketMean }))
     .sort((a, b) => Math.abs(b.spreadBps) - Math.abs(a.spreadBps));
+
+  if (btcRow && Number.isFinite(btcRow.momentum6hBps)) {
+    currentRegime = regimeFromBtcMomentum6hBps(btcRow.momentum6hBps);
+  }
 
   let inserted = 0;
   let skipped = 0;
