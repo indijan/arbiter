@@ -29,6 +29,7 @@ export type PaperOpportunitySelectorParams = {
   highThroughputPositiveMode: boolean;
 
   // gating inputs
+  paperSymbolAllowlist: Set<string> | null;
   openBySymbol: Map<string, number>;
   maxOpenPerSymbol: number;
   minNetEdgeBps: number;
@@ -77,6 +78,7 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
     candidateLimit,
     contrarianActive,
     highThroughputPositiveMode,
+    paperSymbolAllowlist,
     openBySymbol,
     maxOpenPerSymbol,
     minNetEdgeBps,
@@ -116,6 +118,11 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
       const symbol = opp.symbol ?? "";
       if (!symbol) {
         markPrefilter("missing_symbol");
+        return false;
+      }
+      if (paperSymbolAllowlist && !paperSymbolAllowlist.has(symbol)) {
+        // Hard guardrail: we do not want to open new symbols "by accident" (eg DOTUSD) outside of our intended scope.
+        markPrefilter("symbol_not_allowed");
         return false;
       }
       if ((openBySymbol.get(symbol) ?? 0) >= maxOpenPerSymbol) {

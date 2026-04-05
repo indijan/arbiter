@@ -4,6 +4,26 @@ import "server-only";
 // Keep these short (1 line) so they fit UI chips/tooltips.
 
 const HU: Record<string, { title: string; detail: string }> = {
+  symbol_not_allowed: {
+    title: "Symbol nincs engedelyezve",
+    detail: "Ez a symbol nincs benne a PAPER_ALLOWED_SYMBOLS allowlistben, ezért nem nyitunk rá."
+  },
+  relative_strength_symbol_blocked: {
+    title: "Symbol tiltva (lane)",
+    detail: "Ez a symbol nincs a lane allowlistben, ezért a lane nem nyithat rá."
+  },
+  missing_symbol: {
+    title: "Hibas opportunity",
+    detail: "Az opportunity-ben hianyzik a symbol."
+  },
+  break_even_too_long: {
+    title: "Túl lassú megtérülés",
+    detail: "A break-even idő túl hosszú ehhez a beállításhoz, ezért nem nyitunk."
+  },
+  xarb_below_min_edge: {
+    title: "Xarb edge túl kicsi",
+    detail: "A xarb nettó edge nem éri el a minimumot."
+  },
   live_edge_below_threshold: {
     title: "Élő árakon nincs előny",
     detail: "A valós idejű árakon a nettó előny a küszöb alá esett (költségek + csúszás)."
@@ -79,4 +99,3 @@ export function rejectReasonHu(code: string | null | undefined) {
   if (!key) return { title: "-", detail: "-" };
   return HU[key] ?? { title: key, detail: "Nincs még lefordítva." };
 }
-

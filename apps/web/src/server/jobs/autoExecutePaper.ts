@@ -115,6 +115,15 @@ const RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS = Number(
   process.env.RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS ?? "8"
 );
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
+const PAPER_ALLOWED_SYMBOLS: Set<string> | null = (() => {
+  const raw = (process.env.PAPER_ALLOWED_SYMBOLS ?? "").trim();
+  if (!raw) return null; // unset => keep current behavior (allow all symbols)
+  const items = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return new Set(items);
+})();
 const XRP_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -75;
 const XRP_SHORT_MAX_BTC_MOMENTUM_6H_BPS = 0;
 const XRP_SHORT_MAX_ALT_MOMENTUM_2H_BPS = 25;
@@ -1234,6 +1243,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       candidateLimit,
       contrarianActive,
       highThroughputPositiveMode: HIGH_THROUGHPUT_POSITIVE_MODE,
+      paperSymbolAllowlist: PAPER_ALLOWED_SYMBOLS,
       openBySymbol,
       maxOpenPerSymbol: MAX_OPEN_PER_SYMBOL,
       minNetEdgeBps,
