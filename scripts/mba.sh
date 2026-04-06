@@ -55,7 +55,14 @@ start_web() {
     cd "$ROOT_DIR/apps/web"
     # Use direct next invocation (pnpm arg forwarding is error-prone).
     nohup ./node_modules/.bin/next dev -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
-    write_pid "$WEB_PID" "$!"
+    local p="$!"
+    write_pid "$WEB_PID" "$p"
+    sleep 0.5
+    if ! kill -0 "$p" >/dev/null 2>&1; then
+      rm -f "$WEB_PID" 2>/dev/null || true
+      echo "web failed to start (see $WEB_LOG_ERR)"
+      exit 1
+    fi
   )
   echo "web started pid=$(read_pid "$WEB_PID")"
 }
@@ -72,7 +79,14 @@ start_runner() {
   (
     cd "$ROOT_DIR/apps/runner"
     nohup node --experimental-strip-types src/index.ts >"$RUNNER_LOG_OUT" 2>"$RUNNER_LOG_ERR" &
-    write_pid "$RUNNER_PID" "$!"
+    local p="$!"
+    write_pid "$RUNNER_PID" "$p"
+    sleep 0.5
+    if ! kill -0 "$p" >/dev/null 2>&1; then
+      rm -f "$RUNNER_PID" 2>/dev/null || true
+      echo "runner failed to start (see $RUNNER_LOG_ERR)"
+      exit 1
+    fi
   )
   echo "runner started pid=$(read_pid "$RUNNER_PID")"
 }
@@ -127,6 +141,16 @@ cmd_stop() {
   echo "ok"
 }
 
+cmd_stop_services() {
+  stop_one "runner" "$RUNNER_PID"
+  stop_one "web" "$WEB_PID"
+}
+
+cmd_start_services() {
+  start_web
+  start_runner
+}
+
 cmd_status() {
   local wp rp cp
   wp="$(read_pid "$WEB_PID")"
@@ -144,13 +168,30 @@ cmd_status() {
 
 cmd_update() {
   ensure_path
-  echo "updating repo..."
+  echo "updating repo (safe)..."
   cd "$ROOT_DIR"
-  git pull
+  local prev_rev
+  prev_rev="$(git rev-parse HEAD 2>/dev/null || true)"
+
+  # Only restart if update succeeded.
+  git pull --ff-only
   pnpm install
-  echo "restart..."
-  cmd_stop || true
-  cmd_start
+
+  echo "restarting services..."
+  cmd_stop_services || true
+  cmd_start_services
+
+  # Quick health check so we don't silently end up "stopped".
+  sleep 0.5
+  local wp rp
+  wp="$(read_pid "$WEB_PID")"
+  rp="$(read_pid "$RUNNER_PID")"
+  if ! is_running "$wp" || ! is_running "$rp"; then
+    echo "update finished but services did not come up cleanly"
+    echo "previous git rev was: ${prev_rev}"
+    echo "check logs: $WEB_LOG_ERR , $RUNNER_LOG_ERR"
+    exit 1
+  fi
 }
 
 cmd_logs() {
