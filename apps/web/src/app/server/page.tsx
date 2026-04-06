@@ -40,6 +40,7 @@ export default function ServerPage() {
   const [copied, setCopied] = useState(false);
   const [envsyncCommand, setEnvsyncCommand] = useState<string>("...");
   const [backcheck, setBackcheck] = useState<any | null>(null);
+  const [openWindowDays, setOpenWindowDays] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("server_ui_token") ?? "";
@@ -244,27 +245,115 @@ export default function ServerPage() {
             <section className="card">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-xl font-semibold">Backcheck (1/7/30 nap)</h2>
-                <button className="btn btn-ghost" onClick={() => doAction("update")} disabled={!token || actionLoading !== null}>
-                  {actionLoading === "update" ? "Update..." : "Update (kód)"}
+                <button className="btn btn-ghost" onClick={refresh} disabled={!token || loading}>
+                  {loading ? "Frissítés..." : "Frissít (adat)"}
                 </button>
               </div>
               {backcheck?.rows?.length ? (
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  {backcheck.rows.map((row: any) => (
-                    <div key={String(row.window_days)} className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
-                      <p className="text-sm font-semibold">{row.window_days} nap</p>
-                      <p className="mt-1 text-xs text-brand-100/60">ts: {fmtTs(row.ts)}</p>
-                      <p className="mt-2 text-xs text-brand-100/70">
-                        Lanes: {Number(row.summary?.lanes?.length ?? 0)} | Families: {Number(row.summary?.families?.length ?? 0)}
-                      </p>
-                      <p className="mt-2 text-xs text-brand-100/60">
-                        Top reject:{" "}
-                        {Array.isArray(row.summary?.top_reject_reasons_24h) && row.summary.top_reject_reasons_24h.length
+                <div className="mt-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {backcheck.rows.map((row: any) => {
+                      const isOpen = openWindowDays === Number(row.window_days);
+                      const topReject =
+                        Array.isArray(row.summary?.top_reject_reasons_24h) && row.summary.top_reject_reasons_24h.length
                           ? String(row.summary.top_reject_reasons_24h[0].reason)
-                          : "-"}
-                      </p>
-                    </div>
-                  ))}
+                          : "-";
+                      return (
+                        <button
+                          key={String(row.window_days)}
+                          className="text-left rounded-xl border border-brand-300/15 bg-brand-900/40 p-3 hover:bg-brand-900/55 transition"
+                          onClick={() => setOpenWindowDays(isOpen ? null : Number(row.window_days))}
+                        >
+                          <p className="text-sm font-semibold">{row.window_days} nap</p>
+                          <p className="mt-1 text-xs text-brand-100/60">ts: {fmtTs(row.ts)}</p>
+                          <p className="mt-2 text-xs text-brand-100/70">
+                            Lanes: {Number(row.summary?.lanes?.length ?? 0)} | Families: {Number(row.summary?.families?.length ?? 0)}
+                          </p>
+                          <p className="mt-2 text-xs text-brand-100/60">Top reject: {topReject}</p>
+                          <p className="mt-2 text-[11px] text-brand-100/50">{isOpen ? "Részletek elrejtése" : "Részletek"}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {(() => {
+                    const row = (backcheck.rows as any[]).find((r) => Number(r.window_days) === openWindowDays);
+                    if (!row) return null;
+                    const lanes = Array.isArray(row.summary?.lanes) ? row.summary.lanes : [];
+                    const families = Array.isArray(row.summary?.families) ? row.summary.families : [];
+                    const topReasons = Array.isArray(row.summary?.top_reject_reasons_24h)
+                      ? row.summary.top_reject_reasons_24h
+                      : [];
+
+                    const worstLanes = lanes.slice(0, 3);
+                    const bestLanes = lanes.slice(-3).reverse();
+                    const worstFamilies = families.slice(0, 3);
+                    const bestFamilies = families.slice(-3).reverse();
+
+                    return (
+                      <div className="mt-4 rounded-2xl border border-brand-300/15 bg-brand-900/30 p-4">
+                        <p className="text-sm font-semibold">{row.window_days} nap részletek</p>
+
+                        <div className="mt-3 grid gap-4 md:grid-cols-3">
+                          <div>
+                            <p className="text-xs text-brand-100/60">Top okok (24h)</p>
+                            <div className="mt-2 space-y-2">
+                              {(topReasons.length ? topReasons : [{ reason: "-", count: 0 }]).slice(0, 3).map((x: any, idx: number) => (
+                                <div key={idx} className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
+                                  <p className="font-semibold">{String(x.reason ?? "-")}</p>
+                                  <p className="text-brand-100/60">count: {Number(x.count ?? 0)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-brand-100/60">Lane-ek (worst / best)</p>
+                            <div className="mt-2 grid gap-2">
+                              <div className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
+                                <p className="font-semibold">Worst</p>
+                                {worstLanes.length ? worstLanes.map((l: any) => (
+                                  <p key={String(l.lane)} className="text-brand-100/70">
+                                    {String(l.lane)}: {Number(l.total_pnl_usd ?? 0).toFixed(2)} USD ({Number(l.closed ?? 0)})
+                                  </p>
+                                )) : <p className="text-brand-100/60">-</p>}
+                              </div>
+                              <div className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
+                                <p className="font-semibold">Best</p>
+                                {bestLanes.length ? bestLanes.map((l: any) => (
+                                  <p key={String(l.lane)} className="text-brand-100/70">
+                                    {String(l.lane)}: {Number(l.total_pnl_usd ?? 0).toFixed(2)} USD ({Number(l.closed ?? 0)})
+                                  </p>
+                                )) : <p className="text-brand-100/60">-</p>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-brand-100/60">Stratégiák (worst / best)</p>
+                            <div className="mt-2 grid gap-2">
+                              <div className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
+                                <p className="font-semibold">Worst</p>
+                                {worstFamilies.length ? worstFamilies.map((f: any) => (
+                                  <p key={String(f.type)} className="text-brand-100/70">
+                                    {String(f.type)}: {Number(f.total_pnl_usd ?? 0).toFixed(2)} USD ({Number(f.closed ?? 0)})
+                                  </p>
+                                )) : <p className="text-brand-100/60">-</p>}
+                              </div>
+                              <div className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
+                                <p className="font-semibold">Best</p>
+                                {bestFamilies.length ? bestFamilies.map((f: any) => (
+                                  <p key={String(f.type)} className="text-brand-100/70">
+                                    {String(f.type)}: {Number(f.total_pnl_usd ?? 0).toFixed(2)} USD ({Number(f.closed ?? 0)})
+                                  </p>
+                                )) : <p className="text-brand-100/60">-</p>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-brand-100/70">Még nincs backcheck run. (A runner tick fogja létrehozni.)</p>
