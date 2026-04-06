@@ -256,7 +256,7 @@ export default function ServerPage() {
                       const isOpen = openWindowDays === Number(row.window_days);
                       const topReject =
                         Array.isArray(row.summary?.top_reject_reasons_24h) && row.summary.top_reject_reasons_24h.length
-                          ? String(row.summary.top_reject_reasons_24h[0].reason)
+                          ? String(row.summary.top_reject_reasons_24h[0].title ?? row.summary.top_reject_reasons_24h[0].reason)
                           : "-";
                       return (
                         <button
@@ -298,9 +298,12 @@ export default function ServerPage() {
                           <div>
                             <p className="text-xs text-brand-100/60">Top okok (24h)</p>
                             <div className="mt-2 space-y-2">
-                              {(topReasons.length ? topReasons : [{ reason: "-", count: 0 }]).slice(0, 3).map((x: any, idx: number) => (
+                              {(topReasons.length ? topReasons : [{ title: "-", detail: "-", reason: "-", count: 0 }])
+                                .slice(0, 3)
+                                .map((x: any, idx: number) => (
                                 <div key={idx} className="rounded-xl border border-brand-300/10 bg-brand-950/50 p-2 text-xs">
-                                  <p className="font-semibold">{String(x.reason ?? "-")}</p>
+                                  <p className="font-semibold">{String(x.title ?? x.reason ?? "-")}</p>
+                                  <p className="mt-1 text-[11px] text-brand-100/60">{String(x.detail ?? "")}</p>
                                   <p className="text-brand-100/60">count: {Number(x.count ?? 0)}</p>
                                 </div>
                               ))}

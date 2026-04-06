@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerUiToken } from "@/server/serverCockpit/auth";
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
+import { rejectReasonHu } from "@/server/ops/rejectReasonsHu";
 
 export async function GET(req: NextRequest) {
   const auth = requireServerUiToken(req);
@@ -25,8 +26,24 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  function decorateRow(row: any) {
+    const summary = row?.summary ?? {};
+    const top = Array.isArray(summary?.top_reject_reasons_24h) ? summary.top_reject_reasons_24h : [];
+    const topDecorated = top.map((x: any) => {
+      const code = String(x?.reason ?? "");
+      const hu = rejectReasonHu(code);
+      return { ...x, title: hu.title, detail: hu.detail };
+    });
+    return {
+      ...row,
+      summary: {
+        ...summary,
+        top_reject_reasons_24h: topDecorated
+      }
+    };
+  }
+
   return NextResponse.json({
-    rows: [1, 7, 30].map((d) => latestByWindow.get(d)).filter(Boolean)
+    rows: [1, 7, 30].map((d) => latestByWindow.get(d)).filter(Boolean).map(decorateRow)
   });
 }
-
