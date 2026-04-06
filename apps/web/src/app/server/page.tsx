@@ -38,6 +38,7 @@ export default function ServerPage() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [envsyncCommand, setEnvsyncCommand] = useState<string>("...");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("server_ui_token") ?? "";
@@ -46,12 +47,10 @@ export default function ServerPage() {
 
   const tokenHeader = useMemo(() => ({ "x-server-ui-token": token }), [token]);
 
-  const envsyncCommand = useMemo(() => {
-    if (typeof window === "undefined") return "";
+  useEffect(() => {
     const host = window.location.hostname;
-    // Prefer current host for SSH; this works for Tailscale IP and LAN IP.
     const sshHost = host && host !== "localhost" ? `indijan@${host}` : "indijan@192.168.1.182";
-    return `cd /Users/indijanmac/Projects/arbiter && RESTART=1 ./scripts/envsync.sh ${sshHost}`;
+    setEnvsyncCommand(`cd /Users/indijanmac/Projects/arbiter && RESTART=1 ./scripts/envsync.sh ${sshHost}`);
   }, []);
 
   async function copyEnvsync() {
