@@ -26,9 +26,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "update") {
-      const update = await runMba("update");
-      const status = await runMba("status");
-      return NextResponse.json({ ok: true, update, status });
+      try {
+        const update = await runMba("update");
+        const status = await runMba("status");
+        return NextResponse.json({ ok: true, update, status });
+      } catch (err) {
+        // Best-effort recovery: don't leave the server UI dead if update failed mid-flight.
+        const start = await runMba("start").catch(() => null);
+        const status = await runMba("status").catch(() => null);
+        return NextResponse.json(
+          { ok: false, error: err instanceof Error ? err.message : "Unknown error", recovered: { start, status } },
+          { status: 500 }
+        );
+      }
     }
 
     if (action === "stop") {
@@ -47,4 +57,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

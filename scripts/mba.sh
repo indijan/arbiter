@@ -179,7 +179,18 @@ cmd_update() {
 
   echo "restarting services..."
   cmd_stop_services || true
+  set +e
   cmd_start_services
+  local start_rc=$?
+  set -e
+
+  if [[ "$start_rc" -ne 0 ]]; then
+    echo "start failed after update; retrying once..."
+    set +e
+    cmd_start_services
+    start_rc=$?
+    set -e
+  fi
 
   # Quick health check so we don't silently end up "stopped".
   sleep 0.5
@@ -190,6 +201,10 @@ cmd_update() {
     echo "update finished but services did not come up cleanly"
     echo "previous git rev was: ${prev_rev}"
     echo "check logs: $WEB_LOG_ERR , $RUNNER_LOG_ERR"
+    # Best-effort: try to bring them back up so UI doesn't stay dead.
+    set +e
+    cmd_start_services
+    set -e
     exit 1
   fi
 }
