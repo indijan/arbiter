@@ -37,6 +37,7 @@ export default function ServerPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("server_ui_token") ?? "";
@@ -44,6 +45,24 @@ export default function ServerPage() {
   }, []);
 
   const tokenHeader = useMemo(() => ({ "x-server-ui-token": token }), [token]);
+
+  const envsyncCommand = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const host = window.location.hostname;
+    // Prefer current host for SSH; this works for Tailscale IP and LAN IP.
+    const sshHost = host && host !== "localhost" ? `indijan@${host}` : "indijan@192.168.1.182";
+    return `cd /Users/indijanmac/Projects/arbiter && RESTART=1 ./scripts/envsync.sh ${sshHost}`;
+  }, []);
+
+  async function copyEnvsync() {
+    try {
+      await navigator.clipboard.writeText(envsyncCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Nem sikerült a vágólapra másolni (browser permission).");
+    }
+  }
 
   async function refresh() {
     setLoading(true);
@@ -138,6 +157,18 @@ export default function ServerPage() {
           </div>
           {error ? <p className="mt-2 text-sm text-rose-200">{error}</p> : null}
           {!token ? <p className="mt-2 text-xs text-brand-100/60">Token nélkül nem tudok lekérdezni/vezérelni.</p> : null}
+
+          <div className="mt-4 rounded-xl border border-brand-300/15 bg-brand-900/30 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold">Env sync parancs (a saját gépeden futtasd)</p>
+              <button className="btn btn-ghost" onClick={copyEnvsync}>
+                {copied ? "Kimásolva" : "Másolás"}
+              </button>
+            </div>
+            <pre className="mt-2 overflow-auto rounded-lg border border-brand-300/10 bg-brand-950/60 p-2 text-xs">
+              {envsyncCommand}
+            </pre>
+          </div>
         </section>
 
         {status ? (
@@ -208,4 +239,3 @@ export default function ServerPage() {
     </div>
   );
 }
-
