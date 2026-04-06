@@ -39,6 +39,7 @@ export default function ServerPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [envsyncCommand, setEnvsyncCommand] = useState<string>("...");
+  const [backcheck, setBackcheck] = useState<any | null>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("server_ui_token") ?? "";
@@ -72,12 +73,19 @@ export default function ServerPage() {
       if (!res.ok) {
         setError(payload.error ?? "Hiba a status lekérésben.");
         setStatus(null);
+        setBackcheck(null);
       } else {
         setStatus(payload as StatusPayload);
+        // Backcheck is optional; don't fail the page if missing.
+        fetch("/api/server/backcheck", { headers: tokenHeader, cache: "no-store" })
+          .then((r) => r.json())
+          .then((x) => setBackcheck(x))
+          .catch(() => setBackcheck(null));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
       setStatus(null);
+      setBackcheck(null);
     } finally {
       setLoading(false);
     }
@@ -231,6 +239,36 @@ export default function ServerPage() {
                   </pre>
                 </div>
               </div>
+            </section>
+
+            <section className="card">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xl font-semibold">Backcheck (1/7/30 nap)</h2>
+                <button className="btn btn-ghost" onClick={() => doAction("update")} disabled={!token || actionLoading !== null}>
+                  {actionLoading === "update" ? "Update..." : "Update (kód)"}
+                </button>
+              </div>
+              {backcheck?.rows?.length ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  {backcheck.rows.map((row: any) => (
+                    <div key={String(row.window_days)} className="rounded-xl border border-brand-300/15 bg-brand-900/40 p-3">
+                      <p className="text-sm font-semibold">{row.window_days} nap</p>
+                      <p className="mt-1 text-xs text-brand-100/60">ts: {fmtTs(row.ts)}</p>
+                      <p className="mt-2 text-xs text-brand-100/70">
+                        Lanes: {Number(row.summary?.lanes?.length ?? 0)} | Families: {Number(row.summary?.families?.length ?? 0)}
+                      </p>
+                      <p className="mt-2 text-xs text-brand-100/60">
+                        Top reject:{" "}
+                        {Array.isArray(row.summary?.top_reject_reasons_24h) && row.summary.top_reject_reasons_24h.length
+                          ? String(row.summary.top_reject_reasons_24h[0].reason)
+                          : "-"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-brand-100/70">Még nincs backcheck run. (A runner tick fogja létrehozni.)</p>
+              )}
             </section>
           </>
         ) : null}
