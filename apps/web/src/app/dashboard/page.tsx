@@ -6,6 +6,7 @@ import { rejectReasonHu } from "@/server/ops/rejectReasonsHu";
 
 type PositionRow = {
   id: number;
+  opportunity_id: number | null;
   entry_ts: string;
   exit_ts: string | null;
   symbol: string;
@@ -42,6 +43,8 @@ type StrategySettingRow = {
 type OpportunityRow = {
   id: number;
   ts: string;
+  exchange: string | null;
+  symbol: string | null;
   type: string;
   status: string;
   details: Record<string, unknown> | null;
@@ -176,24 +179,39 @@ function metaBool(meta: Record<string, unknown> | null, key: string) {
   return meta?.[key] === true;
 }
 
-function formatExchange(row: PositionRow) {
+function normalizeExchangeName(value: string | null) {
+  if (!value) return null;
+  if (value === "coinbase") return "Coinbase";
+  if (value === "binance") return "Binance";
+  if (value === "bybit") return "Bybit";
+  if (value === "okx") return "OKX";
+  if (value === "kraken") return "Kraken";
+  return value;
+}
+
+function resolveOpportunityExchange(opp: OpportunityRow | null | undefined) {
+  if (!opp) return null;
+  if (opp.exchange) return normalizeExchangeName(opp.exchange);
+  const details = opp.details ?? {};
+  const buyExchange = typeof details.buy_exchange === "string" ? details.buy_exchange : null;
+  const sellExchange = typeof details.sell_exchange === "string" ? details.sell_exchange : null;
+  if (buyExchange && sellExchange) {
+    return `${normalizeExchangeName(buyExchange) ?? buyExchange} -> ${normalizeExchangeName(sellExchange) ?? sellExchange}`;
+  }
+  return normalizeExchangeName(buyExchange) ?? normalizeExchangeName(sellExchange) ?? null;
+}
+
+function formatExchange(row: PositionRow, opp?: OpportunityRow | null) {
   const meta = row.meta ?? {};
   const exchange = typeof meta.exchange === "string" ? meta.exchange : null;
   const buyExchange = typeof meta.buy_exchange === "string" ? meta.buy_exchange : null;
   const sellExchange = typeof meta.sell_exchange === "string" ? meta.sell_exchange : null;
   const strategyVariant = typeof meta.strategy_variant === "string" ? meta.strategy_variant : null;
   const type = typeof meta.type === "string" ? meta.type : null;
-  const normalize = (value: string | null) => {
-    if (!value) return null;
-    if (value === "coinbase") return "Coinbase";
-    if (value === "binance") return "Binance";
-    if (value === "bybit") return "Bybit";
-    if (value === "okx") return "OKX";
-    if (value === "kraken") return "Kraken";
-    return value;
-  };
-  if (exchange) return normalize(exchange) ?? exchange;
-  if (buyExchange && sellExchange) return `${normalize(buyExchange) ?? buyExchange} -> ${normalize(sellExchange) ?? sellExchange}`;
+  if (exchange) return normalizeExchangeName(exchange) ?? exchange;
+  if (buyExchange && sellExchange) return `${normalizeExchangeName(buyExchange) ?? buyExchange} -> ${normalizeExchangeName(sellExchange) ?? sellExchange}`;
+  const oppExchange = resolveOpportunityExchange(opp);
+  if (oppExchange) return oppExchange;
   if (metaBool(meta, "relative_strength_open") || type === "relative_strength" || strategyVariant) return "Coinbase";
   if (
     (row.symbol === "XRPUSD" || row.symbol === "AVAXUSD" || row.symbol === "SOLUSD") &&
@@ -201,7 +219,7 @@ function formatExchange(row: PositionRow) {
   ) {
     return "Coinbase";
   }
-  return normalize(buyExchange) ?? normalize(sellExchange) ?? "-";
+  return normalizeExchangeName(buyExchange) ?? normalizeExchangeName(sellExchange) ?? "-";
 }
 
 function laneMetrics(rows: PositionRow[], since24h: string, since7d: string) {
@@ -323,21 +341,21 @@ export default async function DashboardPage() {
       .maybeSingle(),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
+      .select("id, opportunity_id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .gte("entry_ts", since30d)
       .order("entry_ts", { ascending: false })
       .limit(1500),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
+      .select("id, opportunity_id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .eq("status", "open")
       .order("entry_ts", { ascending: false })
       .limit(20),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
+      .select("id, opportunity_id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .eq("status", "closed")
       .order("exit_ts", { ascending: false })
@@ -376,6 +394,23 @@ export default async function DashboardPage() {
   const positions30d = positions30dAll.filter((row) => !isSandboxRow(row));
   const openPositions = openPositionsAll.filter((row) => !isSandboxRow(row));
   const recentClosed = recentClosedAll.filter((row) => !isSandboxRow(row));
+  const opportunityIds = Array.from(
+    new Set(
+      positions30d
+        .map((row) => row.opportunity_id)
+        .filter((id): id is number => typeof id === "number" && Number.isFinite(id))
+    )
+  );
+  const opportunityMap = new Map<number, OpportunityRow>();
+  if (opportunityIds.length > 0) {
+    const { data: opportunities } = await supabase
+      .from("opportunities")
+      .select("id, ts, exchange, symbol, type, status, details")
+      .in("id", opportunityIds);
+    for (const row of (opportunities ?? []) as OpportunityRow[]) {
+      opportunityMap.set(row.id, row);
+    }
+  }
 
   const lifetimeClosedRealizedPnl = positions30d
     .filter((row) => row.status === "closed")
@@ -555,7 +590,7 @@ export default async function DashboardPage() {
 
   const byExchange = new Map<string, ExchangeStats>();
   for (const row of positions30d) {
-    const exchange = formatExchange(row);
+    const exchange = formatExchange(row, row.opportunity_id ? opportunityMap.get(row.opportunity_id) ?? null : null);
     const current = byExchange.get(exchange) ?? {
       exchange,
       closedCount: 0,
@@ -573,7 +608,13 @@ export default async function DashboardPage() {
     byExchange.set(exchange, current);
   }
   const exchangeStats = Array.from(byExchange.values())
-    .sort((a, b) => b.pnl7d - a.pnl7d)
+    .sort((a, b) => {
+      const activityA = a.openCount + a.closedCount;
+      const activityB = b.openCount + b.closedCount;
+      const scoreA = Math.abs(a.pnl7d) * 100 + activityA;
+      const scoreB = Math.abs(b.pnl7d) * 100 + activityB;
+      return scoreB - scoreA;
+    })
     .slice(0, 6);
 
 
@@ -953,7 +994,7 @@ export default async function DashboardPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-lg font-semibold text-white">{row.symbol}</p>
-                        <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">{direction} · {formatExchange(row)}</p>
+                        <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">{direction} · {formatExchange(row, row.opportunity_id ? opportunityMap.get(row.opportunity_id) ?? null : null)}</p>
                       </div>
                       <div className="text-right text-sm text-brand-100/70">
                         <p>{compactUsd(notional)}</p>
@@ -989,7 +1030,7 @@ export default async function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <p className="text-base font-semibold text-white">{row.symbol}</p>
                           <p className="truncate text-xs uppercase tracking-[0.18em] text-brand-100/50">
-                            {direction} · {formatExchange(row)}
+                            {direction} · {formatExchange(row, row.opportunity_id ? opportunityMap.get(row.opportunity_id) ?? null : null)}
                           </p>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-100/60">
