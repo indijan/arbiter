@@ -53,11 +53,10 @@ start_web() {
   echo "starting web..."
   (
     cd "$ROOT_DIR/apps/web"
-    # Use direct next invocation (pnpm arg forwarding is error-prone).
-    nohup ./node_modules/.bin/next dev -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
+    nohup ./node_modules/.bin/next start -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
     local p="$!"
     write_pid "$WEB_PID" "$p"
-    sleep 0.5
+    sleep 1
     if ! kill -0 "$p" >/dev/null 2>&1; then
       rm -f "$WEB_PID" 2>/dev/null || true
       echo "web failed to start (see $WEB_LOG_ERR)"
@@ -176,6 +175,7 @@ cmd_update() {
   # Only restart if update succeeded.
   git pull --ff-only
   pnpm install
+  pnpm -C apps/web build
 
   echo "restarting services..."
   cmd_stop_services || true
