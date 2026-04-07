@@ -46,6 +46,20 @@ type OpportunityRow = {
   details: Record<string, unknown> | null;
 };
 
+type LanePanel = {
+  key: string;
+  label: string;
+  pnl: number;
+  pnl24h: number;
+  pnl7d: number;
+  pnl30d: number;
+  closed: number;
+  open: number;
+  actualState: LanePolicyState;
+  origin: "basic";
+  trend7d: number[];
+};
+
 const LANE_LABELS = [
   "XRP core short",
   "XRP bull fade canary",
@@ -166,6 +180,8 @@ function formatExchange(meta: Record<string, unknown> | null) {
   const exchange = typeof meta.exchange === "string" ? meta.exchange : null;
   const buyExchange = typeof meta.buy_exchange === "string" ? meta.buy_exchange : null;
   const sellExchange = typeof meta.sell_exchange === "string" ? meta.sell_exchange : null;
+  const strategyVariant = typeof meta.strategy_variant === "string" ? meta.strategy_variant : null;
+  const type = typeof meta.type === "string" ? meta.type : null;
   const normalize = (value: string | null) => {
     if (!value) return null;
     if (value === "coinbase") return "Coinbase";
@@ -177,8 +193,21 @@ function formatExchange(meta: Record<string, unknown> | null) {
   };
   if (exchange) return normalize(exchange) ?? exchange;
   if (buyExchange && sellExchange) return `${normalize(buyExchange) ?? buyExchange} -> ${normalize(sellExchange) ?? sellExchange}`;
-  if (metaBool(meta, "relative_strength_open") || meta?.type === "relative_strength") return "Coinbase";
+  if (metaBool(meta, "relative_strength_open") || type === "relative_strength" || strategyVariant) return "Coinbase";
   return normalize(buyExchange) ?? normalize(sellExchange) ?? "-";
+}
+
+function laneMetrics(rows: PositionRow[], since24h: string, since7d: string) {
+  const closed = rows.filter((row) => row.status === "closed");
+  return {
+    pnl24h: closed
+      .filter((row) => row.exit_ts && row.exit_ts >= since24h)
+      .reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0),
+    pnl7d: closed
+      .filter((row) => row.exit_ts && row.exit_ts >= since7d)
+      .reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0),
+    pnl30d: closed.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0)
+  };
 }
 
 function bucketHourIso(value: string) {
@@ -448,11 +477,12 @@ export default async function DashboardPage() {
   };
   const btcSparklineValues = btcHours.map((hour) => btcHourly.get(hour) ?? 0).filter((value) => value > 0);
   const btcSparklinePath = sparklinePath(btcSparklineValues, 560, 120);
-  const lanePanels = [
+  const lanePanels: LanePanel[] = [
     {
       key: "xrp_shadow_short_core",
       label: "XRP core short",
       pnl: shadowXrpCorePnl,
+      ...laneMetrics(shadowXrpCoreClosed, since24h, since7d),
       closed: shadowXrpCoreClosed.length,
       open: shadowXrpCoreOpen.length,
       actualState: effectiveLaneState("xrp_shadow_short_core"),
@@ -463,6 +493,7 @@ export default async function DashboardPage() {
       key: "xrp_shadow_short_bull_fade_canary",
       label: "XRP bull fade canary",
       pnl: shadowXrpBullFadePnl,
+      ...laneMetrics(shadowXrpBullFadeClosed, since24h, since7d),
       closed: shadowXrpBullFadeClosed.length,
       open: shadowXrpBullFadeOpen.length,
       actualState: effectiveLaneState("xrp_shadow_short_bull_fade_canary"),
@@ -473,6 +504,7 @@ export default async function DashboardPage() {
       key: "avax_shadow_short_canary",
       label: "AVAX canary short",
       pnl: shadowAvaxPnl,
+      ...laneMetrics(shadowAvaxClosed, since24h, since7d),
       closed: shadowAvaxClosed.length,
       open: shadowAvaxOpen.length,
       actualState: effectiveLaneState("avax_shadow_short_canary"),
@@ -483,6 +515,7 @@ export default async function DashboardPage() {
       key: "sol_shadow_short_soft_bear_laggard",
       label: "SOL soft-bear laggard",
       pnl: shadowSolSoftBearPnl,
+      ...laneMetrics(shadowSolSoftBearClosed, since24h, since7d),
       closed: shadowSolSoftBearClosed.length,
       open: shadowSolSoftBearOpen.length,
       actualState: effectiveLaneState("sol_shadow_short_soft_bear_laggard"),
@@ -493,6 +526,7 @@ export default async function DashboardPage() {
       key: "sol_shadow_short_deep_bear_continuation",
       label: "SOL deep-bear continuation",
       pnl: shadowSolDeepBearPnl,
+      ...laneMetrics(shadowSolDeepBearClosed, since24h, since7d),
       closed: shadowSolDeepBearClosed.length,
       open: shadowSolDeepBearOpen.length,
       actualState: effectiveLaneState("sol_shadow_short_deep_bear_continuation"),
@@ -503,6 +537,7 @@ export default async function DashboardPage() {
       key: "sol_shadow_short_soft_bull_reversal_probe",
       label: "SOL soft-bull reversal probe",
       pnl: shadowSolSoftBullProbePnl,
+      ...laneMetrics(shadowSolSoftBullProbeClosed, since24h, since7d),
       closed: shadowSolSoftBullProbeClosed.length,
       open: shadowSolSoftBullProbeOpen.length,
       actualState: effectiveLaneState("sol_shadow_short_soft_bull_reversal_probe"),
@@ -535,7 +570,7 @@ export default async function DashboardPage() {
     .slice(0, 6);
 
 
-  const lanePnlScale = Math.max(1, ...lanePanels.map((lane) => Math.abs(lane.pnl)));
+  const lanePnlScale = Math.max(1, ...lanePanels.map((lane) => Math.abs(lane.pnl7d || lane.pnl30d)));
 
   const latestTick = latestTickResult.data as { ts?: string | null; detect_summary?: any } | null;
   const autoExecute = latestTick?.detect_summary?.auto_execute ?? null;
@@ -854,7 +889,7 @@ export default async function DashboardPage() {
                           <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">{lane.label}</p>
                         </div>
                         <div className="mt-1 flex items-center gap-3">
-                          <p className={`text-lg font-semibold ${toneClass(lane.pnl)}`}>{usd(lane.pnl)}</p>
+                          <p className={`text-lg font-semibold ${toneClass(lane.pnl30d)}`}>{usd(lane.pnl30d)}</p>
                           <p className="text-xs text-brand-100/55">{lane.closed} zárt · {lane.open} nyitott</p>
                         </div>
                       </div>
@@ -862,12 +897,27 @@ export default async function DashboardPage() {
                         {stateLabel(lane.actualState)}
                       </span>
                     </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-brand-100/60">
+                      <div>
+                        <p>24h</p>
+                        <p className={`mt-1 font-semibold ${toneClass(lane.pnl24h)}`}>{usd(lane.pnl24h)}</p>
+                      </div>
+                      <div>
+                        <p>7d</p>
+                        <p className={`mt-1 font-semibold ${toneClass(lane.pnl7d)}`}>{usd(lane.pnl7d)}</p>
+                      </div>
+                      <div>
+                        <p>30d</p>
+                        <p className={`mt-1 font-semibold ${toneClass(lane.pnl30d)}`}>{usd(lane.pnl30d)}</p>
+                      </div>
+                    </div>
                     <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-brand-100/10">
                       <div
-                        className={`h-full rounded-full ${lane.pnl >= 0 ? "bg-emerald-300" : "bg-rose-300"}`}
-                        style={{ width: `${Math.max(8, (Math.abs(lane.pnl) / lanePnlScale) * 100)}%` }}
+                        className={`h-full rounded-full ${lane.pnl7d >= 0 ? "bg-emerald-300" : "bg-rose-300"}`}
+                        style={{ width: `${Math.max(3, (Math.abs(lane.pnl7d || lane.pnl30d) / lanePnlScale) * 100)}%` }}
                       />
                     </div>
+                    <p className="mt-2 text-[11px] text-brand-100/45">A sáv a 7 napos teljesítményt mutatja.</p>
                     {/* AI candidate workflow disabled; no extra approved-only chart. */}
                   </div>
                 ))}
