@@ -424,6 +424,7 @@ export async function autoClosePaper(): Promise<CloseResult> {
 
   const userId = account.user_id;
   let reservedCurrent = Number(account.reserved_usd ?? 0);
+  let balanceCurrent = Number(account.balance_usd ?? 10000);
 
   const { data: positions, error: positionsError } = await adminSupabase
     .from("positions")
@@ -617,9 +618,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
       }
 
       reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+      balanceCurrent = Number((balanceCurrent + realized).toFixed(4));
       await adminSupabase
         .from("paper_accounts")
-        .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+        .update({
+          reserved_usd: Math.max(0, reservedCurrent),
+          balance_usd: balanceCurrent,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", account.id);
 
       closed += 1;
@@ -706,9 +712,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
         if (execError) throw new Error(execError.message);
 
         reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+        balanceCurrent = Number((balanceCurrent + Number(realized.toFixed(4))).toFixed(4));
         await adminSupabase
           .from("paper_accounts")
-          .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+          .update({
+            reserved_usd: Math.max(0, reservedCurrent),
+            balance_usd: balanceCurrent,
+            updated_at: new Date().toISOString()
+          })
           .eq("id", account.id);
 
         closed += 1;
@@ -770,9 +781,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
       if (execError) throw new Error(execError.message);
 
       reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+      balanceCurrent = Number((balanceCurrent + Number(realized.toFixed(4))).toFixed(4));
       await adminSupabase
         .from("paper_accounts")
-        .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+        .update({
+          reserved_usd: Math.max(0, reservedCurrent),
+          balance_usd: balanceCurrent,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", account.id);
 
       closed += 1;
@@ -934,9 +950,14 @@ export async function autoClosePaper(): Promise<CloseResult> {
       }
 
       reservedCurrent = Number((reservedCurrent - notionalUsd).toFixed(2));
+      balanceCurrent = Number((balanceCurrent + realized).toFixed(4));
       await adminSupabase
         .from("paper_accounts")
-        .update({ reserved_usd: Math.max(0, reservedCurrent), updated_at: new Date().toISOString() })
+        .update({
+          reserved_usd: Math.max(0, reservedCurrent),
+          balance_usd: balanceCurrent,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", account.id);
 
       closed += 1;

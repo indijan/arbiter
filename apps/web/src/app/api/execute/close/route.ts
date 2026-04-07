@@ -106,7 +106,7 @@ export async function POST(request: Request) {
   if (reservedRelease > 0) {
     const { data: account, error: accountError } = await adminSupabase
       .from("paper_accounts")
-      .select("id, reserved_usd")
+      .select("id, balance_usd, reserved_usd")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -116,9 +116,11 @@ export async function POST(request: Request) {
 
     if (account) {
       const nextReserved = Math.max(0, Number(account.reserved_usd ?? 0) - reservedRelease);
+      const nextBalance = Number((Number(account.balance_usd ?? 10000) + Number(realizedPnl.toFixed(2))).toFixed(2));
       const { error: reserveError } = await adminSupabase
         .from("paper_accounts")
         .update({
+          balance_usd: nextBalance,
           reserved_usd: Number(nextReserved.toFixed(2)),
           updated_at: new Date().toISOString()
         })

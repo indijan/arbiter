@@ -166,9 +166,19 @@ function formatExchange(meta: Record<string, unknown> | null) {
   const exchange = typeof meta.exchange === "string" ? meta.exchange : null;
   const buyExchange = typeof meta.buy_exchange === "string" ? meta.buy_exchange : null;
   const sellExchange = typeof meta.sell_exchange === "string" ? meta.sell_exchange : null;
-  if (exchange) return exchange;
-  if (buyExchange && sellExchange) return `${buyExchange} -> ${sellExchange}`;
-  return buyExchange ?? sellExchange ?? "-";
+  const normalize = (value: string | null) => {
+    if (!value) return null;
+    if (value === "coinbase") return "Coinbase";
+    if (value === "binance") return "Binance";
+    if (value === "bybit") return "Bybit";
+    if (value === "okx") return "OKX";
+    if (value === "kraken") return "Kraken";
+    return value;
+  };
+  if (exchange) return normalize(exchange) ?? exchange;
+  if (buyExchange && sellExchange) return `${normalize(buyExchange) ?? buyExchange} -> ${normalize(sellExchange) ?? sellExchange}`;
+  if (metaBool(meta, "relative_strength_open") || meta?.type === "relative_strength") return "Coinbase";
+  return normalize(buyExchange) ?? normalize(sellExchange) ?? "-";
 }
 
 function bucketHourIso(value: string) {
@@ -316,11 +326,7 @@ export default async function DashboardPage() {
       .maybeSingle()
   ]);
 
-  const balanceUsd = asNumber(paperAccountResult.data?.balance_usd ?? 10000);
-  const reservedUsd = asNumber(paperAccountResult.data?.reserved_usd ?? 0);
-  const availableUsd = Math.max(0, balanceUsd - reservedUsd);
-  const reserveRatio = balanceUsd > 0 ? (reservedUsd / balanceUsd) * 100 : 0;
-  const absoluteProfitUsd = balanceUsd - 10000;
+  const storedBalanceUsd = asNumber(paperAccountResult.data?.balance_usd ?? 10000);
 
   const positions30dAll = (positions30dResult.data ?? []) as PositionRow[];
   const openPositionsAll = (openPositionsResult.data ?? []) as PositionRow[];
@@ -334,6 +340,20 @@ export default async function DashboardPage() {
   const positions30d = positions30dAll.filter((row) => !isSandboxRow(row));
   const openPositions = openPositionsAll.filter((row) => !isSandboxRow(row));
   const recentClosed = recentClosedAll.filter((row) => !isSandboxRow(row));
+
+  const lifetimeClosedRealizedPnl = positions30d
+    .filter((row) => row.status === "closed")
+    .reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
+  const reservedUsdFromOpen = openPositions.reduce((sum, row) => {
+    const notional = asNumber(row.meta?.notional_usd);
+    if (notional > 0) return sum + notional;
+    return sum + Math.abs(asNumber(row.spot_qty) * asNumber(row.entry_spot_price));
+  }, 0);
+  const absoluteProfitUsd = lifetimeClosedRealizedPnl;
+  const balanceUsd = 10000 + lifetimeClosedRealizedPnl;
+  const reservedUsd = Number(reservedUsdFromOpen.toFixed(2));
+  const availableUsd = Math.max(0, balanceUsd - reservedUsd);
+  const reserveRatio = balanceUsd > 0 ? (reservedUsd / balanceUsd) * 100 : 0;
   const capitalDial = Math.round(reserveRatio * 3.6);
 
   const closed24h = positions30d.filter((row) => row.status === "closed" && row.exit_ts && row.exit_ts >= since24h);
@@ -347,9 +367,8 @@ export default async function DashboardPage() {
   const pnl30d = closed30d.reduce((sum, row) => sum + asNumber(row.realized_pnl_usd), 0);
 
   const shadowRows = positions30d.filter((row) => metaBool(row.meta, "relative_strength_open"));
-  const shadowWithBtcMeta = shadowRows.filter((row) => row.meta?.btc_momentum_6h_bps !== null && row.meta?.btc_momentum_6h_bps !== undefined);
-  const shadowClosed = shadowWithBtcMeta.filter((row) => row.status === "closed");
-  const shadowOpen = shadowWithBtcMeta.filter((row) => row.status === "open");
+  const shadowClosed = shadowRows.filter((row) => row.status === "closed");
+  const shadowOpen = shadowRows.filter((row) => row.status === "open");
   const shadowXrpCoreClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_core");
   const shadowXrpBullFadeClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "xrp_shadow_short_bull_fade_canary");
   const shadowAvaxClosed = shadowClosed.filter((row) => String(row.meta?.strategy_variant ?? "") === "avax_shadow_short_canary");
