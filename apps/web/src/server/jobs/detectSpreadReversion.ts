@@ -13,6 +13,7 @@ const MIN_Z_SCORE = 1.5;
 const MIN_EXPECTED_NET_BPS = 0.1;
 const ROUNDTRIP_COSTS_BPS = 11;
 const MAX_NEAR_MISS_SAMPLES = 5;
+const SPREAD_REVERSION_DISABLED_SYMBOLS = new Set(["AVAXUSD"]);
 
 const CANONICAL_MAP: Array<{
   canonical: string;
@@ -206,6 +207,22 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
   }
 
   for (const mapping of CANONICAL_MAP) {
+    if (SPREAD_REVERSION_DISABLED_SYMBOLS.has(mapping.canonical)) {
+      markSkip({
+        canonical_symbol: mapping.canonical,
+        exchange: "-",
+        buy_exchange: "-",
+        sell_exchange: "-",
+        current_gross_bps: 0,
+        rolling_mean_bps: 0,
+        rolling_std_bps: 0,
+        z_score: 0,
+        expected_net_bps: 0,
+        decision: "skipped"
+      }, "symbol_disabled");
+      continue;
+    }
+
     const symbolBuckets = bucketsBySymbol.get(mapping.canonical);
     if (!symbolBuckets || symbolBuckets.size === 0) {
       markSkip({

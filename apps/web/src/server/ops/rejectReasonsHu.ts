@@ -16,6 +16,14 @@ const HU: Record<string, { title: string; detail: string }> = {
     title: "Hibas opportunity",
     detail: "Az opportunity-ben hianyzik a symbol."
   },
+  type_not_allowed: {
+    title: "Nem jóváhagyott stratégia",
+    detail: "Mostantól csak a jóváhagyott lane-ek nyithatnak, más stratégia-family nem."
+  },
+  symbol_disabled: {
+    title: "Symbol célzottan tiltva",
+    detail: "Ez a symbol erre a stratégia-familyre külön le van tiltva."
+  },
   break_even_too_long: {
     title: "Túl lassú megtérülés",
     detail: "A break-even idő túl hosszú ehhez a beállításhoz, ezért nem nyitunk."
@@ -87,6 +95,10 @@ const HU: Record<string, { title: string; detail: string }> = {
   relative_strength_lane_disabled: {
     title: "Lane standby/paused",
     detail: "A lane nincs ACTIVE állapotban, ezért nem fut."
+  },
+  lane_cooldown_active: {
+    title: "Lane cooldown aktív",
+    detail: "Ugyanarra a lane-re és symbolra túl hamar jött új jel, ezért most nem nyitunk újra."
   },
   candidate_canary_disabled: {
     title: "Canary jelölt tiltva",

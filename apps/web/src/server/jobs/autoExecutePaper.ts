@@ -115,6 +115,7 @@ const RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS = Number(
   process.env.RELATIVE_STRENGTH_MAX_SIGNAL_AGE_HOURS ?? "8"
 );
 const RELATIVE_STRENGTH_ALLOWLIST = new Set(["XRPUSD", "AVAXUSD", "SOLUSD"]);
+const AUTO_EXECUTE_ALLOWED_TYPES = new Set(["relative_strength"]);
 const PAPER_ALLOWED_SYMBOLS: Set<string> | null = (() => {
   const raw = (process.env.PAPER_ALLOWED_SYMBOLS ?? "").trim();
   if (!raw) return null; // unset => keep current behavior (allow all symbols)
@@ -149,8 +150,10 @@ const RELATIVE_STRENGTH_LANE_KEYS = new Set([
   "xrp_shadow_short_bull_fade_canary",
   "avax_shadow_short_canary",
   "sol_shadow_short_soft_bear_laggard",
-  "sol_shadow_short_deep_bear_continuation"
+  "sol_shadow_short_deep_bear_continuation",
+  "sol_shadow_short_soft_bull_reversal_probe"
 ]);
+const SOL_SOFT_BULL_REENTRY_COOLDOWN_SECONDS = 90 * 60;
 
 function candidateCanaryIdFromVariant(strategyVariant: string) {
   if (!strategyVariant.startsWith("candidate_canary:")) return null;
@@ -164,6 +167,7 @@ function relativeStrengthHoldSecondsForVariant(strategyVariant: string) {
   if (strategyVariant === "avax_shadow_short_canary") return 4 * 60 * 60;
   if (strategyVariant === "sol_shadow_short_soft_bear_laggard") return 4 * 60 * 60;
   if (strategyVariant === "sol_shadow_short_deep_bear_continuation") return 4 * 60 * 60;
+  if (strategyVariant === "sol_shadow_short_soft_bull_reversal_probe") return 90 * 60;
   return 4 * 60 * 60;
 }
 
@@ -1357,6 +1361,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let created = 0;
   let skipped = 0;
   const reasons: Array<{ opportunity_id: number; reason: string }> = [];
+  const decisionIdByOpportunityId = new Map<number, number>();
   let forceProbeOpenedThisTick = false;
 
   let available = Math.max(0, balance - reserved);
@@ -1367,6 +1372,12 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       break;
     }
     attempted += 1;
+
+    if (!AUTO_EXECUTE_ALLOWED_TYPES.has(opp.type)) {
+      skipped += 1;
+      reasons.push({ opportunity_id: opp.id, reason: "type_not_allowed" });
+      continue;
+    }
 
     const { data: decisionRow } = await adminSupabase
       .from("opportunity_decisions")
@@ -1386,6 +1397,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       })
       .select("id")
       .single();
+
+    if (decisionRow?.id) {
+      decisionIdByOpportunityId.set(opp.id, Number(decisionRow.id));
+    }
 
     const { data: existingPosition, error: existingError } = await adminSupabase
       .from("positions")
@@ -1845,6 +1860,33 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         skipped += 1;
         reasons.push({ opportunity_id: opp.id, reason: "relative_strength_sol_soft_bull_filter_blocked" });
         continue;
+      }
+
+      if (strategyVariant === "sol_shadow_short_soft_bull_reversal_probe") {
+        const cooldownSince = new Date(Date.now() - SOL_SOFT_BULL_REENTRY_COOLDOWN_SECONDS * 1000).toISOString();
+        const { data: recentLaneRows, error: recentLaneRowsError } = await adminSupabase
+          .from("positions")
+          .select("id, entry_ts, exit_ts, status, meta")
+          .eq("user_id", userId)
+          .eq("symbol", symbol)
+          .gte("entry_ts", cooldownSince)
+          .order("entry_ts", { ascending: false })
+          .limit(20);
+
+        if (recentLaneRowsError) {
+          throw new Error(recentLaneRowsError.message);
+        }
+
+        const hasRecentSameLane = (recentLaneRows ?? []).some((row: any) => {
+          const meta = (row?.meta ?? {}) as Record<string, unknown>;
+          return meta.type === "relative_strength" && meta.strategy_variant === strategyVariant;
+        });
+
+        if (hasRecentSameLane) {
+          skipped += 1;
+          reasons.push({ opportunity_id: opp.id, reason: "lane_cooldown_active" });
+          continue;
+        }
       }
 
       let quote: { bid: number; ask: number };
@@ -2559,6 +2601,23 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
     skipped += 1;
     reasons.push({ opportunity_id: opp.id, reason: "execution_not_supported" });
+  }
+
+  for (const item of reasons) {
+    const decisionId = decisionIdByOpportunityId.get(item.opportunity_id);
+    if (!decisionId) continue;
+    const { error: rejectUpdateError } = await adminSupabase
+      .from("opportunity_decisions")
+      .update({
+        chosen: false,
+        reject_reason: item.reason,
+        reject_meta: { auto_execute: true }
+      })
+      .eq("id", decisionId);
+
+    if (rejectUpdateError) {
+      throw new Error(rejectUpdateError.message);
+    }
   }
 
 

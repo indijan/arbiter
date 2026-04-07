@@ -278,7 +278,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     symbol: "SOLUSD",
     direction: "short",
     variant: "sol_shadow_short_soft_bull_reversal_probe",
-    holdSeconds: 4 * 60 * 60,
+    holdSeconds: 90 * 60,
     evaluate: ({ btcMomentum6hBps, spreadBps, momentum6hBps, momentum2hBps }) => {
       if (
         !(btcMomentum6hBps !== null && btcMomentum6hBps >= SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS && btcMomentum6hBps < SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS)

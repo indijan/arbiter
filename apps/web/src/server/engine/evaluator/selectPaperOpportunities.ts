@@ -3,6 +3,8 @@ import "server-only";
 import { buildFeatureBundle, predictScore, variantForOpportunity } from "@/server/ai/opportunityScoring";
 import { scoreWithOpenAI } from "@/server/ai/openaiRanker";
 
+const AUTO_EXECUTE_ALLOWED_TYPES = new Set(["relative_strength"]);
+
 export type OpportunityRow = {
   id: number;
   ts: string;
@@ -118,6 +120,10 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
       const symbol = opp.symbol ?? "";
       if (!symbol) {
         markPrefilter("missing_symbol");
+        return false;
+      }
+      if (!AUTO_EXECUTE_ALLOWED_TYPES.has(opp.type)) {
+        markPrefilter("type_not_allowed");
         return false;
       }
       if (paperSymbolAllowlist && !paperSymbolAllowlist.has(symbol)) {
