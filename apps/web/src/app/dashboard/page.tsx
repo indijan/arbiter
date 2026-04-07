@@ -12,6 +12,7 @@ type PositionRow = {
   status: string;
   realized_pnl_usd: number | string | null;
   spot_qty: number | string | null;
+  perp_qty: number | string | null;
   entry_spot_price: number | string | null;
   meta: Record<string, unknown> | null;
 };
@@ -175,8 +176,8 @@ function metaBool(meta: Record<string, unknown> | null, key: string) {
   return meta?.[key] === true;
 }
 
-function formatExchange(meta: Record<string, unknown> | null) {
-  if (!meta) return "-";
+function formatExchange(row: PositionRow) {
+  const meta = row.meta ?? {};
   const exchange = typeof meta.exchange === "string" ? meta.exchange : null;
   const buyExchange = typeof meta.buy_exchange === "string" ? meta.buy_exchange : null;
   const sellExchange = typeof meta.sell_exchange === "string" ? meta.sell_exchange : null;
@@ -194,6 +195,12 @@ function formatExchange(meta: Record<string, unknown> | null) {
   if (exchange) return normalize(exchange) ?? exchange;
   if (buyExchange && sellExchange) return `${normalize(buyExchange) ?? buyExchange} -> ${normalize(sellExchange) ?? sellExchange}`;
   if (metaBool(meta, "relative_strength_open") || type === "relative_strength" || strategyVariant) return "Coinbase";
+  if (
+    (row.symbol === "XRPUSD" || row.symbol === "AVAXUSD" || row.symbol === "SOLUSD") &&
+    Math.abs(asNumber(row.perp_qty)) === 0
+  ) {
+    return "Coinbase";
+  }
   return normalize(buyExchange) ?? normalize(sellExchange) ?? "-";
 }
 
@@ -316,21 +323,21 @@ export default async function DashboardPage() {
       .maybeSingle(),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, entry_spot_price, meta")
+      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .gte("entry_ts", since30d)
       .order("entry_ts", { ascending: false })
       .limit(1500),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, entry_spot_price, meta")
+      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .eq("status", "open")
       .order("entry_ts", { ascending: false })
       .limit(20),
     supabase
       .from("positions")
-      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, entry_spot_price, meta")
+      .select("id, entry_ts, exit_ts, symbol, status, realized_pnl_usd, spot_qty, perp_qty, entry_spot_price, meta")
       .eq("user_id", user.id)
       .eq("status", "closed")
       .order("exit_ts", { ascending: false })
@@ -548,7 +555,7 @@ export default async function DashboardPage() {
 
   const byExchange = new Map<string, ExchangeStats>();
   for (const row of positions30d) {
-    const exchange = formatExchange(row.meta);
+    const exchange = formatExchange(row);
     const current = byExchange.get(exchange) ?? {
       exchange,
       closedCount: 0,
@@ -946,7 +953,7 @@ export default async function DashboardPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-lg font-semibold text-white">{row.symbol}</p>
-                        <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">{direction} · {formatExchange(row.meta)}</p>
+                        <p className="text-xs uppercase tracking-[0.22em] text-brand-100/50">{direction} · {formatExchange(row)}</p>
                       </div>
                       <div className="text-right text-sm text-brand-100/70">
                         <p>{compactUsd(notional)}</p>
@@ -982,7 +989,7 @@ export default async function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <p className="text-base font-semibold text-white">{row.symbol}</p>
                           <p className="truncate text-xs uppercase tracking-[0.18em] text-brand-100/50">
-                            {direction} · {formatExchange(row.meta)}
+                            {direction} · {formatExchange(row)}
                           </p>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-100/60">
