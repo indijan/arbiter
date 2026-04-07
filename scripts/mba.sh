@@ -53,7 +53,7 @@ start_web() {
   echo "starting web..."
   (
     cd "$ROOT_DIR/apps/web"
-    nohup ./node_modules/.bin/next start -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
+    nohup ./node_modules/.bin/next start -H 0.0.0.0 -p 3000 >"$WEB_LOG_OUT" 2>"$WEB_LOG_ERR" &
     local p="$!"
     write_pid "$WEB_PID" "$p"
     sleep 1
