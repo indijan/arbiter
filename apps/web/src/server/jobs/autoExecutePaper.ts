@@ -29,7 +29,6 @@ const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
 const MAX_OPEN_POSITIONS = 10;
-const MAX_OPEN_PER_SYMBOL = 2;
 const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
 const MAX_EXECUTE_PER_TICK = 2;
@@ -133,7 +132,7 @@ const XRP_SHORT_MAX_SPREAD_BPS = 40;
 const XRP_BULL_FADE_MIN_BTC_MOMENTUM_6H_BPS = 100;
 const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
 const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
-const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = 0;
+const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -250;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
 const SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -50;
 const SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS = 0;
@@ -145,6 +144,11 @@ const SOL_DEEP_BEAR_MAX_BTC_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_6H_BPS = -100;
 const SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS = -25;
 const SOL_DEEP_BEAR_MIN_SPREAD_BPS = -25;
+const SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS = -30;
+const SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS = 100;
+const SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS = 25;
+const SOL_SOFT_BULL_MIN_SPREAD_BPS = -10;
+const SOL_SOFT_BULL_MAX_SPREAD_BPS = 20;
 const RELATIVE_STRENGTH_LANE_KEYS = new Set([
   "xrp_shadow_short_core",
   "xrp_shadow_short_bull_fade_canary",
@@ -1177,15 +1181,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   );
   const pilotModeActive = prolongedInactivity && !severeLosing;
 
-  const openBySymbol = new Map<string, number>();
-  for (const pos of openPositions ?? []) {
-    const symbol = (pos as { symbol?: string | null }).symbol ?? "";
-    if (!symbol) {
-      continue;
-    }
-    openBySymbol.set(symbol, (openBySymbol.get(symbol) ?? 0) + 1);
-  }
-
   const trainingSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: decisionRows } = await adminSupabase
     .from("opportunity_decisions")
@@ -1248,8 +1243,6 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       contrarianActive,
       highThroughputPositiveMode: HIGH_THROUGHPUT_POSITIVE_MODE,
       paperSymbolAllowlist: PAPER_ALLOWED_SYMBOLS,
-      openBySymbol,
-      maxOpenPerSymbol: MAX_OPEN_PER_SYMBOL,
       minNetEdgeBps,
       minConfidence,
       minXarbNetEdgeBps,
@@ -1852,9 +1845,10 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         (
           !(direction === "short") ||
           !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps > 0 && btcMomentum6hBps < 150) ||
-          !(Number.isFinite(spreadBps) && spreadBps >= -25 && spreadBps < 20) ||
-          !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps < 100) ||
-          !(Number.isFinite(altMomentum2hBps) && altMomentum2hBps >= 25)
+          !(Number.isFinite(spreadBps) && spreadBps >= SOL_SOFT_BULL_MIN_SPREAD_BPS && spreadBps < SOL_SOFT_BULL_MAX_SPREAD_BPS) ||
+          !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps >= SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS) ||
+          !(Number.isFinite(altMomentum6hBps) && altMomentum6hBps < SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS) ||
+          !(Number.isFinite(altMomentum2hBps) && altMomentum2hBps >= SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS)
         )
       ) {
         skipped += 1;
@@ -1958,7 +1952,17 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           sol_deep_bear_max_alt_momentum_2h_bps:
             strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MAX_ALT_MOMENTUM_2H_BPS : null,
           sol_deep_bear_min_spread_bps:
-            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_SPREAD_BPS : null
+            strategyVariant === "sol_shadow_short_deep_bear_continuation" ? SOL_DEEP_BEAR_MIN_SPREAD_BPS : null,
+          sol_soft_bull_min_alt_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" ? SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS : null,
+          sol_soft_bull_max_alt_momentum_6h_bps:
+            strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" ? SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS : null,
+          sol_soft_bull_min_alt_momentum_2h_bps:
+            strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" ? SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS : null,
+          sol_soft_bull_min_spread_bps:
+            strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" ? SOL_SOFT_BULL_MIN_SPREAD_BPS : null,
+          sol_soft_bull_max_spread_bps:
+            strategyVariant === "sol_shadow_short_soft_bull_reversal_probe" ? SOL_SOFT_BULL_MAX_SPREAD_BPS : null
         }
       });
 

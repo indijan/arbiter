@@ -39,9 +39,10 @@ const SOL_DEEP_BEAR_MIN_SPREAD_BPS = -25;
 // New base lane: "SOL soft-bull reversal probe" (was a candidate lane, now promoted to a basic lane).
 const SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS = 0;
 const SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS = 150;
+const SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS = -30;
 const SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS = 100;
 const SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS = 25;
-const SOL_SOFT_BULL_MIN_SPREAD_BPS = -25;
+const SOL_SOFT_BULL_MIN_SPREAD_BPS = -10;
 const SOL_SOFT_BULL_MAX_SPREAD_BPS = 20;
 const ENTRY_LOOKBACK_HOURS = 6;
 const EXIT_LOOKBACK_HOURS = 2;
@@ -285,7 +286,8 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
       ) {
         return "btc_filter_blocked";
       }
-      // Tightening based on last 36h buckets: avoid sol6h >= 100.
+      // Keep this lane in a genuinely mild soft-bull reversal bucket.
+      if (!(momentum6hBps >= SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS)) return "sol_soft_bull_filter_blocked";
       if (!(momentum6hBps < SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS)) return "sol_soft_bull_filter_blocked";
       if (!(momentum2hBps >= SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS)) return "sol_soft_bull_filter_blocked";
       if (!(spreadBps >= SOL_SOFT_BULL_MIN_SPREAD_BPS && spreadBps < SOL_SOFT_BULL_MAX_SPREAD_BPS)) return "sol_soft_bull_filter_blocked";
@@ -294,6 +296,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     details: ({ btcMomentum6hBps }) => ({
       sol_soft_bull_min_btc_momentum_6h_bps: SOL_SOFT_BULL_MIN_BTC_MOMENTUM_6H_BPS,
       sol_soft_bull_max_btc_momentum_6h_bps: SOL_SOFT_BULL_MAX_BTC_MOMENTUM_6H_BPS,
+      sol_soft_bull_min_alt_momentum_6h_bps: SOL_SOFT_BULL_MIN_ALT_MOMENTUM_6H_BPS,
       sol_soft_bull_max_alt_momentum_6h_bps: SOL_SOFT_BULL_MAX_ALT_MOMENTUM_6H_BPS,
       sol_soft_bull_min_alt_momentum_2h_bps: SOL_SOFT_BULL_MIN_ALT_MOMENTUM_2H_BPS,
       sol_soft_bull_min_spread_bps: SOL_SOFT_BULL_MIN_SPREAD_BPS,

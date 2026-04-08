@@ -26,7 +26,7 @@ const REGIME_MATRIX: Record<BtcRegime, Record<string, LanePolicyState>> = {
   btc_neg: {
     xrp_shadow_short_core: "active",
     xrp_shadow_short_bull_fade_canary: "standby",
-    avax_shadow_short_canary: "standby",
+    avax_shadow_short_canary: "active",
     sol_shadow_short_soft_bear_laggard: "watch",
     sol_shadow_short_deep_bear_continuation: "standby",
     sol_shadow_short_soft_bull_reversal_probe: "standby"

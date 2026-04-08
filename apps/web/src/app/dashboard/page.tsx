@@ -64,6 +64,13 @@ type LanePanel = {
   trend7d: number[];
 };
 
+const LANE_STATE_ORDER: Record<LanePolicyState, number> = {
+  active: 0,
+  watch: 1,
+  standby: 2,
+  paused: 3
+};
+
 const LANE_LABELS = [
   "XRP core short",
   "XRP bull fade canary",
@@ -618,7 +625,15 @@ export default async function DashboardPage() {
     .slice(0, 6);
 
 
-  const lanePnlScale = Math.max(1, ...lanePanels.map((lane) => Math.abs(lane.pnl7d || lane.pnl30d)));
+  const sortedLanePanels = [...lanePanels].sort((a, b) => {
+    const stateDelta = LANE_STATE_ORDER[a.actualState] - LANE_STATE_ORDER[b.actualState];
+    if (stateDelta !== 0) return stateDelta;
+    return a.label.localeCompare(b.label);
+  });
+  const activeLaneCount = sortedLanePanels.filter((lane) => lane.actualState === "active").length;
+  const watchLaneCount = sortedLanePanels.filter((lane) => lane.actualState === "watch").length;
+  const standbyLaneCount = sortedLanePanels.filter((lane) => lane.actualState === "standby").length;
+  const lanePnlScale = Math.max(1, ...sortedLanePanels.map((lane) => Math.abs(lane.pnl7d || lane.pnl30d)));
 
   const latestTick = latestTickResult.data as { ts?: string | null; detect_summary?: any } | null;
   const autoExecute = latestTick?.detect_summary?.auto_execute ?? null;
@@ -927,9 +942,21 @@ export default async function DashboardPage() {
                 </div>
               </div>
               <div className="mt-4 rounded-2xl border border-brand-300/10 bg-brand-950/40 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Lane performance</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.22em] text-brand-100/45">Lane aktivitás az aktuális rezsimben</p>
+                    <p className="mt-1 text-sm text-brand-100/60">
+                      Mostani BTC rezsim: <span className="font-semibold text-white">{latestBtcRegimeLabel}</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.18em]">
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 ${policyToneClass("active")}`}>Aktív: {activeLaneCount}</span>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 ${policyToneClass("watch")}`}>Figyel: {watchLaneCount}</span>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 ${policyToneClass("standby")}`}>Vár: {standbyLaneCount}</span>
+                  </div>
+                </div>
                 <div className="mt-4 space-y-3">
-                {lanePanels.map((lane) => (
+                {sortedLanePanels.map((lane) => (
                   <div key={`perf-${lane.key}`} className="rounded-xl border border-brand-300/10 bg-brand-900/30 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -959,13 +986,16 @@ export default async function DashboardPage() {
                         <p className={`mt-1 font-semibold ${toneClass(lane.pnl30d)}`}>{usd(lane.pnl30d)}</p>
                       </div>
                     </div>
+                    <p className="mt-3 text-[11px] text-brand-100/55">
+                      {simpleRecommendationReason(lane.actualState)}
+                    </p>
                     <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-brand-100/10">
                       <div
                         className={`h-full rounded-full ${lane.pnl7d >= 0 ? "bg-emerald-300" : "bg-rose-300"}`}
                         style={{ width: `${Math.max(3, (Math.abs(lane.pnl7d || lane.pnl30d) / lanePnlScale) * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-2 text-[11px] text-brand-100/45">A sáv a 7 napos teljesítményt mutatja.</p>
+                    <p className="mt-2 text-[11px] text-brand-100/45">A státusz az aktuális rezsimet mutatja, a sáv csak a 7 napos teljesítményt.</p>
                     {/* AI candidate workflow disabled; no extra approved-only chart. */}
                   </div>
                 ))}
