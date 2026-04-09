@@ -992,7 +992,7 @@ export default async function DashboardPage() {
                     <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-brand-100/10">
                       <div
                         className={`h-full rounded-full ${lane.pnl7d >= 0 ? "bg-emerald-300" : "bg-rose-300"}`}
-                        style={{ width: `${Math.max(3, (Math.abs(lane.pnl7d || lane.pnl30d) / lanePnlScale) * 100)}%` }}
+                        style={{ width: `${Math.max(0, (Math.abs(lane.pnl7d) / lanePnlScale) * 100)}%` }}
                       />
                     </div>
                     <p className="mt-2 text-[11px] text-brand-100/45">A státusz az aktuális rezsimet mutatja, a sáv csak a 7 napos teljesítményt.</p>

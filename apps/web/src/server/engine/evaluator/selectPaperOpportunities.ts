@@ -106,10 +106,22 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
   let remainingLlmCalls = params.remainingLlmCalls;
 
   const scoredBase: ScoredOpportunity[] = (opportunities ?? [])
-    // Keep only the newest opportunity per (type, symbol, exchange) key to avoid retrying stale snapshots.
+    // Keep only the newest opportunity per execution identity key.
+    // For relative strength we must dedupe by lane as well, otherwise different
+    // lanes on the same symbol collapse into one row before scoring.
     .filter((opp, idx, arr) => {
-      const key = `${opp.type}|${opp.symbol}|${opp.exchange}`;
-      const firstIdx = arr.findIndex((x) => `${x.type}|${x.symbol}|${x.exchange}` === key);
+      const strategyVariant =
+        opp.type === "relative_strength"
+          ? String((opp.details as Record<string, unknown> | null)?.strategy_variant ?? "")
+          : "";
+      const key = `${opp.type}|${opp.symbol}|${opp.exchange}|${strategyVariant}`;
+      const firstIdx = arr.findIndex((x) => {
+        const xStrategyVariant =
+          x.type === "relative_strength"
+            ? String((x.details as Record<string, unknown> | null)?.strategy_variant ?? "")
+            : "";
+        return `${x.type}|${x.symbol}|${x.exchange}|${xStrategyVariant}` === key;
+      });
       return firstIdx === idx;
     })
     .filter((opp) => {
