@@ -134,6 +134,7 @@ const XRP_BULL_FADE_MAX_SPREAD_BPS = -50;
 const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
 const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -250;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
+const AVAX_SHORT_LOSSY_MAX_SPREAD_BPS = 80;
 const SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -50;
 const SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS = 0;
 const SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS = -100;
@@ -1804,7 +1805,9 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
           !(direction === "short") ||
           // Prevent AVAX short from firing in bull regimes.
           !(Number.isFinite(btcMomentum6hBps) && btcMomentum6hBps >= -250 && btcMomentum6hBps < 0) ||
-          !(Number.isFinite(spreadBps) && spreadBps >= AVAX_SHORT_MIN_SPREAD_BPS)
+          !(Number.isFinite(spreadBps) && spreadBps >= AVAX_SHORT_MIN_SPREAD_BPS) ||
+          !(Number.isFinite(altMomentum2hBps)) ||
+          (altMomentum2hBps > 0 && spreadBps < AVAX_SHORT_LOSSY_MAX_SPREAD_BPS)
         )
       ) {
         skipped += 1;

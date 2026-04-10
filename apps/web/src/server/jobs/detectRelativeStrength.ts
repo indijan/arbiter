@@ -26,6 +26,7 @@ const XRP_BULL_FADE_MIN_ALT_MOMENTUM_2H_BPS = 25;
 const AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS = -250;
 const AVAX_SHORT_MIN_SPREAD_BPS = 50;
 const AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS = 0;
+const AVAX_SHORT_LOSSY_MAX_SPREAD_BPS = 80;
 const SOL_SOFT_BEAR_MIN_BTC_MOMENTUM_6H_BPS = -50;
 const SOL_SOFT_BEAR_MAX_BTC_MOMENTUM_6H_BPS = 0;
 const SOL_SOFT_BEAR_MIN_ALT_MOMENTUM_6H_BPS = -100;
@@ -201,7 +202,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
     direction: "short",
     variant: "avax_shadow_short_canary",
     holdSeconds: 4 * 60 * 60,
-    evaluate: ({ btcMomentum6hBps, spreadBps }) => {
+    evaluate: ({ btcMomentum6hBps, spreadBps, momentum2hBps }) => {
       // Prevent this AVAX short lane from firing in bull regimes (it caused consistent losses in btc_pos).
       if (!(btcMomentum6hBps !== null && btcMomentum6hBps < AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS)) return "btc_filter_blocked";
       if (
@@ -211,6 +212,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
       ) {
         return "avax_short_filter_blocked";
       }
+      if (momentum2hBps > 0 && spreadBps < AVAX_SHORT_LOSSY_MAX_SPREAD_BPS) return "avax_short_lossy_bucket_blocked";
       if (!(spreadBps >= 0)) return "direction_blocked";
       return null;
     },
@@ -218,6 +220,7 @@ const RELATIVE_STRENGTH_LANES: RelativeStrengthLane[] = [
       avax_short_min_btc_momentum_6h_bps: AVAX_SHORT_MIN_BTC_MOMENTUM_6H_BPS,
       avax_short_max_btc_momentum_6h_bps: AVAX_SHORT_MAX_BTC_MOMENTUM_6H_BPS,
       avax_short_min_spread_bps: AVAX_SHORT_MIN_SPREAD_BPS,
+      avax_short_lossy_max_spread_bps: AVAX_SHORT_LOSSY_MAX_SPREAD_BPS,
       btc_momentum_6h_bps: btcMomentum6hBps
     })
   },

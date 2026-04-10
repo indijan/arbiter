@@ -72,6 +72,11 @@ export type PaperOpportunitySelectorResult = {
   remainingLlmCalls: number;
 };
 
+function relativeStrengthBucketKey(opp: OpportunityRow) {
+  const strategyVariant = String((opp.details as Record<string, unknown> | null)?.strategy_variant ?? "");
+  return `${opp.type}|${opp.symbol}|${opp.exchange}|${strategyVariant}|${opp.ts}`;
+}
+
 export async function selectPaperOpportunities(params: PaperOpportunitySelectorParams): Promise<PaperOpportunitySelectorResult> {
   const {
     opportunities,
@@ -105,25 +110,35 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
 
   let remainingLlmCalls = params.remainingLlmCalls;
 
-  const scoredBase: ScoredOpportunity[] = (opportunities ?? [])
-    // Keep only the newest opportunity per execution identity key.
-    // For relative strength we must dedupe by lane as well, otherwise different
-    // lanes on the same symbol collapse into one row before scoring.
-    .filter((opp, idx, arr) => {
-      const strategyVariant =
-        opp.type === "relative_strength"
-          ? String((opp.details as Record<string, unknown> | null)?.strategy_variant ?? "")
-          : "";
-      const key = `${opp.type}|${opp.symbol}|${opp.exchange}|${strategyVariant}`;
-      const firstIdx = arr.findIndex((x) => {
-        const xStrategyVariant =
-          x.type === "relative_strength"
-            ? String((x.details as Record<string, unknown> | null)?.strategy_variant ?? "")
-            : "";
-        return `${x.type}|${x.symbol}|${x.exchange}|${xStrategyVariant}` === key;
-      });
-      return firstIdx === idx;
-    })
+  const dedupedOpportunities = new Map<string, OpportunityRow>();
+  for (const opp of opportunities ?? []) {
+    const key =
+      opp.type === "relative_strength"
+        ? relativeStrengthBucketKey(opp)
+        : `${opp.type}|${opp.symbol}|${opp.exchange}`;
+    const existing = dedupedOpportunities.get(key);
+    if (!existing) {
+      dedupedOpportunities.set(key, opp);
+      continue;
+    }
+
+    const existingEdge = Number(existing.net_edge_bps ?? Number.NEGATIVE_INFINITY);
+    const nextEdge = Number(opp.net_edge_bps ?? Number.NEGATIVE_INFINITY);
+    const existingConfidence = Number(existing.confidence ?? Number.NEGATIVE_INFINITY);
+    const nextConfidence = Number(opp.confidence ?? Number.NEGATIVE_INFINITY);
+
+    if (
+      nextEdge > existingEdge ||
+      (nextEdge === existingEdge && nextConfidence > existingConfidence) ||
+      (nextEdge === existingEdge &&
+        nextConfidence === existingConfidence &&
+        Date.parse(opp.ts) >= Date.parse(existing.ts))
+    ) {
+      dedupedOpportunities.set(key, opp);
+    }
+  }
+
+  const scoredBase: ScoredOpportunity[] = Array.from(dedupedOpportunities.values())
     .filter((opp) => {
       const symbol = opp.symbol ?? "";
       if (!symbol) {
