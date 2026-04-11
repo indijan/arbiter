@@ -33,6 +33,8 @@ const MAX_NEW_PER_HOUR = 3;
 const MAX_CANDIDATES = 10;
 const MAX_EXECUTE_PER_TICK = 2;
 const MAX_ATTEMPTS_PER_TICK = 5;
+const MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH = 24;
+const ATTEMPT_SCAN_MULTIPLIER = 4;
 const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
@@ -709,8 +711,16 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 0)
   );
   const candidateLimit = activeObserveMode
-    ? Math.max(MAX_CANDIDATES + 4 + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0), maxAttemptsPerTick + 2)
-    : MAX_CANDIDATES + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0);
+    ? Math.max(
+        MAX_CANDIDATES + 4 + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0),
+        maxAttemptsPerTick + 2,
+        MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH
+      )
+    : Math.max(
+        MAX_CANDIDATES + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0),
+        maxAttemptsPerTick + 2,
+        MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH
+      );
   const liveXarbEntryFloorBps = policy.live_xarb_entry_floor_bps;
   const liveXarbTotalCostsBps = policy.live_xarb_total_costs_bps;
   const liveXarbBufferBps = policy.live_xarb_buffer_bps;
@@ -1361,7 +1371,8 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
   let available = Math.max(0, balance - reserved);
   let reservedCurrent = reserved;
 
-  for (const opp of scored.slice(0, maxAttemptsPerTick)) {
+  const scanLimit = Math.max(maxAttemptsPerTick * ATTEMPT_SCAN_MULTIPLIER, maxExecutePerTick * 8);
+  for (const opp of scored.slice(0, scanLimit)) {
     if (created >= maxExecutePerTick) {
       break;
     }
