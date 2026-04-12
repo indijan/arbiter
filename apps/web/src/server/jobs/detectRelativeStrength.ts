@@ -8,7 +8,8 @@ import {
 } from "@/server/lanes/policy";
 import { laneAllowsDetectionByRegime, regimeFromBtcMomentum6hBps, type BtcRegime } from "@/server/lanes/regimePolicy";
 
-const LOOKBACK_HOURS = 24;
+// We only need enough history to compute the 6h/2h momentum windows plus a small safety margin.
+const LOOKBACK_HOURS = 8;
 const IDEMPOTENT_MINUTES = 10;
 const EXCHANGE = "coinbase";
 const SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "ADAUSD", "LINKUSD", "AVAXUSD", "LTCUSD", "DOTUSD", "BCHUSD"];
@@ -127,6 +128,7 @@ async function fetchSnapshots(
 export type DetectRelativeStrengthResult = {
   inserted: number;
   skipped: number;
+  snapshot_rows_read?: number;
   skip_reasons: Record<string, number>;
   near_miss_samples: Array<{
     symbol: string;
@@ -434,7 +436,13 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
 
   const hours = Array.from(byHour.keys()).sort();
   if (hours.length < ENTRY_LOOKBACK_HOURS + 1) {
-    return { inserted: 0, skipped: SYMBOLS.length, skip_reasons: { insufficient_history: SYMBOLS.length }, near_miss_samples: [] };
+    return {
+      inserted: 0,
+      skipped: SYMBOLS.length,
+      snapshot_rows_read: data.length,
+      skip_reasons: { insufficient_history: SYMBOLS.length },
+      near_miss_samples: []
+    };
   }
 
   const latestHour = hours[hours.length - 1];
@@ -463,6 +471,7 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     return {
       inserted: 0,
       skipped: 0,
+      snapshot_rows_read: data.length,
       skip_reasons: { no_allowed_symbols: 1 },
       near_miss_samples: []
     };
@@ -578,5 +587,11 @@ export async function detectRelativeStrength(): Promise<DetectRelativeStrengthRe
     skip_reasons.unknown = (skip_reasons.unknown ?? 0) + (candidates.length - accounted);
   }
 
-  return { inserted, skipped, skip_reasons, near_miss_samples: near_miss_samples.slice(0, 5) };
+  return {
+    inserted,
+    skipped,
+    snapshot_rows_read: data.length,
+    skip_reasons,
+    near_miss_samples: near_miss_samples.slice(0, 5)
+  };
 }

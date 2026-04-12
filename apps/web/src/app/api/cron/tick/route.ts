@@ -243,6 +243,7 @@ async function handleTick(request: Request) {
           ? {
               inserted: spreadReversionResult.data.inserted,
               skipped: spreadReversionResult.data.skipped,
+              snapshot_rows_read: spreadReversionResult.data.snapshot_rows_read ?? 0,
               skip_reasons: spreadReversionResult.data.skip_reasons,
               near_miss_samples: spreadReversionResult.data.near_miss_samples
             }
@@ -251,6 +252,7 @@ async function handleTick(request: Request) {
           ? {
               inserted: relativeStrengthResult.data.inserted,
               skipped: relativeStrengthResult.data.skipped,
+              snapshot_rows_read: relativeStrengthResult.data.snapshot_rows_read ?? 0,
               skip_reasons: relativeStrengthResult.data.skip_reasons,
               near_miss_samples: relativeStrengthResult.data.near_miss_samples
             }

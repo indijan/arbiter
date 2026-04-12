@@ -2,7 +2,8 @@ import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
 
-const LOOKBACK_HOURS = 24;
+// Mean-reversion only needs a handful of 10m buckets plus safety margin, not a full day.
+const LOOKBACK_HOURS = 6;
 const IDEMPOTENT_MINUTES = 10;
 const TIME_BUCKET_MINUTES = 10;
 const MAX_SNAPSHOT_AGE_SECONDS = 40 * 60;
@@ -71,6 +72,7 @@ export type SpreadReversionEvaluatedRow = {
 export type DetectSpreadReversionResult = {
   inserted: number;
   skipped: number;
+  snapshot_rows_read?: number;
   evaluated: SpreadReversionEvaluatedRow[];
   skip_reasons: Record<string, number>;
   near_miss_samples: Array<{
@@ -120,6 +122,15 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
   ).toISOString();
 
   const exchangeUniverse = ["binance", "bybit", "okx", "coinbase", "kraken"];
+  const rawSymbols = Array.from(
+    new Set(
+      CANONICAL_MAP.flatMap((mapping) =>
+        [mapping.binance, mapping.bybit, mapping.okx, mapping.coinbase, mapping.kraken].filter(
+          (symbol): symbol is string => Boolean(symbol)
+        )
+      )
+    )
+  );
   const rawToCanonical = new Map<string, string>();
   for (const mapping of CANONICAL_MAP) {
     if (mapping.binance) rawToCanonical.set(`binance:${mapping.binance}`, mapping.canonical);
@@ -139,6 +150,7 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
       .select("ts, exchange, symbol, spot_bid, spot_ask")
       .gte("ts", since)
       .in("exchange", exchangeUniverse)
+      .in("symbol", rawSymbols)
       .order("ts", { ascending: true })
       .range(from, from + pageSize - 1);
 
@@ -445,6 +457,7 @@ export async function detectSpreadReversion(): Promise<DetectSpreadReversionResu
   return {
     inserted,
     skipped,
+    snapshot_rows_read: data.length,
     evaluated,
     skip_reasons,
     near_miss_samples: nearMisses
