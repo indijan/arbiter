@@ -365,12 +365,47 @@ function scoreOpportunity(opp: OpportunityRow) {
   const details = opp.details ?? {};
   const breakEven = Number((details as Record<string, unknown>).break_even_hours);
 
-  const breakEvenPenalty = Number.isFinite(breakEven) ? breakEven / 24 : 4;
+  const breakEvenPenalty =
+    Number.isFinite(breakEven)
+      ? breakEven / 24
+      : opp.type === "relative_strength"
+        ? 0
+        : 4;
   const edgeBonus = netEdge / 10;
   const confidenceBonus = confidence;
 
   // Higher score is better.
   return edgeBonus + confidenceBonus - risk - breakEvenPenalty;
+}
+
+function prioritizeRelativeStrengthByLane(scored: ScoredOpportunity[]) {
+  const bestByLane = new Map<string, ScoredOpportunity>();
+  const remainingByLane = new Map<string, ScoredOpportunity[]>();
+
+  for (const opp of scored) {
+    if (opp.type !== "relative_strength") continue;
+    const lane = String((opp.details as Record<string, unknown> | null)?.strategy_variant ?? "");
+    const currentBest = bestByLane.get(lane);
+    if (!currentBest || opp.effectiveScore > currentBest.effectiveScore) {
+      if (currentBest) {
+        const list = remainingByLane.get(lane) ?? [];
+        list.push(currentBest);
+        remainingByLane.set(lane, list);
+      }
+      bestByLane.set(lane, opp);
+      continue;
+    }
+    const list = remainingByLane.get(lane) ?? [];
+    list.push(opp);
+    remainingByLane.set(lane, list);
+  }
+
+  const bestFirst = Array.from(bestByLane.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
+  const remainder = Array.from(remainingByLane.values())
+    .flat()
+    .sort((a, b) => b.effectiveScore - a.effectiveScore);
+
+  return [...bestFirst, ...remainder];
 }
 
 function inRange(value: number, min: number, max: number) {
@@ -1359,7 +1394,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
         { onConflict: "day" }
       );
   }
-  scored = scored.sort((a, b) => b.effectiveScore - a.effectiveScore);
+  scored = prioritizeRelativeStrengthByLane(scored.sort((a, b) => b.effectiveScore - a.effectiveScore));
 
   let attempted = 0;
   let created = 0;
@@ -1412,7 +1447,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
       .select("id")
       .eq("user_id", userId)
       .eq("opportunity_id", opp.id)
-      .eq("status", "open")
+      .limit(1)
       .maybeSingle();
 
     if (existingError) {
@@ -1421,7 +1456,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
 
     if (existingPosition) {
       skipped += 1;
-      reasons.push({ opportunity_id: opp.id, reason: "already_open" });
+      reasons.push({ opportunity_id: opp.id, reason: "opportunity_already_consumed" });
       if (decisionRow?.id) {
         await adminSupabase
           .from("opportunity_decisions")

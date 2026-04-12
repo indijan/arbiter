@@ -42,7 +42,11 @@ fi
 
 run() {
   # BatchMode avoids password prompts; if this fails, your key isn't accepted for this host/user.
-  ssh -o BatchMode=yes "${IDENTITY_OPT[@]}" "$HOST" "$@"
+  if [[ -n "${ARBITER_SSH_IDENTITY:-}" ]]; then
+    ssh -o BatchMode=yes -i "$ARBITER_SSH_IDENTITY" "$HOST" "$@"
+  else
+    ssh -o BatchMode=yes "$HOST" "$@"
+  fi
 }
 
 die_ssh() {

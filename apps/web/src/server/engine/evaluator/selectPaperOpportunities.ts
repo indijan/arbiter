@@ -243,7 +243,7 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
       }
 
       if (opp.type === "relative_strength") {
-        if (!allowsDetect("relative_strength")) {
+        if (!allowsExecute("relative_strength")) {
           markPrefilter("relative_strength_disabled");
           return false;
         }
@@ -258,7 +258,7 @@ export async function selectPaperOpportunities(params: PaperOpportunitySelectorP
         }
 
         const strategyVariant = String((opp.details as Record<string, unknown> | null)?.strategy_variant ?? "");
-        if (strategyVariant && relativeStrengthLaneKeys.has(strategyVariant) && !allowsDetect(strategyVariant)) {
+        if (strategyVariant && relativeStrengthLaneKeys.has(strategyVariant) && !allowsExecute(strategyVariant)) {
           markPrefilter("relative_strength_lane_disabled");
           return false;
         }
