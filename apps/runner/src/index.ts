@@ -74,10 +74,8 @@ async function runTick() {
 
   await run("cron.ingest", () => callCron("/api/cron/ingest"));
   await run("cron.detect", () => callCron("/api/cron/detect"));
-  await run("cron.news", () => callCron("/api/cron/news"));
   await run("cron.execute", () => callCron("/api/cron/execute"));
   await run("cron.close", () => callCron("/api/cron/close"));
-  await run("cron.backcheck", () => callCron("/api/cron/backcheck"));
 
   const dt = ((Date.now() - started) / 1000).toFixed(1);
   console.log(`[${isoNow()}] tick done (${dt}s) errors=${errors.length}`);

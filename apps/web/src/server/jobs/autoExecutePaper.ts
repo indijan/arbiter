@@ -8,8 +8,6 @@ import {
   type OpportunityRow,
   type ScoredOpportunity
 } from "@/server/engine/evaluator/selectPaperOpportunities";
-import { loadEffectivePolicy } from "@/server/policy/store";
-import { runStrategyPolicyController } from "@/server/policy/controller";
 import {
   buildStrategySettingsMap,
   lanePolicyStateFromSettingsMap,
@@ -23,18 +21,18 @@ import { openXarbSpotPaperPosition } from "@/server/engine/execution/paper/openX
 
 const DEFAULT_NOTIONAL = 100;
 const DEFAULT_MIN_NOTIONAL = 100;
-const DEFAULT_MAX_NOTIONAL = 500;
+const DEFAULT_MAX_NOTIONAL = 150;
 const DEFAULT_PAPER_BALANCE = 10000;
 const SLIPPAGE_BPS = 2;
 const FEE_BPS = 4;
 
-const MAX_OPEN_POSITIONS = 10;
-const MAX_NEW_PER_HOUR = 3;
-const MAX_CANDIDATES = 10;
-const MAX_EXECUTE_PER_TICK = 2;
-const MAX_ATTEMPTS_PER_TICK = 5;
-const MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH = 24;
-const ATTEMPT_SCAN_MULTIPLIER = 4;
+const MAX_OPEN_POSITIONS = 3;
+const MAX_NEW_PER_HOUR = 1;
+const MAX_CANDIDATES = 6;
+const MAX_EXECUTE_PER_TICK = 1;
+const MAX_ATTEMPTS_PER_TICK = 3;
+const MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH = 8;
+const ATTEMPT_SCAN_MULTIPLIER = 2;
 const MAX_LLM_CALLS_PER_TICK = 3;
 const MAX_LLM_RERANK = 3;
 const MAX_LLM_CALLS_PER_DAY = 500;
@@ -324,7 +322,7 @@ function sortedExchangePairKey(symbol: string, exchangeA: string, exchangeB: str
 }
 
 function deriveNotional(
-  opportunity: { net_edge_bps: number | null; details: Record<string, unknown> | null },
+  opportunity: { type?: string; net_edge_bps: number | null; details: Record<string, unknown> | null },
   minNotional: number,
   maxNotional: number
 ) {
@@ -334,6 +332,21 @@ function deriveNotional(
 
   let notional = DEFAULT_NOTIONAL;
   let reason = "default";
+
+  if (opportunity.type === "relative_strength") {
+    if (netEdge >= 25) {
+      notional = 150;
+      reason = "relative_strength_high_edge";
+    } else if (netEdge >= 12) {
+      notional = 125;
+      reason = "relative_strength_mid_edge";
+    } else {
+      notional = DEFAULT_NOTIONAL;
+      reason = "relative_strength_base";
+    }
+
+    return { notional: clampNotional(notional, minNotional, maxNotional), reason };
+  }
 
   if (Number.isFinite(breakEven)) {
     if (breakEven <= 24) {
@@ -715,78 +728,49 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     (canaryCandidateRows ?? []).map((row) => [String(row.id), String((row as { regime?: string | null }).regime ?? "")])
   );
 
-  let policyControllerAction = "none";
-  try {
-    const controllerResult = await runStrategyPolicyController(adminSupabase, userId);
-    policyControllerAction = controllerResult.action ?? (controllerResult.skipped ? "skipped" : "none");
-  } catch (err) {
-    policyControllerAction = "error";
-  }
+  const policyControllerAction = "disabled";
+  const effectivePolicy = {
+    rollout_id: null as string | null,
+    config_id: null as string | null,
+    rollout_status: "disabled",
+    is_canary: false
+  };
+  const activeObserveMode = false;
 
-  const effectivePolicy = await loadEffectivePolicy(adminSupabase, userId);
-  const policy = effectivePolicy.policy;
-  const hasStableActiveRollout =
-    effectivePolicy.rollout_status === "active" && !effectivePolicy.is_canary;
-  const activeObserveMode =
-    hasStableActiveRollout &&
-    (policyControllerAction === "active_observe" ||
-      policyControllerAction === "skipped" ||
-      policyControllerAction === "promotion_hold");
-
-  const maxExecutePerTick = Math.max(
-    1,
-    Math.round(policy.max_execute_per_tick) +
-      (activeObserveMode ? 1 : 0) +
-      (HIGH_THROUGHPUT_POSITIVE_MODE ? 1 : 0)
-  );
-  const maxAttemptsPerTick = Math.max(
-    1,
-    Math.round(policy.max_attempts_per_tick) +
-      (activeObserveMode ? 2 : 0) +
-      (HIGH_THROUGHPUT_POSITIVE_MODE ? 2 : 0)
-  );
-  const candidateLimit = activeObserveMode
-    ? Math.max(
-        MAX_CANDIDATES + 4 + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0),
-        maxAttemptsPerTick + 2,
-        MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH
-      )
-    : Math.max(
-        MAX_CANDIDATES + (HIGH_THROUGHPUT_POSITIVE_MODE ? 4 : 0),
-        maxAttemptsPerTick + 2,
-        MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH
-      );
-  const liveXarbEntryFloorBps = policy.live_xarb_entry_floor_bps;
-  const liveXarbTotalCostsBps = policy.live_xarb_total_costs_bps;
-  const liveXarbBufferBps = policy.live_xarb_buffer_bps;
-  const pilotMinLiveGrossEdgeBps = policy.pilot_min_live_gross_edge_bps;
-  const pilotMinLiveNetEdgeBps = policy.pilot_min_live_net_edge_bps;
-  const pilotNotionalMultiplier = policy.pilot_notional_multiplier;
-  const calibrationMinLiveGrossEdgeBps = policy.calibration_min_live_gross_edge_bps;
-  const calibrationMinLiveNetEdgeBps = policy.calibration_min_live_net_edge_bps;
-  const calibrationNotionalMultiplier = policy.calibration_notional_multiplier;
-  const recoveryMinLiveGrossEdgeBps = policy.recovery_min_live_gross_edge_bps;
-  const recoveryMinLiveNetEdgeBps = policy.recovery_min_live_net_edge_bps;
-  const recoveryNotionalMultiplier = policy.recovery_notional_multiplier;
-  const reentryMinLiveGrossEdgeBps = policy.reentry_min_live_gross_edge_bps;
-  const reentryMinLiveNetEdgeBps = policy.reentry_min_live_net_edge_bps;
-  const reentryNotionalMultiplier = policy.reentry_notional_multiplier;
-  const inactivityMinLiveGrossEdgeBps = policy.inactivity_min_live_gross_edge_bps;
-  const inactivityMinLiveNetEdgeBps = policy.inactivity_min_live_net_edge_bps;
-  const inactivityNotionalMultiplier = policy.inactivity_notional_multiplier;
-  const starvationMinLiveGrossEdgeBps = policy.starvation_min_live_gross_edge_bps;
-  const starvationMinLiveNetEdgeBps = policy.starvation_min_live_net_edge_bps;
-  const starvationNotionalMultiplier = policy.starvation_notional_multiplier;
-  const controllerLookbackHours = policy.controller_lookback_hours;
-  const controllerMinOpenings = policy.controller_min_openings;
-  const controllerLongLookbackDays = policy.controller_long_lookback_days;
-  const controllerShortWeight = policy.controller_short_weight;
-  const controllerLongWeight = policy.controller_long_weight;
-  const controllerMinClosedShort = policy.controller_min_closed_short;
-  const controllerMinClosedLong = policy.controller_min_closed_long;
-  const controllerEmergencyMinLiveGrossEdgeBps = policy.controller_emergency_min_live_gross_edge_bps;
-  const controllerEmergencyMinLiveNetEdgeBps = policy.controller_emergency_min_live_net_edge_bps;
-  const controllerEmergencyNotionalMultiplier = policy.controller_emergency_notional_multiplier;
+  const maxExecutePerTick = MAX_EXECUTE_PER_TICK;
+  const maxAttemptsPerTick = MAX_ATTEMPTS_PER_TICK;
+  const candidateLimit = Math.max(MAX_CANDIDATES, MIN_CANDIDATE_LIMIT_RELATIVE_STRENGTH);
+  const liveXarbEntryFloorBps = LIVE_XARB_ENTRY_FLOOR_BPS;
+  const liveXarbTotalCostsBps = LIVE_XARB_TOTAL_COSTS_BPS;
+  const liveXarbBufferBps = LIVE_XARB_BUFFER_BPS;
+  const pilotMinLiveGrossEdgeBps = PILOT_MIN_LIVE_GROSS_EDGE_BPS;
+  const pilotMinLiveNetEdgeBps = PILOT_MIN_LIVE_NET_EDGE_BPS;
+  const pilotNotionalMultiplier = PILOT_NOTIONAL_MULTIPLIER;
+  const calibrationMinLiveGrossEdgeBps = CALIBRATION_MIN_LIVE_GROSS_EDGE_BPS;
+  const calibrationMinLiveNetEdgeBps = CALIBRATION_MIN_LIVE_NET_EDGE_BPS;
+  const calibrationNotionalMultiplier = CALIBRATION_NOTIONAL_MULTIPLIER;
+  const recoveryMinLiveGrossEdgeBps = RECOVERY_MIN_LIVE_GROSS_EDGE_BPS;
+  const recoveryMinLiveNetEdgeBps = RECOVERY_MIN_LIVE_NET_EDGE_BPS;
+  const recoveryNotionalMultiplier = RECOVERY_NOTIONAL_MULTIPLIER;
+  const reentryMinLiveGrossEdgeBps = REENTRY_MIN_LIVE_GROSS_EDGE_BPS;
+  const reentryMinLiveNetEdgeBps = REENTRY_MIN_LIVE_NET_EDGE_BPS;
+  const reentryNotionalMultiplier = REENTRY_NOTIONAL_MULTIPLIER;
+  const inactivityMinLiveGrossEdgeBps = INACTIVITY_MIN_LIVE_GROSS_EDGE_BPS;
+  const inactivityMinLiveNetEdgeBps = INACTIVITY_MIN_LIVE_NET_EDGE_BPS;
+  const inactivityNotionalMultiplier = INACTIVITY_NOTIONAL_MULTIPLIER;
+  const starvationMinLiveGrossEdgeBps = STARVATION_MIN_LIVE_GROSS_EDGE_BPS;
+  const starvationMinLiveNetEdgeBps = STARVATION_MIN_LIVE_NET_EDGE_BPS;
+  const starvationNotionalMultiplier = STARVATION_NOTIONAL_MULTIPLIER;
+  const controllerLookbackHours = CONTROLLER_LOOKBACK_HOURS;
+  const controllerMinOpenings = CONTROLLER_MIN_OPENINGS;
+  const controllerLongLookbackDays = CONTROLLER_LONG_LOOKBACK_DAYS;
+  const controllerShortWeight = CONTROLLER_SHORT_WEIGHT;
+  const controllerLongWeight = CONTROLLER_LONG_WEIGHT;
+  const controllerMinClosedShort = CONTROLLER_MIN_CLOSED_SHORT;
+  const controllerMinClosedLong = CONTROLLER_MIN_CLOSED_LONG;
+  const controllerEmergencyMinLiveGrossEdgeBps = CONTROLLER_EMERGENCY_MIN_LIVE_GROSS_EDGE_BPS;
+  const controllerEmergencyMinLiveNetEdgeBps = CONTROLLER_EMERGENCY_MIN_LIVE_NET_EDGE_BPS;
+  const controllerEmergencyNotionalMultiplier = CONTROLLER_EMERGENCY_NOTIONAL_MULTIPLIER;
 
   const { data: openPositions, error: openError } = await adminSupabase
     .from("positions")
@@ -1467,7 +1451,7 @@ export async function autoExecutePaper(): Promise<AutoExecuteResult> {
     }
 
     const derived = deriveNotional(
-      { net_edge_bps: opp.net_edge_bps, details: opp.details },
+      { type: opp.type, net_edge_bps: opp.net_edge_bps, details: opp.details },
       minNotional,
       maxNotional
     );
