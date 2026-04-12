@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
+import { readRecentSpotSnapshots } from "@/server/hotdb/sqlite";
 import {
   buildStrategySettingsMap,
   lanePolicyStateFromSettingsMap,
@@ -99,6 +100,15 @@ async function fetchSnapshots(
   adminSupabase: NonNullable<ReturnType<typeof createAdminSupabase>>,
   since: string
 ) {
+  const hotRows = readRecentSpotSnapshots({
+    exchange: EXCHANGE,
+    symbols: SYMBOLS as unknown as string[],
+    since
+  });
+  if (hotRows.length > 0) {
+    return hotRows as SnapshotRow[];
+  }
+
   const rows: SnapshotRow[] = [];
   const pageSize = 1000;
   let from = 0;

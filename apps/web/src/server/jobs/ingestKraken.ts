@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminSupabase } from "@/lib/supabase/server-admin";
+import { writeHotSnapshots } from "@/server/hotdb/sqlite";
 
 const TIMEOUT_MS = 9000;
 
@@ -117,6 +118,18 @@ export async function ingestKraken(): Promise<IngestKrakenResult> {
     if (error) {
       throw new Error(error.message);
     }
+    writeHotSnapshots(payload as Array<Record<string, unknown>> as Array<{
+      ts: string;
+      exchange: string;
+      symbol: string;
+      spot_bid: number | null;
+      spot_ask: number | null;
+      perp_bid?: number | null;
+      perp_ask?: number | null;
+      funding_rate?: number | null;
+      mark_price?: number | null;
+      index_price?: number | null;
+    }>);
   }
 
   return {
