@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
+import ReportExportButtons from "@/components/ReportExportButtons";
+import AdvancedViewTable from "@/components/AdvancedViewTable";
+import StrategyLearningPanel from "@/components/StrategyLearningPanel";
+import AutoRefreshClient from "@/components/AutoRefreshClient";
 
 type OpportunityRow = {
   id: number;
@@ -12,18 +16,23 @@ type OpportunityRow = {
   details: Record<string, unknown> | null;
 };
 
-type DecisionRow = {
-  ts: string;
-  chosen: boolean;
-  score: number | string | null;
-  variant: string;
-  reject_reason: string | null;
-};
-
 type TickRow = {
   ts: string;
   ingest_errors: number;
   detect_summary: Record<string, unknown> | null;
+};
+
+type SnapshotPoint = {
+  ts: string;
+  symbol: string;
+  spot_bid: number | string | null;
+  spot_ask: number | string | null;
+};
+
+type PositionRow = {
+  symbol: string;
+  entry_ts: string | null;
+  exit_ts: string | null;
 };
 
 function asNumber(value: unknown, fallback = 0) {
@@ -83,7 +92,9 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  const [{ data: latestTick }, { data: opportunities }, { data: decisions }, { data: snapshots }] = await Promise.all([
+  const snapshotsSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: latestTick }, { data: opportunities }, { data: snapshots }, { data: positions }] = await Promise.all([
     supabase
       .from("system_ticks")
       .select("ts, ingest_errors, detect_summary")
@@ -96,15 +107,16 @@ export default async function DashboardPage() {
       .order("ts", { ascending: false })
       .limit(20),
     supabase
-      .from("opportunity_decisions")
-      .select("ts, chosen, score, variant, reject_reason")
-      .order("ts", { ascending: false })
-      .limit(20),
-    supabase
       .from("market_snapshots")
-      .select("ts")
+      .select("ts, symbol, spot_bid, spot_ask")
+      .gte("ts", snapshotsSince)
       .order("ts", { ascending: false })
-      .limit(40)
+      .limit(5000),
+    supabase
+      .from("positions")
+      .select("symbol, entry_ts, exit_ts")
+      .order("entry_ts", { ascending: false })
+      .limit(80)
   ]);
 
   const typedOpportunities = (opportunities ?? []) as OpportunityRow[];
@@ -120,8 +132,49 @@ export default async function DashboardPage() {
   const hasOpportunity = ranked.some((r) => r.decision !== "ignore");
   const latestTickTs = latestTick?.ts ?? null;
   const marketCount = new Set(typedOpportunities.map((o) => `${o.exchange}:${o.symbol}`)).size;
-  const learningPoints = (snapshots ?? []).slice(0, 24);
-  const latestDecisions = (decisions ?? []) as DecisionRow[];
+  const learningSnapshotSeries = ((snapshots ?? []) as SnapshotPoint[])
+    .map((point) => {
+      const bid = asNumber(point.spot_bid);
+      const ask = asNumber(point.spot_ask);
+      const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0;
+      return { ts: point.ts, symbol: point.symbol, mid };
+    })
+    .filter((x) => x.mid > 0);
+
+  const learningOpportunitySeries = typedOpportunities.slice(0, 40).map((opp) => {
+    const score = scoreOpportunity(opp);
+    const decision = decisionFromScore(score);
+    return {
+      ts: opp.ts,
+      symbol: opp.symbol,
+      strategy: opp.type,
+      decision,
+      score,
+      reason: whyInteresting(opp),
+      net_edge_bps: asNumber(opp.net_edge_bps),
+      break_even_hours: asNumber(opp.details?.break_even_hours, 0),
+      risk_score: Math.max(1, 100 - score)
+    };
+  });
+
+  const learningTradeSeries = ((positions ?? []) as PositionRow[]).map((p) => ({
+    symbol: p.symbol,
+    entry_ts: p.entry_ts,
+    exit_ts: p.exit_ts
+  }));
+
+  const liveAdvancedRows = typedOpportunities.slice(0, 20).map((opp) => {
+    const score = scoreOpportunity(opp);
+    const decision = decisionFromScore(score);
+    return {
+      ts: opp.ts,
+      strategy: opp.type,
+      symbol: opp.symbol,
+      score,
+      decision,
+      reason: whyInteresting(opp)
+    };
+  });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -131,6 +184,9 @@ export default async function DashboardPage() {
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
           Determinisztikus opportunity szelekció. Nincs runtime AI döntés, nincs automatikus trade trigger.
         </p>
+        <div className="mt-2">
+          <AutoRefreshClient intervalSec={45} />
+        </div>
       </header>
 
       <section className="mb-6 grid gap-3 md:grid-cols-4">
@@ -155,12 +211,7 @@ export default async function DashboardPage() {
       <section className="card mb-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-semibold">Top Opportunities (max 5)</h2>
-          <div className="flex gap-2 text-xs">
-            <a className="tag" href="/api/report/export?type=latest">Export Report</a>
-            <a className="tag" href="/api/report/export?type=24h">24h</a>
-            <a className="tag" href="/api/report/export?type=7d">7d</a>
-            <a className="tag" href="/api/report/export?type=strategy&key=carry_spot_perp">Carry</a>
-          </div>
+          <ReportExportButtons />
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -191,73 +242,21 @@ export default async function DashboardPage() {
       <section className="card mb-6">
         <h2 className="text-xl font-semibold">Learning View</h2>
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-          Egyszerű idősoros nézet: a legfrissebb snapshot pontok, hogy lásd mit látott a rendszer.
+          Árfolyam görbe + stratégia döntési pontok (belépési helyek). Válassz symbolt és nézd az overlay jelöléseket.
         </p>
-        <div className="mt-3 h-44 overflow-hidden rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "color-mix(in oklab, var(--card) 76%, transparent)" }}>
-          <div className="flex h-full items-end gap-1">
-            {learningPoints.length > 0 ? (
-              learningPoints
-                .slice()
-                .reverse()
-                .map((point, idx) => {
-                  const hour = new Date(point.ts).getHours();
-                  const height = 20 + ((hour / 23) * 80);
-                  return (
-                    <div
-                      key={`${point.ts}-${idx}`}
-                      className="flex-1 rounded-t"
-                      style={{
-                        height: `${height}%`,
-                        background: "linear-gradient(180deg, var(--accent), color-mix(in oklab, var(--accent) 60%, transparent))"
-                      }}
-                      title={formatTs(point.ts)}
-                    />
-                  );
-                })
-            ) : (
-              <p className="text-sm" style={{ color: "var(--muted)" }}>Nincs snapshot adat.</p>
-            )}
-          </div>
-        </div>
+        <StrategyLearningPanel
+          snapshots={learningSnapshotSeries}
+          opportunities={learningOpportunitySeries}
+          trades={learningTradeSeries}
+        />
       </section>
 
       <section className="card">
         <h2 className="text-xl font-semibold">Advanced View</h2>
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-          Debug és evaluator output (utolsó döntések) ellenőrzéshez.
+          Friss opportunity stream. Ez minden auto refresh ciklusban újraolvasódik.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border" style={{ borderColor: "var(--line)" }}>
-          <table className="min-w-full text-sm">
-            <thead style={{ background: "color-mix(in oklab, var(--bg-alt) 55%, transparent)" }}>
-              <tr>
-                <th className="px-3 py-2 text-left">Idő</th>
-                <th className="px-3 py-2 text-left">Variant</th>
-                <th className="px-3 py-2 text-left">Score</th>
-                <th className="px-3 py-2 text-left">Chosen</th>
-                <th className="px-3 py-2 text-left">Reject reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {latestDecisions.length > 0 ? (
-                latestDecisions.map((row, idx) => (
-                  <tr key={`${row.ts}-${idx}`} className="border-t" style={{ borderColor: "var(--line)" }}>
-                    <td className="px-3 py-2">{formatTs(row.ts)}</td>
-                    <td className="px-3 py-2">{row.variant}</td>
-                    <td className="px-3 py-2">{asNumber(row.score).toFixed(1)}</td>
-                    <td className="px-3 py-2">{row.chosen ? "yes" : "no"}</td>
-                    <td className="px-3 py-2">{row.reject_reason ?? "-"}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-3 py-4" style={{ color: "var(--muted)" }}>
-                    Nincs decision log.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <AdvancedViewTable rows={liveAdvancedRows} />
       </section>
     </div>
   );

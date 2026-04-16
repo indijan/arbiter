@@ -3,7 +3,7 @@ import "server-only";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 
 type HotSnapshotRow = {
   ts: string;
@@ -29,15 +29,43 @@ type RecentSpotSnapshotRow = {
 const HOT_DB_RETENTION_HOURS = Number(process.env.HOT_DB_RETENTION_HOURS ?? 12);
 const HOT_DB_PATH =
   process.env.ARBITER_HOT_DB_PATH ?? path.join(os.homedir(), ".arbiter", "data", "hot.db");
+const HOT_DB_ENABLED =
+  process.env.ARBITER_USE_HOT_DB === "1" ||
+  (!process.env.VERCEL && process.env.ARBITER_USE_HOT_DB !== "0");
 
-let dbInstance: DatabaseSync | null = null;
+type SqliteDatabase = {
+  exec(sql: string): void;
+  prepare(sql: string): { run(...args: unknown[]): void; all(...args: unknown[]): unknown[] };
+};
+
+let dbInstance: SqliteDatabase | null = null;
 let dbInitFailed = false;
+let sqliteUnavailable = false;
+
+function loadSqliteSyncCtor() {
+  if (sqliteUnavailable || !HOT_DB_ENABLED) return null;
+  try {
+    const require = createRequire(import.meta.url);
+    const sqlite = require("node:sqlite") as { DatabaseSync?: new (path: string) => SqliteDatabase };
+    return sqlite.DatabaseSync ?? null;
+  } catch {
+    sqliteUnavailable = true;
+    return null;
+  }
+}
 
 function getDb() {
+  if (!HOT_DB_ENABLED) return null;
   if (dbInitFailed) return null;
   if (dbInstance) return dbInstance;
 
   try {
+    const DatabaseSync = loadSqliteSyncCtor();
+    if (!DatabaseSync) {
+      dbInitFailed = true;
+      return null;
+    }
+
     fs.mkdirSync(path.dirname(HOT_DB_PATH), { recursive: true });
     const db = new DatabaseSync(HOT_DB_PATH);
     db.exec(`
