@@ -31,41 +31,49 @@ const HOT_DB_PATH =
   process.env.ARBITER_HOT_DB_PATH ?? path.join(os.homedir(), ".arbiter", "data", "hot.db");
 
 let dbInstance: DatabaseSync | null = null;
+let dbInitFailed = false;
 
 function getDb() {
+  if (dbInitFailed) return null;
   if (dbInstance) return dbInstance;
 
-  fs.mkdirSync(path.dirname(HOT_DB_PATH), { recursive: true });
-  const db = new DatabaseSync(HOT_DB_PATH);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA synchronous = NORMAL;
-    CREATE TABLE IF NOT EXISTS market_snapshots_recent (
-      ts TEXT NOT NULL,
-      exchange TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      spot_bid REAL,
-      spot_ask REAL,
-      perp_bid REAL,
-      perp_ask REAL,
-      funding_rate REAL,
-      mark_price REAL,
-      index_price REAL
-    );
-    CREATE INDEX IF NOT EXISTS idx_market_snapshots_recent_exchange_symbol_ts
-      ON market_snapshots_recent(exchange, symbol, ts);
-    CREATE INDEX IF NOT EXISTS idx_market_snapshots_recent_ts
-      ON market_snapshots_recent(ts);
-  `);
+  try {
+    fs.mkdirSync(path.dirname(HOT_DB_PATH), { recursive: true });
+    const db = new DatabaseSync(HOT_DB_PATH);
+    db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      CREATE TABLE IF NOT EXISTS market_snapshots_recent (
+        ts TEXT NOT NULL,
+        exchange TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        spot_bid REAL,
+        spot_ask REAL,
+        perp_bid REAL,
+        perp_ask REAL,
+        funding_rate REAL,
+        mark_price REAL,
+        index_price REAL
+      );
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_recent_exchange_symbol_ts
+        ON market_snapshots_recent(exchange, symbol, ts);
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_recent_ts
+        ON market_snapshots_recent(ts);
+    `);
 
-  dbInstance = db;
-  return db;
+    dbInstance = db;
+    return db;
+  } catch {
+    dbInitFailed = true;
+    return null;
+  }
 }
 
 export function writeHotSnapshots(rows: HotSnapshotRow[]) {
   if (rows.length === 0) return;
 
   const db = getDb();
+  if (!db) return;
   const insert = db.prepare(`
     INSERT INTO market_snapshots_recent (
       ts, exchange, symbol, spot_bid, spot_ask, perp_bid, perp_ask, funding_rate, mark_price, index_price
@@ -106,6 +114,7 @@ export function readRecentSpotSnapshots(args: {
   if (args.symbols.length === 0) return [];
 
   const db = getDb();
+  if (!db) return [];
   const placeholders = args.symbols.map(() => "?").join(", ");
   const stmt = db.prepare(`
     SELECT ts, exchange, symbol, spot_bid, spot_ask

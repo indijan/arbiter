@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-
-export const maxDuration = 300;
 import { ensureCronAuthorized } from "@/server/cron/auth";
 import { runIngestStep } from "@/server/engine/pipeline/ingest";
 import { runValidateStep } from "@/server/engine/pipeline/validate";
@@ -8,6 +6,8 @@ import { runStrategyStep } from "@/server/engine/pipeline/strategies";
 import { runEvaluateStep } from "@/server/engine/pipeline/evaluate";
 import { runWatchlistStep } from "@/server/engine/pipeline/watchlist";
 import { runStoreStep } from "@/server/engine/pipeline/store";
+
+export const maxDuration = 300;
 
 async function handleTick(request: Request) {
   const unauthorized = ensureCronAuthorized(request);
