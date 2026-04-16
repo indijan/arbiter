@@ -1,6 +1,12 @@
 import "server-only";
 
-export type EngineLayer = "data" | "strategy" | "evaluation" | "execution";
+export type EngineLayer =
+  | "data"
+  | "strategy"
+  | "evaluation"
+  | "decision"
+  | "watchlist"
+  | "execution";
 
 export type StrategyKey =
   | "carry_spot_perp"
@@ -8,6 +14,13 @@ export type StrategyKey =
   | "spread_reversion"
   | "relative_strength"
   | "tri_arb";
+
+export type WatchDecision =
+  | "ignore"
+  | "watch"
+  | "strong_watch"
+  | "paper_candidate"
+  | "future_auto_candidate";
 
 export type EnginePluginResult<T> =
   | { ok: true; data: T }
@@ -20,4 +33,3 @@ export type DetectJobSummary = {
   near_miss_samples?: unknown[];
   error?: string;
 };
-

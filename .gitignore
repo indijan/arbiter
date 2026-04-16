@@ -5,6 +5,10 @@ node_modules
 apps/web/.next
 apps/web/.env.local
 apps/runner/.env.local
+.local-data/
 .DS_Store
 apps/web/tsconfig.tsbuildinfo
 apps/web/fixtures/spread-reversion-historical-export.json
+
+.vercel
+apps/web/.vercel

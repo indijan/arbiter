@@ -74,8 +74,9 @@ export function writeHotSnapshots(rows: HotSnapshotRow[]) {
   const purge = db.prepare(`DELETE FROM market_snapshots_recent WHERE ts < ?`);
   const retentionFloor = new Date(Date.now() - HOT_DB_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
 
-  const tx = db.transaction((payload: HotSnapshotRow[]) => {
-    for (const row of payload) {
+  db.exec("BEGIN");
+  try {
+    for (const row of rows) {
       insert.run(
         row.ts,
         row.exchange,
@@ -90,9 +91,11 @@ export function writeHotSnapshots(rows: HotSnapshotRow[]) {
       );
     }
     purge.run(retentionFloor);
-  });
-
-  tx(rows);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function readRecentSpotSnapshots(args: {
