@@ -5,7 +5,7 @@ import { detectCrossExchangeSpot } from "@/server/jobs/detectCrossExchangeSpot";
 import { detectTriangular } from "@/server/jobs/detectTriangular";
 import type { StrategyOpportunity } from "@/server/engine/pipeline/model";
 
-const LOOKBACK_MINUTES = 12;
+const LOOKBACK_MINUTES = 35;
 
 function asNumber(v: unknown, fallback = 0) {
   const n = Number(v);
@@ -28,7 +28,7 @@ export async function runStrategyStep(): Promise<{
   const since = new Date(Date.now() - LOOKBACK_MINUTES * 60 * 1000).toISOString();
   const { data, error } = await admin
     .from("opportunities")
-    .select("id, type, exchange, symbol, net_edge_bps, expected_daily_bps, details")
+    .select("id, ts, type, exchange, symbol, net_edge_bps, expected_daily_bps, details")
     .gte("ts", since)
     .order("ts", { ascending: false })
     .limit(150);
@@ -61,7 +61,7 @@ export async function runStrategyStep(): Promise<{
       break_even_hours: breakEven,
       risk_score: 0,
       time_horizon_hours: 24,
-      metadata: details
+      metadata: { ...details, ts: row.ts }
     };
   });
 

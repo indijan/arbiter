@@ -33,4 +33,14 @@ export type EvaluatedOpportunity = StrategyOpportunity & {
   execution_ready: true;
   auto_trade_candidate: boolean;
   confidence_score: number;
+  maker_net_edge_bps: number;
+  taker_net_edge_bps: number | null;
+  persistence_ticks: number;
+  first_seen_ts: string | null;
+  last_seen_ts: string | null;
+  lifetime_minutes: number;
+  execution_fragile: boolean;
+  consumed_risk_score: number;
+  auto_trade_exclusion_reasons: string[];
+  decision_trace: string[];
 };

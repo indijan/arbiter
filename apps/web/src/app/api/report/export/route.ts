@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { evaluateOpportunity, opportunityKey } from "@/lib/decision/evaluator";
 
 type ExportType = "latest" | "24h" | "7d" | "strategy" | "full";
 type PacketWindow = Exclude<ExportType, "full">;
@@ -25,6 +26,28 @@ function topReasons(decisions: Array<{ reject_reason: string | null }>) {
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
     .map(([reason, count]) => ({ reason, count }));
+}
+
+function buildPersistence(
+  opportunities: Array<{ ts: string; type: string; exchange: string; symbol: string }>
+) {
+  const map = new Map<string, { count: number; first: string | null; last: string | null }>();
+  for (const item of opportunities) {
+    const key = opportunityKey({ strategy: item.type, exchange: item.exchange, symbol: item.symbol });
+    const existing = map.get(key) ?? { count: 0, first: null, last: null };
+    existing.count += 1;
+    if (!existing.first || item.ts < existing.first) existing.first = item.ts;
+    if (!existing.last || item.ts > existing.last) existing.last = item.ts;
+    map.set(key, existing);
+  }
+  return map;
+}
+
+function consumedRiskFor(strategy: string, decisions: Array<{ variant: string; reject_reason: string | null }>) {
+  const relevant = decisions.filter((d) => d.variant === strategy || d.variant === "A");
+  if (relevant.length === 0) return 0;
+  const consumed = relevant.filter((d) => d.reject_reason === "opportunity_already_consumed").length;
+  return Math.min(100, (consumed / relevant.length) * 100);
 }
 
 async function buildPacket(args: {
@@ -67,22 +90,6 @@ async function buildPacket(args: {
         .limit(type === "latest" ? 20 : 200)
     ]);
 
-  const topOpps = (opportunities ?? []).slice(0, 5).map((item) => {
-    const score = Math.max(0, Math.min(100, normalizeNumber(item.net_edge_bps) * 4));
-    return {
-      id: item.id,
-      ts: item.ts,
-      strategy: item.type,
-      exchange: item.exchange,
-      symbol: item.symbol,
-      net_edge_bps: normalizeNumber(item.net_edge_bps),
-      execution_ready: true,
-      auto_trade_candidate: score >= 70,
-      confidence_score: Number(score.toFixed(1)),
-      metadata: item.details ?? {}
-    };
-  });
-
   const allDecisions = (decisions ?? []) as Array<{
     ts: string;
     variant: string;
@@ -90,6 +97,63 @@ async function buildPacket(args: {
     chosen: boolean;
     reject_reason: string | null;
   }>;
+  const persistence = buildPersistence((opportunities ?? []) as Array<{ ts: string; type: string; exchange: string; symbol: string }>);
+  const evaluatedOpps = (opportunities ?? []).map((item) => {
+    const key = opportunityKey({ strategy: item.type, exchange: item.exchange, symbol: item.symbol });
+    const seen = persistence.get(key);
+    const first = seen?.first ?? item.ts;
+    const last = seen?.last ?? item.ts;
+    const lifetime = (new Date(last).getTime() - new Date(first).getTime()) / 60000;
+    const evaluation = evaluateOpportunity({
+      strategy: item.type,
+      exchange: item.exchange,
+      symbol: item.symbol,
+      net_edge_bps: normalizeNumber(item.net_edge_bps),
+      metadata: item.details ?? {},
+      persistence_ticks: seen?.count ?? 1,
+      first_seen_ts: first,
+      last_seen_ts: last,
+      lifetime_minutes: lifetime,
+      consumed_risk_score: consumedRiskFor(item.type, allDecisions)
+    });
+
+    return {
+      id: item.id,
+      ts: item.ts,
+      strategy: item.type,
+      exchange: item.exchange,
+      symbol: item.symbol,
+      net_edge_bps: normalizeNumber(item.net_edge_bps),
+      maker_net_edge_bps: evaluation.maker_net_edge_bps,
+      taker_net_edge_bps: evaluation.taker_net_edge_bps,
+      execution_ready: true,
+      auto_trade_candidate: evaluation.auto_trade_candidate,
+      confidence_score: evaluation.confidence_score,
+      score: evaluation.score,
+      decision: evaluation.decision,
+      persistence_ticks: evaluation.persistence_ticks,
+      first_seen_ts: evaluation.first_seen_ts,
+      last_seen_ts: evaluation.last_seen_ts,
+      lifetime_minutes: evaluation.lifetime_minutes,
+      execution_fragile: evaluation.execution_fragile,
+      consumed_risk_score: evaluation.consumed_risk_score,
+      auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
+      decision_trace: evaluation.decision_trace,
+      metadata: {
+        ...(item.details ?? {}),
+        execution_fragile: evaluation.execution_fragile,
+        auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons
+      }
+    };
+  });
+
+  const topOpps = evaluatedOpps
+    .filter((item) => item.maker_net_edge_bps >= 1.5)
+    .filter((item) => item.confidence_score >= 6)
+    .filter((item) => item.persistence_ticks >= 3 || item.lifetime_minutes >= 20)
+    .filter((item) => item.consumed_risk_score < 50)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
   const nearMisses = allDecisions
     .filter((d) => !d.chosen)
@@ -126,6 +190,8 @@ async function buildPacket(args: {
     })),
     period_summary: {
       total_opportunities: (opportunities ?? []).length,
+      decision_capable_opportunities: topOpps.length,
+      execution_fragile_count: evaluatedOpps.filter((x) => x.execution_fragile).length,
       chosen_count: allDecisions.filter((d) => d.chosen).length,
       skipped_count: allDecisions.filter((d) => !d.chosen).length
     },

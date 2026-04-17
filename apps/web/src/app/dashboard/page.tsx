@@ -4,6 +4,7 @@ import ReportExportButtons from "@/components/ReportExportButtons";
 import AdvancedViewTable from "@/components/AdvancedViewTable";
 import StrategyLearningPanel from "@/components/StrategyLearningPanel";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
+import { evaluateOpportunity } from "@/lib/decision/evaluator";
 
 type OpportunityRow = {
   id: number;
@@ -45,20 +46,19 @@ function formatTs(value: string | null | undefined) {
   return new Date(value).toLocaleString("hu-HU");
 }
 
-function decisionFromScore(score: number) {
-  if (score < 25) return "ignore";
-  if (score < 45) return "watch";
-  if (score < 65) return "strong_watch";
-  if (score < 80) return "paper_candidate";
-  return "future_auto_candidate";
-}
-
 function scoreOpportunity(opportunity: OpportunityRow) {
-  const netEdge = asNumber(opportunity.net_edge_bps);
-  const confidence = asNumber(opportunity.confidence, 0.5);
-  const funding = asNumber(opportunity.details?.funding_rate);
-  const base = netEdge * 3.6 + confidence * 18 + funding * 250;
-  return Math.max(0, Math.min(100, Number(base.toFixed(1))));
+  return evaluateOpportunity({
+    strategy: opportunity.type,
+    exchange: opportunity.exchange,
+    symbol: opportunity.symbol,
+    net_edge_bps: asNumber(opportunity.net_edge_bps),
+    metadata: opportunity.details ?? {},
+    persistence_ticks: 1,
+    first_seen_ts: opportunity.ts,
+    last_seen_ts: opportunity.ts,
+    lifetime_minutes: 0,
+    consumed_risk_score: 0
+  });
 }
 
 function whyInteresting(opportunity: OpportunityRow) {
@@ -122,9 +122,8 @@ export default async function DashboardPage() {
   const typedOpportunities = (opportunities ?? []) as OpportunityRow[];
   const ranked = typedOpportunities
     .map((opp) => {
-      const score = scoreOpportunity(opp);
-      const decision = decisionFromScore(score);
-      return { opp, score, decision };
+      const evaluation = scoreOpportunity(opp);
+      return { opp, score: evaluation.score, decision: evaluation.decision, evaluation };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
@@ -142,18 +141,17 @@ export default async function DashboardPage() {
     .filter((x) => x.mid > 0);
 
   const learningOpportunitySeries = typedOpportunities.slice(0, 40).map((opp) => {
-    const score = scoreOpportunity(opp);
-    const decision = decisionFromScore(score);
+    const evaluation = scoreOpportunity(opp);
     return {
       ts: opp.ts,
       symbol: opp.symbol,
       strategy: opp.type,
-      decision,
-      score,
-      reason: whyInteresting(opp),
-      net_edge_bps: asNumber(opp.net_edge_bps),
+      decision: evaluation.decision,
+      score: evaluation.score,
+      reason: evaluation.reason,
+      net_edge_bps: evaluation.maker_net_edge_bps,
       break_even_hours: asNumber(opp.details?.break_even_hours, 0),
-      risk_score: Math.max(1, 100 - score)
+      risk_score: 100 - evaluation.score
     };
   });
 
@@ -164,15 +162,14 @@ export default async function DashboardPage() {
   }));
 
   const liveAdvancedRows = typedOpportunities.slice(0, 20).map((opp) => {
-    const score = scoreOpportunity(opp);
-    const decision = decisionFromScore(score);
+    const evaluation = scoreOpportunity(opp);
     return {
       ts: opp.ts,
       strategy: opp.type,
       symbol: opp.symbol,
-      score,
-      decision,
-      reason: whyInteresting(opp)
+      score: evaluation.score,
+      decision: evaluation.decision,
+      reason: evaluation.auto_trade_exclusion_reasons.join(", ") || evaluation.reason
     };
   });
 

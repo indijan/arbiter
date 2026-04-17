@@ -1,36 +1,60 @@
 import "server-only";
 import type { EvaluatedOpportunity, StrategyOpportunity } from "@/server/engine/pipeline/model";
+import { evaluateOpportunity, opportunityKey } from "@/lib/decision/evaluator";
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function decisionFromScore(score: number): EvaluatedOpportunity["decision"] {
-  if (score < 25) return "ignore";
-  if (score < 45) return "watch";
-  if (score < 65) return "strong_watch";
-  if (score < 80) return "paper_candidate";
-  return "future_auto_candidate";
+function buildPersistence(opportunities: StrategyOpportunity[]) {
+  const map = new Map<string, { count: number; first: string | null; last: string | null }>();
+  for (const item of opportunities) {
+    const key = opportunityKey(item);
+    const ts = typeof item.metadata.ts === "string" ? item.metadata.ts : null;
+    const existing = map.get(key) ?? { count: 0, first: null, last: null };
+    existing.count += 1;
+    if (ts && (!existing.first || ts < existing.first)) existing.first = ts;
+    if (ts && (!existing.last || ts > existing.last)) existing.last = ts;
+    map.set(key, existing);
+  }
+  return map;
 }
 
 export function runEvaluateStep(opportunities: StrategyOpportunity[]): EvaluatedOpportunity[] {
+  const persistence = buildPersistence(opportunities);
   return opportunities.map((item) => {
-    const edgeScore = clamp(item.net_edge_bps * 2.5, -25, 60);
-    const fundingScore = clamp((item.funding_daily_bps ?? 0) * 0.4, -10, 20);
-    const breakEvenPenalty = item.break_even_hours === null ? 0 : clamp((item.break_even_hours - 24) * 0.4, 0, 25);
-    const riskScore = clamp(50 - item.net_edge_bps * 1.3 + breakEvenPenalty, 1, 100);
-    const score = clamp(Number((40 + edgeScore + fundingScore - breakEvenPenalty).toFixed(1)), 0, 100);
-    const decision = decisionFromScore(score);
+    const seen = persistence.get(opportunityKey(item));
+    const first = seen?.first ?? null;
+    const last = seen?.last ?? null;
+    const lifetime = first && last ? (new Date(last).getTime() - new Date(first).getTime()) / 60000 : 0;
+    const evaluation = evaluateOpportunity({
+      strategy: item.strategy,
+      exchange: item.exchange,
+      symbol: item.symbol,
+      net_edge_bps: item.net_edge_bps,
+      metadata: item.metadata,
+      persistence_ticks: seen?.count ?? 1,
+      first_seen_ts: first,
+      last_seen_ts: last,
+      lifetime_minutes: lifetime,
+      consumed_risk_score: 0
+    });
 
     return {
       ...item,
-      risk_score: Number(riskScore.toFixed(1)),
-      score,
-      decision,
-      reason: `edge=${item.net_edge_bps.toFixed(2)} bps, risk=${riskScore.toFixed(1)}`,
+      risk_score: Number((100 - evaluation.score).toFixed(1)),
+      score: evaluation.score,
+      decision: evaluation.decision,
+      reason: evaluation.reason,
       execution_ready: true,
-      auto_trade_candidate: decision === "future_auto_candidate",
-      confidence_score: score
+      auto_trade_candidate: evaluation.auto_trade_candidate,
+      confidence_score: evaluation.confidence_score,
+      maker_net_edge_bps: evaluation.maker_net_edge_bps,
+      taker_net_edge_bps: evaluation.taker_net_edge_bps,
+      persistence_ticks: evaluation.persistence_ticks,
+      first_seen_ts: evaluation.first_seen_ts,
+      last_seen_ts: evaluation.last_seen_ts,
+      lifetime_minutes: evaluation.lifetime_minutes,
+      execution_fragile: evaluation.execution_fragile,
+      consumed_risk_score: evaluation.consumed_risk_score,
+      auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
+      decision_trace: evaluation.decision_trace
     };
   });
 }
