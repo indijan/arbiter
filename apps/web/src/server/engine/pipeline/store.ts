@@ -9,6 +9,7 @@ export async function runStoreStep(params: {
   strategyInserted: Record<string, number>;
   evaluated: EvaluatedOpportunity[];
   top: EvaluatedOpportunity[];
+  nearTop: EvaluatedOpportunity[];
   nearMisses: EvaluatedOpportunity[];
 }) {
   const admin = createAdminSupabase();
@@ -27,6 +28,7 @@ export async function runStoreStep(params: {
       evaluation: {
         evaluated: params.evaluated.length,
         top_count: params.top.length,
+        near_top_count: params.nearTop.length,
         near_miss_count: params.nearMisses.length
       },
       watchlist: params.top.map((x) => ({
@@ -34,14 +36,28 @@ export async function runStoreStep(params: {
         strategy: x.strategy,
         symbol: x.symbol,
         score: x.score,
-        decision: x.decision
+        decision: x.decision,
+        decision_support_state: x.decision_support_state
+      })),
+      near_top: params.nearTop.map((x) => ({
+        opportunity_id: x.opportunity_id,
+        strategy: x.strategy,
+        symbol: x.symbol,
+        score: x.score,
+        decision: x.decision,
+        decision_support_state: x.decision_support_state,
+        failed_checks: x.failed_checks,
+        primary_failure_reason: x.primary_failure_reason,
+        score_components: x.score_components
       })),
       near_misses: params.nearMisses.map((x) => ({
         opportunity_id: x.opportunity_id,
         strategy: x.strategy,
         symbol: x.symbol,
         score: x.score,
-        decision: x.decision
+        decision: x.decision,
+        decision_support_state: x.decision_support_state,
+        primary_failure_reason: x.primary_failure_reason
       }))
     }
   };

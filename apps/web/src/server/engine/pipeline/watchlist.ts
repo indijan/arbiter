@@ -3,17 +3,16 @@ import type { EvaluatedOpportunity } from "@/server/engine/pipeline/model";
 
 export function runWatchlistStep(rows: EvaluatedOpportunity[]) {
   const sorted = rows.slice().sort((a, b) => b.score - a.score);
-  const top = sorted
-    .filter((r) => r.maker_net_edge_bps >= 1.5)
-    .filter((r) => r.confidence_score >= 6)
-    .filter((r) => r.persistence_ticks >= 3 || r.lifetime_minutes >= 20)
-    .filter((r) => r.consumed_risk_score < 50)
-    .filter((r) => r.decision !== "ignore")
+  const top = sorted.filter((r) => r.qualified_for_top_list).slice(0, 5);
+  const nearTop = sorted
+    .filter((r) => !r.qualified_for_top_list)
+    .filter((r) => r.decision_support_state === "near_decision_capable" || r.qualified_for_decision_capable)
     .slice(0, 5);
   const nearMisses = sorted.filter((r) => r.decision === "watch" || r.decision === "strong_watch").slice(0, 8);
 
   return {
     top,
+    nearTop,
     nearMisses,
     counts: rows.reduce(
       (acc, row) => {

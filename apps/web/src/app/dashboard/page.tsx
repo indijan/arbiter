@@ -36,6 +36,37 @@ type PositionRow = {
   exit_ts: string | null;
 };
 
+function canonicalSymbol(raw: string) {
+  return raw.replace(/USDT$/i, "USD");
+}
+
+function learningSymbolsFrom(opportunities: OpportunityRow[]) {
+  const counts = new Map<string, number>();
+  for (const opportunity of opportunities) {
+    const canonical = canonicalSymbol(opportunity.symbol);
+    counts.set(canonical, (counts.get(canonical) ?? 0) + 1);
+  }
+
+  const preferred = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([symbol]) => symbol);
+
+  if (preferred.length > 0) return preferred;
+  return ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "BNBUSD"];
+}
+
+function snapshotSymbolVariants(symbols: string[]) {
+  return Array.from(
+    new Set(
+      symbols.flatMap((symbol) => {
+        const base = symbol.replace(/USDT$/i, "").replace(/USD$/i, "");
+        return [`${base}USD`, `${base}USDT`];
+      })
+    )
+  );
+}
+
 function asNumber(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -94,7 +125,7 @@ export default async function DashboardPage() {
 
   const snapshotsSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: latestTick }, { data: opportunities }, { data: snapshots }, { data: positions }] = await Promise.all([
+  const [{ data: latestTick }, { data: opportunities }, { data: positions }] = await Promise.all([
     supabase
       .from("system_ticks")
       .select("ts, ingest_errors, detect_summary")
@@ -105,13 +136,7 @@ export default async function DashboardPage() {
       .from("opportunities")
       .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
       .order("ts", { ascending: false })
-      .limit(20),
-    supabase
-      .from("market_snapshots")
-      .select("ts, symbol, spot_bid, spot_ask")
-      .gte("ts", snapshotsSince)
-      .order("ts", { ascending: false })
-      .limit(5000),
+      .limit(80),
     supabase
       .from("positions")
       .select("symbol, entry_ts, exit_ts")
@@ -120,6 +145,16 @@ export default async function DashboardPage() {
   ]);
 
   const typedOpportunities = (opportunities ?? []) as OpportunityRow[];
+  const learningSymbols = learningSymbolsFrom(typedOpportunities);
+  const snapshotSymbols = snapshotSymbolVariants(learningSymbols);
+  const { data: snapshots } = await supabase
+    .from("market_snapshots")
+    .select("ts, symbol, spot_bid, spot_ask")
+    .in("symbol", snapshotSymbols)
+    .gte("ts", snapshotsSince)
+    .order("ts", { ascending: false })
+    .limit(20000);
+
   const ranked = typedOpportunities
     .map((opp) => {
       const evaluation = scoreOpportunity(opp);

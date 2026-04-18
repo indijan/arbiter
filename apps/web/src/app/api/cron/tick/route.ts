@@ -27,6 +27,7 @@ async function handleTick(request: Request) {
       strategyInserted: strategy.inserted,
       evaluated,
       top: watchlist.top,
+      nearTop: watchlist.nearTop,
       nearMisses: watchlist.nearMisses
     });
 
@@ -46,6 +47,7 @@ async function handleTick(request: Request) {
       },
       watchlist: {
         top: watchlist.top,
+        near_top: watchlist.nearTop,
         near_misses: watchlist.nearMisses
       }
     });

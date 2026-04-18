@@ -50,6 +50,87 @@ function consumedRiskFor(strategy: string, decisions: Array<{ variant: string; r
   return Math.min(100, (consumed / relevant.length) * 100);
 }
 
+function countFailed(evaluated: Array<{ failed_checks: string[] }>, check: string) {
+  return evaluated.filter((item) => item.failed_checks.includes(check)).length;
+}
+
+function summarizeRelativeStrength(
+  evaluated: Array<{
+    strategy: string;
+    decision_support_state: string;
+    confidence_score: number;
+    failed_checks: string[];
+  }>
+) {
+  const rows = evaluated.filter((item) => item.strategy === "relative_strength");
+  return {
+    total: rows.length,
+    observation_noise: rows.filter(
+      (item) =>
+        (item.decision_support_state === "ignored" || item.decision_support_state === "watch") &&
+        item.confidence_score < 6
+    ).length,
+    outliers: rows.filter((item) => item.confidence_score >= 8).length,
+    near_decision_capable: rows.filter((item) => item.decision_support_state === "near_decision_capable").length,
+    decision_capable: rows.filter((item) => item.decision_support_state === "decision_capable").length,
+    capped_by_strategy_filter: rows.filter((item) => item.failed_checks.includes("strategy_filter_relative_strength")).length
+  };
+}
+
+function summarizeStrategyDiagnostics(
+  evaluated: Array<{
+    strategy: string;
+    decision_support_state: string;
+    qualified_for_top_list: boolean;
+    qualified_for_decision_capable: boolean;
+    failed_checks: string[];
+  }>
+) {
+  const grouped = evaluated.reduce(
+    (acc, item) => {
+      const current = acc[item.strategy] ?? {
+        strategy: item.strategy,
+        total: 0,
+        top_qualified: 0,
+        decision_capable: 0,
+        near_decision_capable: 0,
+        failed_due_to_strategy_filter: 0,
+        failed_due_to_consumed_risk: 0,
+        failed_due_to_persistence: 0,
+        failed_due_to_insufficient_edge: 0
+      };
+      current.total += 1;
+      if (item.qualified_for_top_list) current.top_qualified += 1;
+      if (item.qualified_for_decision_capable) current.decision_capable += 1;
+      if (item.decision_support_state === "near_decision_capable") current.near_decision_capable += 1;
+      if (item.failed_checks.some((check) => check.startsWith("strategy_filter"))) {
+        current.failed_due_to_strategy_filter += 1;
+      }
+      if (item.failed_checks.includes("high_consumption_risk")) current.failed_due_to_consumed_risk += 1;
+      if (item.failed_checks.includes("insufficient_persistence")) current.failed_due_to_persistence += 1;
+      if (item.failed_checks.includes("insufficient_edge_for_top")) current.failed_due_to_insufficient_edge += 1;
+      acc[item.strategy] = current;
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        strategy: string;
+        total: number;
+        top_qualified: number;
+        decision_capable: number;
+        near_decision_capable: number;
+        failed_due_to_strategy_filter: number;
+        failed_due_to_consumed_risk: number;
+        failed_due_to_persistence: number;
+        failed_due_to_insufficient_edge: number;
+      }
+    >
+  );
+
+  return Object.values(grouped).sort((a, b) => b.total - a.total);
+}
+
 async function buildPacket(args: {
   supabase: NonNullable<ReturnType<typeof createServerSupabase>>;
   userId: string;
@@ -139,19 +220,38 @@ async function buildPacket(args: {
       consumed_risk_score: evaluation.consumed_risk_score,
       auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
       decision_trace: evaluation.decision_trace,
+      decision_support_state: evaluation.decision_support_state,
+      qualified_for_top_list: evaluation.qualified_for_top_list,
+      qualified_for_decision_capable: evaluation.qualified_for_decision_capable,
+      failed_checks: evaluation.failed_checks,
+      primary_failure_reason: evaluation.primary_failure_reason,
+      score_components: evaluation.score_components,
       metadata: {
         ...(item.details ?? {}),
         execution_fragile: evaluation.execution_fragile,
-        auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons
+        auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
+        decision_support_state: evaluation.decision_support_state,
+        qualified_for_top_list: evaluation.qualified_for_top_list,
+        qualified_for_decision_capable: evaluation.qualified_for_decision_capable,
+        failed_checks: evaluation.failed_checks,
+        primary_failure_reason: evaluation.primary_failure_reason,
+        score_components: evaluation.score_components
       }
     };
   });
 
   const topOpps = evaluatedOpps
-    .filter((item) => item.maker_net_edge_bps >= 1.5)
-    .filter((item) => item.confidence_score >= 6)
-    .filter((item) => item.persistence_ticks >= 3 || item.lifetime_minutes >= 20)
-    .filter((item) => item.consumed_risk_score < 50)
+    .filter((item) => item.qualified_for_top_list)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  const nearTopOpps = evaluatedOpps
+    .filter((item) => !item.qualified_for_top_list)
+    .filter(
+      (item) =>
+        item.decision_support_state === "near_decision_capable" ||
+        (item.qualified_for_decision_capable && item.failed_checks.length <= 2)
+    )
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
@@ -179,6 +279,8 @@ async function buildPacket(args: {
       errors: (latestTick?.detect_summary as any)?.errors ?? []
     },
     top_opportunities: topOpps,
+    near_top_opportunities: nearTopOpps,
+    filtered_but_notable_opportunities: nearTopOpps,
     near_misses: nearMisses,
     paper_results: (paperResults ?? []).map((row) => ({
       id: row.id,
@@ -191,10 +293,20 @@ async function buildPacket(args: {
     period_summary: {
       total_opportunities: (opportunities ?? []).length,
       decision_capable_opportunities: topOpps.length,
+      near_decision_capable_count: evaluatedOpps.filter((x) => x.decision_support_state === "near_decision_capable").length,
       execution_fragile_count: evaluatedOpps.filter((x) => x.execution_fragile).length,
+      failed_due_to_consumed_risk: countFailed(evaluatedOpps, "high_consumption_risk"),
+      failed_due_to_persistence: countFailed(evaluatedOpps, "insufficient_persistence"),
+      failed_due_to_insufficient_edge: countFailed(evaluatedOpps, "insufficient_edge_for_top"),
+      failed_due_to_execution_fragility: countFailed(evaluatedOpps, "execution_fragile"),
+      failed_due_to_strategy_filter: evaluatedOpps.filter((x) =>
+        x.failed_checks.some((check) => check.startsWith("strategy_filter"))
+      ).length,
       chosen_count: allDecisions.filter((d) => d.chosen).length,
       skipped_count: allDecisions.filter((d) => !d.chosen).length
     },
+    relative_strength_summary: summarizeRelativeStrength(evaluatedOpps),
+    strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedOpps),
     by_strategy: Object.entries(
       (opportunities ?? []).reduce((acc, row) => {
         const k = row.type;

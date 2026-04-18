@@ -54,7 +54,13 @@ export function runEvaluateStep(opportunities: StrategyOpportunity[]): Evaluated
       execution_fragile: evaluation.execution_fragile,
       consumed_risk_score: evaluation.consumed_risk_score,
       auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
-      decision_trace: evaluation.decision_trace
+      decision_trace: evaluation.decision_trace,
+      decision_support_state: evaluation.decision_support_state,
+      qualified_for_top_list: evaluation.qualified_for_top_list,
+      qualified_for_decision_capable: evaluation.qualified_for_decision_capable,
+      failed_checks: evaluation.failed_checks,
+      primary_failure_reason: evaluation.primary_failure_reason,
+      score_components: evaluation.score_components
     };
   });
 }

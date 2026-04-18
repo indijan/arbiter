@@ -43,4 +43,17 @@ export type EvaluatedOpportunity = StrategyOpportunity & {
   consumed_risk_score: number;
   auto_trade_exclusion_reasons: string[];
   decision_trace: string[];
+  decision_support_state: "ignored" | "watch" | "near_decision_capable" | "decision_capable";
+  qualified_for_top_list: boolean;
+  qualified_for_decision_capable: boolean;
+  failed_checks: string[];
+  primary_failure_reason: string | null;
+  score_components: {
+    edge: number;
+    persistence: number;
+    confidence: number;
+    consumed_risk_penalty: number;
+    execution_fragility_penalty: number;
+    strategy_penalty: number;
+  };
 };
