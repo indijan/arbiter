@@ -37,7 +37,11 @@ export async function runStoreStep(params: {
         symbol: x.symbol,
         score: x.score,
         decision: x.decision,
-        decision_support_state: x.decision_support_state
+        decision_support_state: x.decision_support_state,
+        strategy_signal_family: x.strategy_signal_family,
+        execution_recommendation_state: x.execution_recommendation_state,
+        execution_viability_score: x.execution_viability_score,
+        regime_key: x.regime_key
       })),
       near_top: params.nearTop.map((x) => ({
         opportunity_id: x.opportunity_id,
@@ -46,6 +50,9 @@ export async function runStoreStep(params: {
         score: x.score,
         decision: x.decision,
         decision_support_state: x.decision_support_state,
+        strategy_signal_family: x.strategy_signal_family,
+        execution_recommendation_state: x.execution_recommendation_state,
+        execution_viability_score: x.execution_viability_score,
         failed_checks: x.failed_checks,
         primary_failure_reason: x.primary_failure_reason,
         score_components: x.score_components

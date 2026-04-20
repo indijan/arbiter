@@ -54,15 +54,38 @@ function countFailed(evaluated: Array<{ failed_checks: string[] }>, check: strin
   return evaluated.filter((item) => item.failed_checks.includes(check)).length;
 }
 
+function dedupeByRegime<T extends { regime_key: string | null; id: number }>(rows: T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.regime_key ?? `id:${row.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function summarizeRelativeStrength(
   evaluated: Array<{
     strategy: string;
     decision_support_state: string;
+    decision_capable_market_signal: boolean;
     confidence_score: number;
     failed_checks: string[];
+    regime_key: string | null;
   }>
 ) {
   const rows = evaluated.filter((item) => item.strategy === "relative_strength");
+  const regimeCounts = rows.reduce(
+    (acc, item) => {
+      const key = item.regime_key ?? "unknown_regime";
+      const current = acc[key] ?? { regime_key: key, total: 0, decision_capable_market_signal: 0 };
+      current.total += 1;
+      if (item.decision_capable_market_signal) current.decision_capable_market_signal += 1;
+      acc[key] = current;
+      return acc;
+    },
+    {} as Record<string, { regime_key: string; total: number; decision_capable_market_signal: number }>
+  );
   return {
     total: rows.length,
     observation_noise: rows.filter(
@@ -72,8 +95,9 @@ function summarizeRelativeStrength(
     ).length,
     outliers: rows.filter((item) => item.confidence_score >= 8).length,
     near_decision_capable: rows.filter((item) => item.decision_support_state === "near_decision_capable").length,
-    decision_capable: rows.filter((item) => item.decision_support_state === "decision_capable").length,
-    capped_by_strategy_filter: rows.filter((item) => item.failed_checks.includes("strategy_filter_relative_strength")).length
+    decision_capable_market_signal: rows.filter((item) => item.decision_capable_market_signal).length,
+    capped_by_strategy_filter: rows.filter((item) => item.failed_checks.includes("strategy_filter_relative_strength")).length,
+    regimes: Object.values(regimeCounts).sort((a, b) => b.total - a.total)
   };
 }
 
@@ -83,6 +107,11 @@ function summarizeStrategyDiagnostics(
     decision_support_state: string;
     qualified_for_top_list: boolean;
     qualified_for_decision_capable: boolean;
+    decision_capable_market_signal: boolean;
+    decision_capable_execution_signal: boolean;
+    strategy_local_decision_capable: boolean;
+    strategy_signal_family: string;
+    execution_recommendation_state: string;
     failed_checks: string[];
   }>
 ) {
@@ -90,25 +119,36 @@ function summarizeStrategyDiagnostics(
     (acc, item) => {
       const current = acc[item.strategy] ?? {
         strategy: item.strategy,
+        strategy_signal_family: item.strategy_signal_family,
         total: 0,
         top_qualified: 0,
-        decision_capable: 0,
+        global_execution_decision_capable: 0,
+        strategy_local_decision_capable: 0,
+        decision_capable_market_signal: 0,
+        decision_capable_execution_signal: 0,
         near_decision_capable: 0,
+        conditional_execution: 0,
         failed_due_to_strategy_filter: 0,
         failed_due_to_consumed_risk: 0,
         failed_due_to_persistence: 0,
-        failed_due_to_insufficient_edge: 0
+        failed_due_to_insufficient_edge: 0,
+        failed_due_to_execution_fragility: 0
       };
       current.total += 1;
       if (item.qualified_for_top_list) current.top_qualified += 1;
-      if (item.qualified_for_decision_capable) current.decision_capable += 1;
+      if (item.qualified_for_decision_capable) current.global_execution_decision_capable += 1;
+      if (item.strategy_local_decision_capable) current.strategy_local_decision_capable += 1;
+      if (item.decision_capable_market_signal) current.decision_capable_market_signal += 1;
+      if (item.decision_capable_execution_signal) current.decision_capable_execution_signal += 1;
       if (item.decision_support_state === "near_decision_capable") current.near_decision_capable += 1;
+      if (item.execution_recommendation_state === "conditional_execution") current.conditional_execution += 1;
       if (item.failed_checks.some((check) => check.startsWith("strategy_filter"))) {
         current.failed_due_to_strategy_filter += 1;
       }
       if (item.failed_checks.includes("high_consumption_risk")) current.failed_due_to_consumed_risk += 1;
       if (item.failed_checks.includes("insufficient_persistence")) current.failed_due_to_persistence += 1;
       if (item.failed_checks.includes("insufficient_edge_for_top")) current.failed_due_to_insufficient_edge += 1;
+      if (item.failed_checks.includes("execution_fragile")) current.failed_due_to_execution_fragility += 1;
       acc[item.strategy] = current;
       return acc;
     },
@@ -116,19 +156,38 @@ function summarizeStrategyDiagnostics(
       string,
       {
         strategy: string;
+        strategy_signal_family: string;
         total: number;
         top_qualified: number;
-        decision_capable: number;
+        global_execution_decision_capable: number;
+        strategy_local_decision_capable: number;
+        decision_capable_market_signal: number;
+        decision_capable_execution_signal: number;
         near_decision_capable: number;
+        conditional_execution: number;
         failed_due_to_strategy_filter: number;
         failed_due_to_consumed_risk: number;
         failed_due_to_persistence: number;
         failed_due_to_insufficient_edge: number;
+        failed_due_to_execution_fragility: number;
       }
     >
   );
 
   return Object.values(grouped).sort((a, b) => b.total - a.total);
+}
+
+function summarizeNearDecisionClusters(evaluated: Array<{ decision_support_state: string; failed_checks: string[] }>) {
+  const near = evaluated.filter((item) => item.decision_support_state === "near_decision_capable");
+  return {
+    total: near.length,
+    near_due_to_execution_fragility: near.filter((item) => item.failed_checks.includes("execution_fragile")).length,
+    near_due_to_insufficient_edge: near.filter((item) => item.failed_checks.includes("insufficient_edge_for_top")).length,
+    near_due_to_persistence: near.filter((item) => item.failed_checks.includes("insufficient_persistence")).length,
+    near_due_to_strategy_filter: near.filter((item) =>
+      item.failed_checks.some((check) => check.startsWith("strategy_filter"))
+    ).length
+  };
 }
 
 async function buildPacket(args: {
@@ -221,6 +280,14 @@ async function buildPacket(args: {
       auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
       decision_trace: evaluation.decision_trace,
       decision_support_state: evaluation.decision_support_state,
+      strategy_signal_family: evaluation.strategy_signal_family,
+      decision_capable_market_signal: evaluation.decision_capable_market_signal,
+      decision_capable_execution_signal: evaluation.decision_capable_execution_signal,
+      strategy_local_decision_capable: evaluation.strategy_local_decision_capable,
+      execution_quality: evaluation.execution_quality,
+      execution_recommendation_state: evaluation.execution_recommendation_state,
+      execution_viability_score: evaluation.execution_viability_score,
+      regime_key: evaluation.regime_key,
       qualified_for_top_list: evaluation.qualified_for_top_list,
       qualified_for_decision_capable: evaluation.qualified_for_decision_capable,
       failed_checks: evaluation.failed_checks,
@@ -231,6 +298,14 @@ async function buildPacket(args: {
         execution_fragile: evaluation.execution_fragile,
         auto_trade_exclusion_reasons: evaluation.auto_trade_exclusion_reasons,
         decision_support_state: evaluation.decision_support_state,
+        strategy_signal_family: evaluation.strategy_signal_family,
+        decision_capable_market_signal: evaluation.decision_capable_market_signal,
+        decision_capable_execution_signal: evaluation.decision_capable_execution_signal,
+        strategy_local_decision_capable: evaluation.strategy_local_decision_capable,
+        execution_quality: evaluation.execution_quality,
+        execution_recommendation_state: evaluation.execution_recommendation_state,
+        execution_viability_score: evaluation.execution_viability_score,
+        regime_key: evaluation.regime_key,
         qualified_for_top_list: evaluation.qualified_for_top_list,
         qualified_for_decision_capable: evaluation.qualified_for_decision_capable,
         failed_checks: evaluation.failed_checks,
@@ -240,8 +315,22 @@ async function buildPacket(args: {
     };
   });
 
-  const topOpps = evaluatedOpps
-    .filter((item) => item.qualified_for_top_list)
+  const topMarketOpps = dedupeByRegime(
+    evaluatedOpps
+      .filter((item) => item.decision_capable_market_signal)
+      .sort((a, b) => b.score - a.score)
+  ).slice(0, 3);
+
+  const topExecutionOpps = evaluatedOpps
+    .filter(
+      (item) =>
+        item.decision_capable_execution_signal ||
+        item.execution_recommendation_state === "conditional_execution"
+    )
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  const topOpps = [...topExecutionOpps, ...topMarketOpps]
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
@@ -279,6 +368,8 @@ async function buildPacket(args: {
       errors: (latestTick?.detect_summary as any)?.errors ?? []
     },
     top_opportunities: topOpps,
+    top_market_opportunities: topMarketOpps,
+    top_execution_opportunities: topExecutionOpps,
     near_top_opportunities: nearTopOpps,
     filtered_but_notable_opportunities: nearTopOpps,
     near_misses: nearMisses,
@@ -292,9 +383,18 @@ async function buildPacket(args: {
     })),
     period_summary: {
       total_opportunities: (opportunities ?? []).length,
-      decision_capable_opportunities: topOpps.length,
+      global_execution_decision_capable_count: evaluatedOpps.filter((x) => x.qualified_for_decision_capable).length,
+      strategy_local_decision_capable_count: evaluatedOpps.filter((x) => x.strategy_local_decision_capable).length,
+      decision_capable_market_signal_count: evaluatedOpps.filter((x) => x.decision_capable_market_signal).length,
+      decision_capable_execution_signal_count: evaluatedOpps.filter((x) => x.decision_capable_execution_signal).length,
+      decision_capable_opportunities: evaluatedOpps.filter((x) => x.qualified_for_decision_capable).length,
+      top_opportunities_count: topOpps.length,
+      top_market_opportunities_count: topMarketOpps.length,
+      top_execution_opportunities_count: topExecutionOpps.length,
       near_decision_capable_count: evaluatedOpps.filter((x) => x.decision_support_state === "near_decision_capable").length,
       execution_fragile_count: evaluatedOpps.filter((x) => x.execution_fragile).length,
+      execution_conditionally_viable_count: evaluatedOpps.filter((x) => x.execution_recommendation_state === "conditional_execution").length,
+      execution_ready_count: evaluatedOpps.filter((x) => x.execution_recommendation_state === "execution_ready").length,
       failed_due_to_consumed_risk: countFailed(evaluatedOpps, "high_consumption_risk"),
       failed_due_to_persistence: countFailed(evaluatedOpps, "insufficient_persistence"),
       failed_due_to_insufficient_edge: countFailed(evaluatedOpps, "insufficient_edge_for_top"),
@@ -304,6 +404,14 @@ async function buildPacket(args: {
       ).length,
       chosen_count: allDecisions.filter((d) => d.chosen).length,
       skipped_count: allDecisions.filter((d) => !d.chosen).length
+    },
+    near_decision_capable_breakdown: summarizeNearDecisionClusters(evaluatedOpps),
+    consumed_risk_diagnostics: {
+      scored_items: evaluatedOpps.length,
+      non_zero_count: evaluatedOpps.filter((x) => x.consumed_risk_score > 0).length,
+      max_score: evaluatedOpps.reduce((max, item) => Math.max(max, item.consumed_risk_score), 0),
+      source_decisions_sampled: allDecisions.length,
+      opportunity_already_consumed_count: allDecisions.filter((d) => d.reject_reason === "opportunity_already_consumed").length
     },
     relative_strength_summary: summarizeRelativeStrength(evaluatedOpps),
     strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedOpps),

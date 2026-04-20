@@ -44,6 +44,24 @@ export type EvaluatedOpportunity = StrategyOpportunity & {
   auto_trade_exclusion_reasons: string[];
   decision_trace: string[];
   decision_support_state: "ignored" | "watch" | "near_decision_capable" | "decision_capable";
+  strategy_signal_family: "market_signal" | "execution_signal" | "generic_signal";
+  decision_capable_market_signal: boolean;
+  decision_capable_execution_signal: boolean;
+  strategy_local_decision_capable: boolean;
+  execution_quality:
+    | "not_applicable"
+    | "not_viable"
+    | "execution_fragile"
+    | "execution_conditionally_viable"
+    | "execution_ready";
+  execution_recommendation_state:
+    | "market_signal_only"
+    | "not_viable"
+    | "watch_only"
+    | "conditional_execution"
+    | "execution_ready";
+  execution_viability_score: number | null;
+  regime_key: string | null;
   qualified_for_top_list: boolean;
   qualified_for_decision_capable: boolean;
   failed_checks: string[];

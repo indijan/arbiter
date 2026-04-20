@@ -47,6 +47,8 @@ async function handleTick(request: Request) {
       },
       watchlist: {
         top: watchlist.top,
+        top_market: watchlist.topMarket,
+        top_execution: watchlist.topExecution,
         near_top: watchlist.nearTop,
         near_misses: watchlist.nearMisses
       }
