@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -85,12 +85,21 @@ export default function StrategyLearningPanel({
     }
     return merged;
   }, [opportunities, trades, symbols]);
-  const symbol = useMemo(() => {
+  const preferredSymbol = useMemo(() => {
     const preferred = symbols
       .slice()
       .sort((a, b) => (signalStats.get(b)?.total ?? 0) - (signalStats.get(a)?.total ?? 0))[0];
     return preferred ?? symbols[0] ?? "";
   }, [symbols, signalStats]);
+  const [selectedSymbol, setSelectedSymbol] = useState(preferredSymbol);
+
+  useEffect(() => {
+    if (!selectedSymbol || !symbols.includes(selectedSymbol)) {
+      setSelectedSymbol(preferredSymbol);
+    }
+  }, [preferredSymbol, selectedSymbol, symbols]);
+
+  const symbol = selectedSymbol;
 
   const series = useMemo(() => {
     const bySymbol = snapshots
@@ -223,6 +232,21 @@ export default function StrategyLearningPanel({
         <span className="rounded-lg border px-2 py-1 font-semibold" style={{ borderColor: "var(--line)" }}>
           {symbol || "-"}
         </span>
+        <label className="ml-2 text-xs" style={{ color: "var(--muted)" }}>
+          Symbol
+        </label>
+        <select
+          value={symbol}
+          onChange={(event) => setSelectedSymbol(event.target.value)}
+          className="rounded-md border px-2 py-1 text-xs"
+          style={{ borderColor: "var(--line)", background: "transparent", color: "var(--text)" }}
+        >
+          {symbols.map((value) => (
+            <option key={value} value={value} style={{ color: "#0f172a" }}>
+              {value}
+            </option>
+          ))}
+        </select>
         <div className="ml-2 flex items-center gap-1">
           {[1, 6, 24, 168].map((h) => (
             <button
@@ -230,10 +254,13 @@ export default function StrategyLearningPanel({
               type="button"
               onClick={() => setWindowHours(h as 1 | 6 | 24 | 168)}
               className="rounded-md border px-2 py-1 text-xs"
+              disabled={availableSpanHours < Math.min(h, 6) && availableSpanHours > 0}
               style={{
                 borderColor: "var(--line)",
                 background: windowHours === h ? "var(--accent)" : "transparent",
-                color: windowHours === h ? "#fff" : "var(--text)"
+                color: windowHours === h ? "#fff" : "var(--text)",
+                opacity: availableSpanHours < Math.min(h, 6) && availableSpanHours > 0 ? 0.45 : 1,
+                cursor: availableSpanHours < Math.min(h, 6) && availableSpanHours > 0 ? "not-allowed" : "pointer"
               }}
             >
               {h === 168 ? "7D" : `${h}H`}
@@ -259,6 +286,11 @@ export default function StrategyLearningPanel({
       <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
         Window: {windowHours === 168 ? "7D" : `${windowHours}H`} · available history: {availableSpanHours.toFixed(1)}h
       </p>
+      {availableSpanHours > 0 && availableSpanHours < windowHours ? (
+        <p className="mt-1 text-xs" style={{ color: "#fbbf24" }}>
+          Ehhez a symbolhoz az elérhető történet rövidebb a választott időablaknál. A grafikon csak a ténylegesen elérhető adatot mutatja.
+        </p>
+      ) : null}
 
       <div className="mt-3 h-[22rem] w-full rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "color-mix(in oklab, var(--card) 76%, transparent)" }}>
         {series.length === 0 ? (

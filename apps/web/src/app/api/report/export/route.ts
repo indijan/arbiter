@@ -190,6 +190,122 @@ function summarizeNearDecisionClusters(evaluated: Array<{ decision_support_state
   };
 }
 
+function executionTimelineKey(item: { strategy: string; exchange: string; symbol: string }) {
+  return `${item.strategy}:${item.exchange}:${item.symbol}`;
+}
+
+function effectiveNetEdge(item: { taker_net_edge_bps: number | null; maker_net_edge_bps: number }) {
+  return item.taker_net_edge_bps ?? item.maker_net_edge_bps;
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+type ExecutionAuditRow = {
+  id: number;
+  ts: string;
+  strategy: string;
+  exchange: string;
+  symbol: string;
+  maker_net_edge_bps: number;
+  taker_net_edge_bps: number | null;
+  persistence_ticks: number;
+  lifetime_minutes: number;
+  decision_capable_execution_signal: boolean;
+  execution_recommendation_state: string;
+  primary_failure_reason: string | null;
+};
+
+type ExecutionAudit = {
+  execution_grade: string;
+  taker_positive_margin_bps: number;
+  maker_vs_taker_gap_bps: number;
+  min_observed_net_edge_bps: number;
+  max_observed_net_edge_bps: number;
+  avg_observed_net_edge_bps: number;
+  net_edge_stability_score: number;
+  time_to_first_decision_capable_minutes: number | null;
+  execution_ready_duration_minutes: number;
+  downgrade_reason: string | null;
+  paper_exit_reason: string;
+  paper_peak_bps_after_signal: number;
+  paper_worst_bps_after_signal: number;
+};
+
+function buildExecutionAudit(rows: ExecutionAuditRow[]) {
+  const grouped = rows.reduce((acc, item) => {
+    const key = executionTimelineKey(item);
+    const current = acc.get(key) ?? ([] as ExecutionAuditRow[]);
+    current.push(item);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, ExecutionAuditRow[]>());
+
+  const audits = new Map<string, ExecutionAudit>();
+
+  for (const [key, timeline] of grouped.entries()) {
+    const ordered = timeline
+      .slice()
+      .sort((a: ExecutionAuditRow, b: ExecutionAuditRow) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const nets = ordered.map((item) => item.maker_net_edge_bps);
+    const takers = ordered.map((item) => item.taker_net_edge_bps ?? item.maker_net_edge_bps);
+    const stableMean = average(nets);
+    const range = Math.max(...nets) - Math.min(...nets);
+    const stability = stableMean <= 0 ? 0 : Math.max(0, Math.min(100, 100 - (range / stableMean) * 20));
+
+    const firstDecisionCapable = ordered.find((item) => item.decision_capable_execution_signal);
+    const readyRows = ordered.filter((item) => item.execution_recommendation_state === "execution_ready");
+    const lastReady = readyRows.at(-1) ?? null;
+    const afterReady = firstDecisionCapable
+      ? ordered.filter((item) => new Date(item.ts).getTime() >= new Date(firstDecisionCapable.ts).getTime())
+      : [];
+    const downgraded = lastReady
+      ? ordered.find((item) => new Date(item.ts).getTime() > new Date(lastReady.ts).getTime() && item.execution_recommendation_state !== "execution_ready")
+      : null;
+    const readyDuration =
+      readyRows.length >= 2
+        ? (new Date(readyRows[readyRows.length - 1].ts).getTime() - new Date(readyRows[0].ts).getTime()) / 60000
+        : readyRows.length === 1
+          ? readyRows[0].lifetime_minutes
+          : 0;
+    const paperPeak = afterReady.length > 0 ? Math.max(...afterReady.map((item) => effectiveNetEdge(item))) : 0;
+    const paperWorst = afterReady.length > 0 ? Math.min(...afterReady.map((item) => effectiveNetEdge(item))) : 0;
+    const paperExitReason = afterReady.length === 0
+      ? "no_post_signal_window"
+      : paperWorst < 0
+        ? "edge_reversal"
+        : afterReady.length > 1
+          ? "window_end"
+          : "single_snapshot";
+
+    audits.set(key, {
+      execution_grade:
+        readyRows.length > 0 && stability >= 75
+          ? "A"
+          : readyRows.length > 0 && stability >= 55
+            ? "B"
+            : "C",
+      taker_positive_margin_bps: Number(Math.max(0, average(takers)).toFixed(4)),
+      maker_vs_taker_gap_bps: Number(Math.max(0, average(nets) - average(takers)).toFixed(4)),
+      min_observed_net_edge_bps: Number(Math.min(...nets).toFixed(4)),
+      max_observed_net_edge_bps: Number(Math.max(...nets).toFixed(4)),
+      avg_observed_net_edge_bps: Number(average(nets).toFixed(4)),
+      net_edge_stability_score: Number(stability.toFixed(1)),
+      time_to_first_decision_capable_minutes:
+        firstDecisionCapable ? Number(((new Date(firstDecisionCapable.ts).getTime() - new Date(ordered[0].ts).getTime()) / 60000).toFixed(1)) : null,
+      execution_ready_duration_minutes: Number(readyDuration.toFixed(1)),
+      downgrade_reason: downgraded?.primary_failure_reason ?? null,
+      paper_exit_reason: paperExitReason,
+      paper_peak_bps_after_signal: Number(paperPeak.toFixed(4)),
+      paper_worst_bps_after_signal: Number(paperWorst.toFixed(4))
+    });
+  }
+
+  return audits;
+}
+
 async function buildPacket(args: {
   supabase: NonNullable<ReturnType<typeof createServerSupabase>>;
   userId: string;
@@ -314,14 +430,33 @@ async function buildPacket(args: {
       }
     };
   });
+  const executionAudits = buildExecutionAudit(evaluatedOpps);
+  const evaluatedWithAudit = evaluatedOpps.map((item) => {
+    const audit = executionAudits.get(executionTimelineKey(item));
+    const paperTradeReady =
+      item.strategy === "xarb_spot" &&
+      item.decision_capable_execution_signal &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      item.persistence_ticks >= 3 &&
+      item.lifetime_minutes >= 60 &&
+      !item.execution_fragile &&
+      (audit?.net_edge_stability_score ?? 0) >= 60;
+
+    return {
+      ...item,
+      ...audit,
+      paper_trade_ready: paperTradeReady
+    };
+  });
 
   const topMarketOpps = dedupeByRegime(
-    evaluatedOpps
+    evaluatedWithAudit
       .filter((item) => item.decision_capable_market_signal)
       .sort((a, b) => b.score - a.score)
   ).slice(0, 3);
 
-  const topExecutionOpps = evaluatedOpps
+  const topExecutionOpps = evaluatedWithAudit
     .filter(
       (item) =>
         item.decision_capable_execution_signal ||
@@ -334,7 +469,7 @@ async function buildPacket(args: {
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  const nearTopOpps = evaluatedOpps
+  const nearTopOpps = evaluatedWithAudit
     .filter((item) => !item.qualified_for_top_list)
     .filter(
       (item) =>
@@ -354,6 +489,41 @@ async function buildPacket(args: {
       reason: d.reject_reason ?? "not_chosen"
     }));
 
+  const executionReadyXarb = evaluatedWithAudit.filter(
+    (item) =>
+      item.strategy === "xarb_spot" &&
+      item.decision_capable_execution_signal &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0
+  );
+  const conditionalExecutionXarb = evaluatedWithAudit.filter(
+    (item) => item.strategy === "xarb_spot" && item.execution_recommendation_state === "conditional_execution"
+  );
+  const watchOnlyFragileXarb = evaluatedWithAudit.filter(
+    (item) => item.strategy === "xarb_spot" && item.execution_recommendation_state === "watch_only"
+  );
+  const executionReadyRankings = {
+    by_taker_positive_margin: executionReadyXarb
+      .slice()
+      .sort((a, b) => (b.taker_positive_margin_bps ?? 0) - (a.taker_positive_margin_bps ?? 0))
+      .slice(0, 5),
+    by_stability: executionReadyXarb
+      .slice()
+      .sort((a, b) => (b.net_edge_stability_score ?? 0) - (a.net_edge_stability_score ?? 0))
+      .slice(0, 5),
+    by_persistence: executionReadyXarb
+      .slice()
+      .sort((a, b) => b.persistence_ticks - a.persistence_ticks || b.lifetime_minutes - a.lifetime_minutes)
+      .slice(0, 5),
+    by_paper_trade_readiness: executionReadyXarb
+      .slice()
+      .sort((a, b) => Number(b.paper_trade_ready) - Number(a.paper_trade_ready) || (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+      .slice(0, 5)
+  };
+  const bestExecutionReady = executionReadyXarb
+    .slice()
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))[0] ?? null;
+
   return {
     run_meta: {
       run_id: latestTick?.id ?? null,
@@ -370,6 +540,10 @@ async function buildPacket(args: {
     top_opportunities: topOpps,
     top_market_opportunities: topMarketOpps,
     top_execution_opportunities: topExecutionOpps,
+    execution_ready_xarb_opportunities: executionReadyXarb,
+    conditional_execution_xarb_opportunities: conditionalExecutionXarb,
+    watch_only_fragile_xarb_opportunities: watchOnlyFragileXarb,
+    execution_ready_rankings: executionReadyRankings,
     near_top_opportunities: nearTopOpps,
     filtered_but_notable_opportunities: nearTopOpps,
     near_misses: nearMisses,
@@ -383,38 +557,54 @@ async function buildPacket(args: {
     })),
     period_summary: {
       total_opportunities: (opportunities ?? []).length,
-      global_execution_decision_capable_count: evaluatedOpps.filter((x) => x.qualified_for_decision_capable).length,
-      strategy_local_decision_capable_count: evaluatedOpps.filter((x) => x.strategy_local_decision_capable).length,
-      decision_capable_market_signal_count: evaluatedOpps.filter((x) => x.decision_capable_market_signal).length,
-      decision_capable_execution_signal_count: evaluatedOpps.filter((x) => x.decision_capable_execution_signal).length,
-      decision_capable_opportunities: evaluatedOpps.filter((x) => x.qualified_for_decision_capable).length,
+      global_execution_decision_capable_count: evaluatedWithAudit.filter((x) => x.qualified_for_decision_capable).length,
+      strategy_local_decision_capable_count: evaluatedWithAudit.filter((x) => x.strategy_local_decision_capable).length,
+      decision_capable_market_signal_count: evaluatedWithAudit.filter((x) => x.decision_capable_market_signal).length,
+      decision_capable_execution_signal_count: evaluatedWithAudit.filter((x) => x.decision_capable_execution_signal).length,
+      decision_capable_opportunities: evaluatedWithAudit.filter((x) => x.qualified_for_decision_capable).length,
       top_opportunities_count: topOpps.length,
       top_market_opportunities_count: topMarketOpps.length,
       top_execution_opportunities_count: topExecutionOpps.length,
-      near_decision_capable_count: evaluatedOpps.filter((x) => x.decision_support_state === "near_decision_capable").length,
-      execution_fragile_count: evaluatedOpps.filter((x) => x.execution_fragile).length,
-      execution_conditionally_viable_count: evaluatedOpps.filter((x) => x.execution_recommendation_state === "conditional_execution").length,
-      execution_ready_count: evaluatedOpps.filter((x) => x.execution_recommendation_state === "execution_ready").length,
-      failed_due_to_consumed_risk: countFailed(evaluatedOpps, "high_consumption_risk"),
-      failed_due_to_persistence: countFailed(evaluatedOpps, "insufficient_persistence"),
-      failed_due_to_insufficient_edge: countFailed(evaluatedOpps, "insufficient_edge_for_top"),
-      failed_due_to_execution_fragility: countFailed(evaluatedOpps, "execution_fragile"),
-      failed_due_to_strategy_filter: evaluatedOpps.filter((x) =>
+      near_decision_capable_count: evaluatedWithAudit.filter((x) => x.decision_support_state === "near_decision_capable").length,
+      execution_fragile_count: evaluatedWithAudit.filter((x) => x.execution_fragile).length,
+      execution_conditionally_viable_count: evaluatedWithAudit.filter((x) => x.execution_recommendation_state === "conditional_execution").length,
+      execution_ready_count: evaluatedWithAudit.filter((x) => x.execution_recommendation_state === "execution_ready").length,
+      failed_due_to_consumed_risk: countFailed(evaluatedWithAudit, "high_consumption_risk"),
+      failed_due_to_persistence: countFailed(evaluatedWithAudit, "insufficient_persistence"),
+      failed_due_to_insufficient_edge: countFailed(evaluatedWithAudit, "insufficient_edge_for_top"),
+      failed_due_to_execution_fragility: countFailed(evaluatedWithAudit, "execution_fragile"),
+      failed_due_to_strategy_filter: evaluatedWithAudit.filter((x) =>
         x.failed_checks.some((check) => check.startsWith("strategy_filter"))
       ).length,
       chosen_count: allDecisions.filter((d) => d.chosen).length,
       skipped_count: allDecisions.filter((d) => !d.chosen).length
     },
-    near_decision_capable_breakdown: summarizeNearDecisionClusters(evaluatedOpps),
+    execution_summary: {
+      execution_ready_count: executionReadyXarb.length,
+      paper_trade_ready_count: executionReadyXarb.filter((item) => item.paper_trade_ready).length,
+      conditional_execution_count: conditionalExecutionXarb.length,
+      watch_only_fragile_count: watchOnlyFragileXarb.length,
+      positive_taker_count: evaluatedWithAudit.filter((item) => item.strategy === "xarb_spot" && (item.taker_net_edge_bps ?? 0) > 0).length,
+      avg_positive_taker_bps: Number(
+        average(
+          evaluatedWithAudit
+            .filter((item) => item.strategy === "xarb_spot" && (item.taker_net_edge_bps ?? 0) > 0)
+            .map((item) => item.taker_net_edge_bps ?? 0)
+        ).toFixed(4)
+      ),
+      best_execution_ready_symbol: bestExecutionReady?.symbol ?? null,
+      best_execution_ready_exchange_pair: bestExecutionReady?.exchange ?? null
+    },
+    near_decision_capable_breakdown: summarizeNearDecisionClusters(evaluatedWithAudit),
     consumed_risk_diagnostics: {
-      scored_items: evaluatedOpps.length,
-      non_zero_count: evaluatedOpps.filter((x) => x.consumed_risk_score > 0).length,
-      max_score: evaluatedOpps.reduce((max, item) => Math.max(max, item.consumed_risk_score), 0),
+      scored_items: evaluatedWithAudit.length,
+      non_zero_count: evaluatedWithAudit.filter((x) => x.consumed_risk_score > 0).length,
+      max_score: evaluatedWithAudit.reduce((max, item) => Math.max(max, item.consumed_risk_score), 0),
       source_decisions_sampled: allDecisions.length,
       opportunity_already_consumed_count: allDecisions.filter((d) => d.reject_reason === "opportunity_already_consumed").length
     },
-    relative_strength_summary: summarizeRelativeStrength(evaluatedOpps),
-    strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedOpps),
+    relative_strength_summary: summarizeRelativeStrength(evaluatedWithAudit),
+    strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedWithAudit),
     by_strategy: Object.entries(
       (opportunities ?? []).reduce((acc, row) => {
         const k = row.type;
