@@ -312,6 +312,9 @@ type OpeningTrialAudit = {
   minutes_until_peak: number | null;
   minutes_until_invalidated: number | null;
   entry_to_exit_outcome_bps: number;
+  paper_trade_exit_ts: string | null;
+  paper_trade_hold_minutes: number | null;
+  paper_trade_exit_reason: string;
 };
 
 function buildOpeningTrialAudit(
@@ -347,7 +350,10 @@ function buildOpeningTrialAudit(
         post_entry_worst_bps: 0,
         minutes_until_peak: null,
         minutes_until_invalidated: null,
-        entry_to_exit_outcome_bps: 0
+        entry_to_exit_outcome_bps: 0,
+        paper_trade_exit_ts: null,
+        paper_trade_hold_minutes: null,
+        paper_trade_exit_reason: "no_entry"
       });
       continue;
     }
@@ -360,6 +366,9 @@ function buildOpeningTrialAudit(
     const peakRow = postEntry.find((item) => effectiveNetEdge(item) === peakBps) ?? null;
     const invalidatedRow = postEntry.find((item) => effectiveNetEdge(item) <= 0) ?? null;
     const lastRow = postEntry.at(-1) ?? entry;
+    const exitRow = invalidatedRow ?? lastRow;
+    const holdMinutes = Number(((new Date(exitRow.ts).getTime() - entryTs) / 60000).toFixed(1));
+    const exitReason = invalidatedRow ? "signal_invalidated" : postEntry.length > 1 ? "window_end" : "single_snapshot";
 
     audits.set(key, {
       post_entry_peak_bps: Number(peakBps.toFixed(4)),
@@ -368,11 +377,190 @@ function buildOpeningTrialAudit(
       minutes_until_invalidated: invalidatedRow
         ? Number(((new Date(invalidatedRow.ts).getTime() - entryTs) / 60000).toFixed(1))
         : null,
-      entry_to_exit_outcome_bps: Number((effectiveNetEdge(lastRow) - effectiveNetEdge(entry)).toFixed(4))
+      entry_to_exit_outcome_bps: Number((effectiveNetEdge(exitRow) - effectiveNetEdge(entry)).toFixed(4)),
+      paper_trade_exit_ts: exitRow.ts,
+      paper_trade_hold_minutes: holdMinutes,
+      paper_trade_exit_reason: exitReason
     });
   }
 
   return audits;
+}
+
+type EventFeedItem = {
+  event_type: string;
+  ts: string;
+  strategy: string;
+  symbol: string;
+  exchange: string;
+  severity: "info" | "watch" | "action" | "profit" | "risk";
+  headline: string;
+  details: string;
+};
+
+function buildEventFeed(
+  rows: Array<{
+    ts: string;
+    strategy: string;
+    symbol: string;
+    exchange: string;
+    regime_key: string | null;
+    decision_support_state: string;
+    execution_recommendation_state: string;
+    opening_trial_candidate: boolean;
+    opening_trial_decision: string;
+    paper_trade_started: boolean;
+    paper_trade_closed: boolean;
+    paper_trade_positive: boolean;
+    paper_trade_pnl_bps: number;
+    taker_net_edge_bps: number | null;
+  }>
+) {
+  const grouped = rows.reduce((acc, item) => {
+    const key = executionTimelineKey(item);
+    const current = acc.get(key) ?? ([] as typeof rows[number][]);
+    current.push(item);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, Array<(typeof rows)[number]>>());
+
+  const events: EventFeedItem[] = [];
+
+  for (const timeline of grouped.values()) {
+    const ordered = timeline
+      .slice()
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+
+    for (let i = 0; i < ordered.length; i += 1) {
+      const current = ordered[i];
+      const previous = i > 0 ? ordered[i - 1] : null;
+
+      if (current.execution_recommendation_state === "execution_ready" && previous?.execution_recommendation_state !== "execution_ready") {
+        events.push({
+          event_type: "execution_ready_signal_detected",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "watch",
+          headline: `${current.symbol} execution-ready lett`,
+          details: `${current.strategy} setup execution-ready állapotba lépett.`
+        });
+      }
+
+      if (previous?.execution_recommendation_state === "execution_ready" && current.execution_recommendation_state !== "execution_ready") {
+        events.push({
+          event_type: "execution_ready_signal_lost",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "risk",
+          headline: `${current.symbol} execution-ready jel elveszett`,
+          details: `Az execution-ready állapot megszűnt, új állapot: ${current.execution_recommendation_state}.`
+        });
+      }
+
+      if (current.opening_trial_candidate && !previous?.opening_trial_candidate) {
+        events.push({
+          event_type: "opening_trial_go_created",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "action",
+          headline: `${current.symbol} go candidate létrejött`,
+          details: "A kontrollált nyitási gate teljesült."
+        });
+      }
+
+      if (current.opening_trial_candidate && previous?.opening_trial_candidate) {
+        events.push({
+          event_type: "opening_trial_go_still_active",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "info",
+          headline: `${current.symbol} go candidate továbbra is aktív`,
+          details: "A belépési ablak továbbra is nyitva maradt."
+        });
+      }
+
+      if (previous?.opening_trial_candidate && !current.opening_trial_candidate) {
+        events.push({
+          event_type: "opening_trial_invalidated",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "risk",
+          headline: `${current.symbol} go candidate invalidálódott`,
+          details: `A belépési ablak bezárult, jelen állapot: ${current.opening_trial_decision}.`
+        });
+      }
+
+      if (current.paper_trade_started) {
+        events.push({
+          event_type: "paper_trade_started",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "action",
+          headline: `${current.symbol} paper trial elindult`,
+          details: "A setup paper-first belépési próbára alkalmas volt."
+        });
+      }
+
+      if (current.paper_trade_closed && current.paper_trade_positive) {
+        events.push({
+          event_type: "paper_trade_profit_taken",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "profit",
+          headline: `${current.symbol} paper trade profitot ért volna el`,
+          details: `Realizált proxy kimenet: ${current.paper_trade_pnl_bps.toFixed(2)} bps.`
+        });
+      }
+
+      if (current.paper_trade_closed && !current.paper_trade_positive) {
+        events.push({
+          event_type: "paper_trade_stopped_out",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "risk",
+          headline: `${current.symbol} paper trade negatívan zárult volna`,
+          details: `Proxy kimenet: ${current.paper_trade_pnl_bps.toFixed(2)} bps.`
+        });
+      }
+
+      if (
+        current.strategy === "relative_strength" &&
+        previous &&
+        current.regime_key &&
+        previous.regime_key &&
+        current.regime_key !== previous.regime_key
+      ) {
+        events.push({
+          event_type: "market_signal_regime_change",
+          ts: current.ts,
+          strategy: current.strategy,
+          symbol: current.symbol,
+          exchange: current.exchange,
+          severity: "watch",
+          headline: `${current.symbol} market regime változott`,
+          details: "A relative_strength rezsim kulcsa megváltozott."
+        });
+      }
+    }
+  }
+
+  return events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 }
 
 async function buildPacket(args: {
@@ -388,7 +576,7 @@ async function buildPacket(args: {
     .from("opportunities")
     .select("id, ts, exchange, symbol, type, net_edge_bps, details")
     .order("ts", { ascending: false })
-    .limit(type === "latest" ? 5 : 120);
+    .limit(type === "latest" ? 40 : 120);
 
   if (since) opportunitiesQuery = opportunitiesQuery.gte("ts", since);
   if (type === "strategy" && strategyKey) opportunitiesQuery = opportunitiesQuery.eq("type", strategyKey);
@@ -583,9 +771,27 @@ async function buildPacket(args: {
       post_entry_worst_bps: 0,
       minutes_until_peak: null,
       minutes_until_invalidated: null,
-      entry_to_exit_outcome_bps: 0
+      entry_to_exit_outcome_bps: 0,
+      paper_trade_exit_ts: null,
+      paper_trade_hold_minutes: null,
+      paper_trade_exit_reason: "no_entry"
     })
-  }));
+  })).map((item) => {
+    const paperTradeStarted = item.opening_trial_candidate;
+    const paperTradeClosed = paperTradeStarted && item.paper_trade_exit_ts !== null;
+    const paperTradePnl = item.entry_to_exit_outcome_bps;
+    return {
+      ...item,
+      paper_trade_started: paperTradeStarted,
+      paper_trade_closed: paperTradeClosed,
+      paper_trade_outcome:
+        !paperTradeStarted ? "not_started" : paperTradePnl > 0 ? "profit" : paperTradePnl < 0 ? "loss" : "flat",
+      paper_trade_positive: paperTradeStarted && paperTradePnl > 0,
+      paper_trade_pnl_bps: paperTradePnl,
+      paper_trade_max_favorable_bps: item.post_entry_peak_bps,
+      paper_trade_max_adverse_bps: item.post_entry_worst_bps
+    };
+  });
 
   const topMarketOpps = dedupeByRegime(
     evaluatedFinal
@@ -642,15 +848,182 @@ async function buildPacket(args: {
   const goCandidatesNow = evaluatedFinal
     .filter((item) => item.opening_trial_decision === "go")
     .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      why_now: item.opening_trial_reason,
+      entry_window_open: true,
+      minutes_since_go: Number(((Date.now() - new Date(item.entry_readiness_timestamp ?? item.ts).getTime()) / 60000).toFixed(1)),
+      current_signal_state: item.execution_recommendation_state,
+      risk_if_enter_now: item.post_entry_worst_bps < 0 ? "edge already showed downside risk after signal" : "no immediate adverse move seen in observed window"
+    }));
   const watchMoreCandidatesNow = evaluatedFinal
     .filter((item) => item.opening_trial_decision === "watch_more")
     .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      why_now: item.opening_trial_reason,
+      entry_window_open: false,
+      minutes_since_go: null,
+      current_signal_state: item.execution_recommendation_state,
+      risk_if_enter_now: "persistence/lifetime még nem elég stabil"
+    }));
   const noGoCandidatesNow = evaluatedFinal
     .filter((item) => item.strategy === "xarb_spot" && item.opening_trial_decision === "no_go")
     .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      why_now: item.opening_trial_reason,
+      entry_window_open: false,
+      minutes_since_go: null,
+      current_signal_state: item.execution_recommendation_state,
+      risk_if_enter_now:
+        item.opening_trial_failed_checks.includes("positive_taker_edge")
+          ? "negative taker edge"
+          : item.opening_trial_failed_checks.includes("not_execution_fragile")
+            ? "execution fragile"
+            : item.opening_trial_failed_checks.includes("min_execution_viability")
+              ? "execution viability túl alacsony"
+              : "entry gate nem teljesült"
+    }));
+  const eventFeed = buildEventFeed(evaluatedFinal);
+  const profitEvents = evaluatedFinal
+    .filter((item) => item.paper_trade_closed && item.paper_trade_positive)
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .map((item) => ({
+      symbol: item.symbol,
+      strategy: item.strategy,
+      exchange: item.exchange,
+      entry_ts: item.entry_readiness_timestamp,
+      exit_ts: item.paper_trade_exit_ts,
+      realized_pnl_bps: item.paper_trade_pnl_bps,
+      max_favorable_bps: item.paper_trade_max_favorable_bps,
+      hold_minutes: item.paper_trade_hold_minutes,
+      exit_reason: item.paper_trade_exit_reason
+    }));
+  const riskEvents = [
+    ...eventFeed
+      .filter((event) =>
+        ["opening_trial_invalidated", "execution_ready_signal_lost", "paper_trade_stopped_out"].includes(event.event_type)
+      )
+      .map((event) => ({
+        event_type: event.event_type,
+        symbol: event.symbol,
+        strategy: event.strategy,
+        exchange: event.exchange,
+        ts: event.ts,
+        details: event.details
+      })),
+    ...evaluatedFinal
+      .filter((item) => item.paper_trade_closed && !item.paper_trade_positive)
+      .map((item) => ({
+        event_type: "paper_trade_negative_outcome",
+        symbol: item.symbol,
+        strategy: item.strategy,
+        exchange: item.exchange,
+        ts: item.paper_trade_exit_ts ?? item.ts,
+        details: `${item.paper_trade_pnl_bps.toFixed(2)} bps, reason=${item.paper_trade_exit_reason}`
+      }))
+  ]
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .slice(0, 25);
+  const activeNow = [
+    ...goCandidatesNow.map((item) => ({
+      kind: "go_candidate",
+      symbol: item.symbol,
+      strategy: item.strategy,
+      exchange: item.exchange,
+      state: item.current_signal_state,
+      summary: item.why_now
+    })),
+    ...watchMoreCandidatesNow.slice(0, 2).map((item) => ({
+      kind: "watch_more",
+      symbol: item.symbol,
+      strategy: item.strategy,
+      exchange: item.exchange,
+      state: item.current_signal_state,
+      summary: item.why_now
+    }))
+  ].slice(0, 5);
+  const happenedRecently = eventFeed.slice(0, 10);
+  const operationalStatus =
+    profitEvents.length > 0
+      ? "profit_event_logged"
+      : riskEvents.length > 0
+        ? "risk_event_logged"
+        : goCandidatesNow.length > 0
+          ? "go_candidate_live"
+          : evaluatedFinal.some((item) => item.paper_trade_started && !item.paper_trade_closed)
+            ? "paper_position_active"
+            : watchMoreCandidatesNow.length > 0 || evaluatedFinal.some((item) => item.decision_support_state === "watch")
+              ? "watching"
+              : "idle";
+  const userAttentionFlag =
+    operationalStatus === "go_candidate_live"
+      ? "actionable"
+      : operationalStatus === "profit_event_logged" || operationalStatus === "risk_event_logged"
+        ? "resolved"
+        : operationalStatus === "watching"
+          ? "watch"
+          : "none";
+  const importantNow = goCandidatesNow.length > 0
+    ? goCandidatesNow.slice(0, 3).map((item) => ({
+        type: "active_go_candidate",
+        ts: item.ts,
+        headline: `${item.symbol} most nyitható`,
+        details: `${item.exchange} · viability ${item.execution_viability_score ?? 0} · taker ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps`
+      }))
+    : watchMoreCandidatesNow.length > 0
+      ? watchMoreCandidatesNow.slice(0, 3).map((item) => ({
+          type: "watch_more",
+          ts: item.ts,
+          headline: `${item.symbol} közel van a nyitáshoz`,
+          details: item.why_now
+        }))
+      : profitEvents.length > 0
+        ? profitEvents.slice(0, 3).map((item) => ({
+            type: "profit_event",
+            ts: item.exit_ts ?? item.entry_ts ?? new Date().toISOString(),
+            headline: `${item.symbol} profit event`,
+            details: `${item.realized_pnl_bps.toFixed(2)} bps paper outcome`
+          }))
+        : riskEvents.length > 0
+          ? riskEvents.slice(0, 3).map((item) => ({
+              type: "risk_event",
+              ts: item.ts,
+              headline: `${item.symbol} risk event`,
+              details: item.details
+            }))
+          : [{
+              type: "idle",
+              ts: new Date().toISOString(),
+              headline: "Nincs aktuális akció",
+              details: noGoCandidatesNow[0]?.why_now ?? "Most nincs execution-ready, nyitható setup."
+            }];
+  const actionSummary = {
+    had_go_candidate_today: evaluatedFinal.some((item) => item.opening_trial_candidate),
+    go_candidate_count_24h: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
+    active_go_candidate_now: goCandidatesNow.length > 0,
+    paper_trade_started_24h: evaluatedFinal.filter((item) => item.paper_trade_started).length,
+    paper_trade_profitable_24h: evaluatedFinal.filter((item) => item.paper_trade_positive).length,
+    paper_trade_stopped_24h: evaluatedFinal.filter((item) => item.paper_trade_closed && !item.paper_trade_positive).length,
+    best_paper_outcome_bps: evaluatedFinal.reduce((best, item) => Math.max(best, item.paper_trade_pnl_bps), 0),
+    worst_paper_outcome_bps: evaluatedFinal.reduce((worst, item) => Math.min(worst, item.paper_trade_pnl_bps), 0)
+  };
+  const xrpOrSolRegime = evaluatedFinal
+    .filter((item) => item.strategy === "relative_strength")
+    .slice(0, 3)
+    .map((item) => `${item.symbol}`)
+    .join(" / ");
+  const whatHappenedToday = [
+    `volt ${actionSummary.go_candidate_count_24h} go execution setup`,
+    `ebből ${actionSummary.paper_trade_started_24h} paper-trade-ready volt`,
+    goCandidatesNow.length > 0 ? "maradt aktív go a latest snapshotban" : "nem maradt aktív go a latest snapshotban",
+    `volt ${conditionalExecutionXarb.length} conditional execution setup`,
+    xrpOrSolRegime ? `market regime oldalon ${xrpOrSolRegime} dominancia látszott` : "market regime oldalon nem volt erős dominancia"
+  ];
   const executionReadyRankings = {
     by_taker_positive_margin: executionReadyXarb
       .slice()
@@ -674,6 +1047,27 @@ async function buildPacket(args: {
       .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))[0] ?? null;
 
   return {
+    operational_status: operationalStatus,
+    user_attention_flag: userAttentionFlag,
+    important_now: importantNow,
+    go_candidates_now:
+      goCandidatesNow.length > 0
+        ? goCandidatesNow
+        : [{
+            entry_window_open: false,
+            why_now:
+              watchMoreCandidatesNow.length > 0
+                ? "csak conditional vagy watch-more setup van"
+                : evaluatedFinal.some((item) => item.strategy === "relative_strength")
+                  ? "csak market-signal van"
+                  : "nincs execution-ready setup",
+            current_signal_state: "idle",
+            risk_if_enter_now: "nincs belépési ablak",
+            minutes_since_go: null
+          }],
+    active_now: activeNow,
+    happened_recently: happenedRecently,
+    event_feed: eventFeed.slice(0, type === "latest" ? 20 : 60),
     run_meta: {
       run_id: latestTick?.id ?? null,
       time_window: type,
@@ -693,7 +1087,6 @@ async function buildPacket(args: {
     conditional_execution_xarb_opportunities: conditionalExecutionXarb,
     watch_only_fragile_xarb_opportunities: watchOnlyFragileXarb,
     execution_ready_rankings: executionReadyRankings,
-    go_candidates_now: goCandidatesNow,
     watch_more_candidates_now: watchMoreCandidatesNow,
     no_go_candidates_now: noGoCandidatesNow,
     near_top_opportunities: nearTopOpps,
@@ -747,6 +1140,7 @@ async function buildPacket(args: {
       best_execution_ready_symbol: bestExecutionReady?.symbol ?? null,
       best_execution_ready_exchange_pair: bestExecutionReady?.exchange ?? null
     },
+    action_summary: actionSummary,
     opening_trial_summary: {
       opening_trial_candidate_count: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
       execution_ready_xarb_count: executionReadyXarb.length,
@@ -782,6 +1176,9 @@ async function buildPacket(args: {
     },
     relative_strength_summary: summarizeRelativeStrength(evaluatedFinal),
     strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedFinal),
+    profit_events: profitEvents,
+    risk_events: riskEvents,
+    what_happened_today: whatHappenedToday,
     by_strategy: Object.entries(
       (opportunities ?? []).reduce((acc, row) => {
         const k = row.type;
