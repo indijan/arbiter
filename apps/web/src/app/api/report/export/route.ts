@@ -306,6 +306,75 @@ function buildExecutionAudit(rows: ExecutionAuditRow[]) {
   return audits;
 }
 
+type OpeningTrialAudit = {
+  post_entry_peak_bps: number;
+  post_entry_worst_bps: number;
+  minutes_until_peak: number | null;
+  minutes_until_invalidated: number | null;
+  entry_to_exit_outcome_bps: number;
+};
+
+function buildOpeningTrialAudit(
+  rows: Array<{
+    ts: string;
+    strategy: string;
+    exchange: string;
+    symbol: string;
+    maker_net_edge_bps: number;
+    taker_net_edge_bps: number | null;
+    opening_trial_candidate: boolean;
+  }>
+) {
+  const grouped = rows.reduce((acc, item) => {
+    const key = executionTimelineKey(item);
+    const current = acc.get(key) ?? ([] as typeof rows);
+    current.push(item);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, typeof rows>());
+
+  const audits = new Map<string, OpeningTrialAudit>();
+
+  for (const [key, timeline] of grouped.entries()) {
+    const ordered = timeline
+      .slice()
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const entry = ordered.find((item) => item.opening_trial_candidate);
+
+    if (!entry) {
+      audits.set(key, {
+        post_entry_peak_bps: 0,
+        post_entry_worst_bps: 0,
+        minutes_until_peak: null,
+        minutes_until_invalidated: null,
+        entry_to_exit_outcome_bps: 0
+      });
+      continue;
+    }
+
+    const entryTs = new Date(entry.ts).getTime();
+    const postEntry = ordered.filter((item) => new Date(item.ts).getTime() >= entryTs);
+    const postEntryNets = postEntry.map((item) => effectiveNetEdge(item));
+    const peakBps = postEntry.length > 0 ? Math.max(...postEntryNets) : 0;
+    const worstBps = postEntry.length > 0 ? Math.min(...postEntryNets) : 0;
+    const peakRow = postEntry.find((item) => effectiveNetEdge(item) === peakBps) ?? null;
+    const invalidatedRow = postEntry.find((item) => effectiveNetEdge(item) <= 0) ?? null;
+    const lastRow = postEntry.at(-1) ?? entry;
+
+    audits.set(key, {
+      post_entry_peak_bps: Number(peakBps.toFixed(4)),
+      post_entry_worst_bps: Number(worstBps.toFixed(4)),
+      minutes_until_peak: peakRow ? Number(((new Date(peakRow.ts).getTime() - entryTs) / 60000).toFixed(1)) : null,
+      minutes_until_invalidated: invalidatedRow
+        ? Number(((new Date(invalidatedRow.ts).getTime() - entryTs) / 60000).toFixed(1))
+        : null,
+      entry_to_exit_outcome_bps: Number((effectiveNetEdge(lastRow) - effectiveNetEdge(entry)).toFixed(4))
+    });
+  }
+
+  return audits;
+}
+
 async function buildPacket(args: {
   supabase: NonNullable<ReturnType<typeof createServerSupabase>>;
   userId: string;
@@ -450,13 +519,81 @@ async function buildPacket(args: {
     };
   });
 
+  const openingTrialEvaluated = evaluatedWithAudit.map((item) => {
+    const exclusionReasons = [
+      ...(item.auto_trade_exclusion_reasons ?? []),
+      ...item.failed_checks.filter((check) => check.startsWith("strategy_filter"))
+    ];
+    const passedChecks: string[] = [];
+    const failedChecks: string[] = [];
+    const pushCheck = (name: string, condition: boolean) => {
+      if (condition) {
+        passedChecks.push(name);
+      } else {
+        failedChecks.push(name);
+      }
+    };
+
+    pushCheck("strategy_xarb_spot", item.strategy === "xarb_spot");
+    pushCheck("decision_capable_execution_signal", item.decision_capable_execution_signal);
+    pushCheck("execution_ready_state", item.execution_recommendation_state === "execution_ready");
+    pushCheck("positive_taker_edge", (item.taker_net_edge_bps ?? 0) > 0);
+    pushCheck("not_execution_fragile", !item.execution_fragile);
+    pushCheck("min_persistence_ticks", item.persistence_ticks >= 3);
+    pushCheck("min_lifetime_minutes", item.lifetime_minutes >= 30);
+    pushCheck("min_execution_viability", (item.execution_viability_score ?? 0) >= 80);
+    pushCheck("paper_trade_ready", item.paper_trade_ready);
+    pushCheck("no_exclusion_reasons", exclusionReasons.length === 0);
+
+    const openingTrialCandidate = failedChecks.length === 0;
+    const watchMoreEligible =
+      item.strategy === "xarb_spot" &&
+      item.decision_capable_execution_signal &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      !item.execution_fragile &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      exclusionReasons.length === 0 &&
+      (!item.paper_trade_ready || item.persistence_ticks < 3 || item.lifetime_minutes < 30);
+
+    const openingTrialDecision = openingTrialCandidate ? "go" : watchMoreEligible ? "watch_more" : "no_go";
+    const openingTrialReason = openingTrialCandidate
+      ? "xarb_spot execution-ready setup passed all controlled opening gates"
+      : openingTrialDecision === "watch_more"
+        ? "setup is close to entry-ready but needs more persistence and/or lifetime"
+        : item.primary_failure_reason ?? failedChecks[0] ?? "opening_gate_not_met";
+    const entryReadinessTimestamp = openingTrialCandidate ? item.ts : null;
+
+    return {
+      ...item,
+      opening_trial_candidate: openingTrialCandidate,
+      opening_trial_reason: openingTrialReason,
+      opening_trial_passed_checks: passedChecks,
+      opening_trial_failed_checks: failedChecks,
+      entry_readiness_timestamp: entryReadinessTimestamp,
+      opening_trial_decision: openingTrialDecision
+    };
+  });
+
+  const openingTrialAudits = buildOpeningTrialAudit(openingTrialEvaluated);
+  const evaluatedFinal = openingTrialEvaluated.map((item) => ({
+    ...item,
+    ...(openingTrialAudits.get(executionTimelineKey(item)) ?? {
+      post_entry_peak_bps: 0,
+      post_entry_worst_bps: 0,
+      minutes_until_peak: null,
+      minutes_until_invalidated: null,
+      entry_to_exit_outcome_bps: 0
+    })
+  }));
+
   const topMarketOpps = dedupeByRegime(
-    evaluatedWithAudit
+    evaluatedFinal
       .filter((item) => item.decision_capable_market_signal)
       .sort((a, b) => b.score - a.score)
   ).slice(0, 3);
 
-  const topExecutionOpps = evaluatedWithAudit
+  const topExecutionOpps = evaluatedFinal
     .filter(
       (item) =>
         item.decision_capable_execution_signal ||
@@ -469,7 +606,7 @@ async function buildPacket(args: {
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  const nearTopOpps = evaluatedWithAudit
+  const nearTopOpps = evaluatedFinal
     .filter((item) => !item.qualified_for_top_list)
     .filter(
       (item) =>
@@ -489,19 +626,31 @@ async function buildPacket(args: {
       reason: d.reject_reason ?? "not_chosen"
     }));
 
-  const executionReadyXarb = evaluatedWithAudit.filter(
+  const executionReadyXarb = evaluatedFinal.filter(
     (item) =>
       item.strategy === "xarb_spot" &&
       item.decision_capable_execution_signal &&
       item.execution_recommendation_state === "execution_ready" &&
       (item.taker_net_edge_bps ?? 0) > 0
   );
-  const conditionalExecutionXarb = evaluatedWithAudit.filter(
+  const conditionalExecutionXarb = evaluatedFinal.filter(
     (item) => item.strategy === "xarb_spot" && item.execution_recommendation_state === "conditional_execution"
   );
-  const watchOnlyFragileXarb = evaluatedWithAudit.filter(
+  const watchOnlyFragileXarb = evaluatedFinal.filter(
     (item) => item.strategy === "xarb_spot" && item.execution_recommendation_state === "watch_only"
   );
+  const goCandidatesNow = evaluatedFinal
+    .filter((item) => item.opening_trial_decision === "go")
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5);
+  const watchMoreCandidatesNow = evaluatedFinal
+    .filter((item) => item.opening_trial_decision === "watch_more")
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5);
+  const noGoCandidatesNow = evaluatedFinal
+    .filter((item) => item.strategy === "xarb_spot" && item.opening_trial_decision === "no_go")
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5);
   const executionReadyRankings = {
     by_taker_positive_margin: executionReadyXarb
       .slice()
@@ -522,7 +671,7 @@ async function buildPacket(args: {
   };
   const bestExecutionReady = executionReadyXarb
     .slice()
-    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))[0] ?? null;
+      .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))[0] ?? null;
 
   return {
     run_meta: {
@@ -544,6 +693,9 @@ async function buildPacket(args: {
     conditional_execution_xarb_opportunities: conditionalExecutionXarb,
     watch_only_fragile_xarb_opportunities: watchOnlyFragileXarb,
     execution_ready_rankings: executionReadyRankings,
+    go_candidates_now: goCandidatesNow,
+    watch_more_candidates_now: watchMoreCandidatesNow,
+    no_go_candidates_now: noGoCandidatesNow,
     near_top_opportunities: nearTopOpps,
     filtered_but_notable_opportunities: nearTopOpps,
     near_misses: nearMisses,
@@ -557,23 +709,23 @@ async function buildPacket(args: {
     })),
     period_summary: {
       total_opportunities: (opportunities ?? []).length,
-      global_execution_decision_capable_count: evaluatedWithAudit.filter((x) => x.qualified_for_decision_capable).length,
-      strategy_local_decision_capable_count: evaluatedWithAudit.filter((x) => x.strategy_local_decision_capable).length,
-      decision_capable_market_signal_count: evaluatedWithAudit.filter((x) => x.decision_capable_market_signal).length,
-      decision_capable_execution_signal_count: evaluatedWithAudit.filter((x) => x.decision_capable_execution_signal).length,
-      decision_capable_opportunities: evaluatedWithAudit.filter((x) => x.qualified_for_decision_capable).length,
+      global_execution_decision_capable_count: evaluatedFinal.filter((x) => x.qualified_for_decision_capable).length,
+      strategy_local_decision_capable_count: evaluatedFinal.filter((x) => x.strategy_local_decision_capable).length,
+      decision_capable_market_signal_count: evaluatedFinal.filter((x) => x.decision_capable_market_signal).length,
+      decision_capable_execution_signal_count: evaluatedFinal.filter((x) => x.decision_capable_execution_signal).length,
+      decision_capable_opportunities: evaluatedFinal.filter((x) => x.qualified_for_decision_capable).length,
       top_opportunities_count: topOpps.length,
       top_market_opportunities_count: topMarketOpps.length,
       top_execution_opportunities_count: topExecutionOpps.length,
-      near_decision_capable_count: evaluatedWithAudit.filter((x) => x.decision_support_state === "near_decision_capable").length,
-      execution_fragile_count: evaluatedWithAudit.filter((x) => x.execution_fragile).length,
-      execution_conditionally_viable_count: evaluatedWithAudit.filter((x) => x.execution_recommendation_state === "conditional_execution").length,
-      execution_ready_count: evaluatedWithAudit.filter((x) => x.execution_recommendation_state === "execution_ready").length,
-      failed_due_to_consumed_risk: countFailed(evaluatedWithAudit, "high_consumption_risk"),
-      failed_due_to_persistence: countFailed(evaluatedWithAudit, "insufficient_persistence"),
-      failed_due_to_insufficient_edge: countFailed(evaluatedWithAudit, "insufficient_edge_for_top"),
-      failed_due_to_execution_fragility: countFailed(evaluatedWithAudit, "execution_fragile"),
-      failed_due_to_strategy_filter: evaluatedWithAudit.filter((x) =>
+      near_decision_capable_count: evaluatedFinal.filter((x) => x.decision_support_state === "near_decision_capable").length,
+      execution_fragile_count: evaluatedFinal.filter((x) => x.execution_fragile).length,
+      execution_conditionally_viable_count: evaluatedFinal.filter((x) => x.execution_recommendation_state === "conditional_execution").length,
+      execution_ready_count: evaluatedFinal.filter((x) => x.execution_recommendation_state === "execution_ready").length,
+      failed_due_to_consumed_risk: countFailed(evaluatedFinal, "high_consumption_risk"),
+      failed_due_to_persistence: countFailed(evaluatedFinal, "insufficient_persistence"),
+      failed_due_to_insufficient_edge: countFailed(evaluatedFinal, "insufficient_edge_for_top"),
+      failed_due_to_execution_fragility: countFailed(evaluatedFinal, "execution_fragile"),
+      failed_due_to_strategy_filter: evaluatedFinal.filter((x) =>
         x.failed_checks.some((check) => check.startsWith("strategy_filter"))
       ).length,
       chosen_count: allDecisions.filter((d) => d.chosen).length,
@@ -595,16 +747,41 @@ async function buildPacket(args: {
       best_execution_ready_symbol: bestExecutionReady?.symbol ?? null,
       best_execution_ready_exchange_pair: bestExecutionReady?.exchange ?? null
     },
-    near_decision_capable_breakdown: summarizeNearDecisionClusters(evaluatedWithAudit),
+    opening_trial_summary: {
+      opening_trial_candidate_count: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
+      execution_ready_xarb_count: executionReadyXarb.length,
+      paper_trade_ready_count: executionReadyXarb.filter((item) => item.paper_trade_ready).length,
+      rejected_due_to_low_persistence: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          item.opening_trial_failed_checks.includes("min_persistence_ticks")
+      ).length,
+      rejected_due_to_negative_taker: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          item.opening_trial_failed_checks.includes("positive_taker_edge")
+      ).length,
+      rejected_due_to_execution_fragility: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          item.opening_trial_failed_checks.includes("not_execution_fragile")
+      ).length,
+      rejected_due_to_low_execution_viability: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          item.opening_trial_failed_checks.includes("min_execution_viability")
+      ).length
+    },
+    near_decision_capable_breakdown: summarizeNearDecisionClusters(evaluatedFinal),
     consumed_risk_diagnostics: {
-      scored_items: evaluatedWithAudit.length,
-      non_zero_count: evaluatedWithAudit.filter((x) => x.consumed_risk_score > 0).length,
-      max_score: evaluatedWithAudit.reduce((max, item) => Math.max(max, item.consumed_risk_score), 0),
+      scored_items: evaluatedFinal.length,
+      non_zero_count: evaluatedFinal.filter((x) => x.consumed_risk_score > 0).length,
+      max_score: evaluatedFinal.reduce((max, item) => Math.max(max, item.consumed_risk_score), 0),
       source_decisions_sampled: allDecisions.length,
       opportunity_already_consumed_count: allDecisions.filter((d) => d.reject_reason === "opportunity_already_consumed").length
     },
-    relative_strength_summary: summarizeRelativeStrength(evaluatedWithAudit),
-    strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedWithAudit),
+    relative_strength_summary: summarizeRelativeStrength(evaluatedFinal),
+    strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedFinal),
     by_strategy: Object.entries(
       (opportunities ?? []).reduce((acc, row) => {
         const k = row.type;
