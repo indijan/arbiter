@@ -5,6 +5,7 @@ import AdvancedViewTable from "@/components/AdvancedViewTable";
 import StrategyLearningPanel from "@/components/StrategyLearningPanel";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
+import OperationalStatusPanel from "@/components/OperationalStatusPanel";
 import { evaluateOpportunity } from "@/lib/decision/evaluator";
 
 type OpportunityRow = {
@@ -301,6 +302,26 @@ export default async function DashboardPage() {
         evaluation.lifetime_minutes >= 60 &&
         !evaluation.execution_fragile &&
         stability >= 60;
+      const exclusionReasons = evaluation.auto_trade_exclusion_reasons;
+      const openingTrialFailedChecks: string[] = [];
+      if (!evaluation.decision_capable_execution_signal) openingTrialFailedChecks.push("decision_capable_execution_signal");
+      if (evaluation.execution_recommendation_state !== "execution_ready") openingTrialFailedChecks.push("execution_ready_state");
+      if (taker <= 0) openingTrialFailedChecks.push("positive_taker_edge");
+      if (evaluation.execution_fragile) openingTrialFailedChecks.push("not_execution_fragile");
+      if (evaluation.persistence_ticks < 3) openingTrialFailedChecks.push("min_persistence_ticks");
+      if (evaluation.lifetime_minutes < 30) openingTrialFailedChecks.push("min_lifetime_minutes");
+      if ((evaluation.execution_viability_score ?? 0) < 80) openingTrialFailedChecks.push("min_execution_viability");
+      if (!paperTradeReady) openingTrialFailedChecks.push("paper_trade_ready");
+      if (exclusionReasons.length > 0) openingTrialFailedChecks.push("no_exclusion_reasons");
+      const openingTrialCandidate = openingTrialFailedChecks.length === 0;
+      const watchMore =
+        evaluation.decision_capable_execution_signal &&
+        evaluation.execution_recommendation_state === "execution_ready" &&
+        taker > 0 &&
+        !evaluation.execution_fragile &&
+        (evaluation.execution_viability_score ?? 0) >= 80 &&
+        (evaluation.persistence_ticks < 3 || evaluation.lifetime_minutes < 30 || !paperTradeReady);
+      const paperTradePnl = Number((paperPeak - Math.max(0, taker)).toFixed(2));
 
       return {
         id: opp.id,
@@ -320,7 +341,23 @@ export default async function DashboardPage() {
         paper_peak_bps_after_signal: Number(paperPeak.toFixed(2)),
         paper_worst_bps_after_signal: Number(paperWorst.toFixed(2)),
         paper_exit_reason: taker > 0 ? "carry_until_signal_decay" : "taker_flip_negative",
-        time_to_first_decision_capable_minutes: evaluation.decision_capable_execution_signal ? 0 : null
+        time_to_first_decision_capable_minutes: evaluation.decision_capable_execution_signal ? 0 : null,
+        opening_trial_candidate: openingTrialCandidate,
+        opening_trial_decision: openingTrialCandidate ? "go" : watchMore ? "watch_more" : "no_go",
+        opening_trial_reason: openingTrialCandidate
+          ? "A kontrollált nyitási gate teljesült."
+          : watchMore
+            ? "Közel van, de még stabilitás/idő kell."
+            : openingTrialFailedChecks[0] ?? "Nincs nyitható setup.",
+        opening_trial_failed_checks: openingTrialFailedChecks,
+        entry_readiness_timestamp: openingTrialCandidate ? opp.ts : null,
+        paper_trade_started: openingTrialCandidate,
+        paper_trade_closed: openingTrialCandidate,
+        paper_trade_outcome: !openingTrialCandidate ? "not_started" : paperTradePnl > 0 ? "profit" : paperTradePnl < 0 ? "loss" : "flat",
+        paper_trade_positive: openingTrialCandidate && paperTradePnl > 0,
+        paper_trade_pnl_bps: openingTrialCandidate ? paperTradePnl : 0,
+        paper_trade_max_favorable_bps: paperPeak,
+        paper_trade_max_adverse_bps: paperWorst
       };
     })
     .sort((a, b) => {
@@ -335,6 +372,131 @@ export default async function DashboardPage() {
     conditional_execution_count: executionRows.filter((row) => row.execution_recommendation_state === "conditional_execution").length,
     watch_only_fragile_count: executionRows.filter((row) => row.execution_recommendation_state === "watch_only").length,
     avg_positive_taker_bps: average(executionRows.filter((row) => (row.taker_net_edge_bps ?? 0) > 0).map((row) => row.taker_net_edge_bps ?? 0))
+  };
+  const goRows = executionRows.filter((row) => row.opening_trial_decision === "go");
+  const watchMoreRows = executionRows.filter((row) => row.opening_trial_decision === "watch_more");
+  const profitRows = executionRows.filter((row) => row.paper_trade_positive);
+  const riskRows = executionRows.filter(
+    (row) =>
+      row.opening_trial_failed_checks.includes("positive_taker_edge") ||
+      row.opening_trial_failed_checks.includes("not_execution_fragile") ||
+      (row.paper_trade_closed && !row.paper_trade_positive && row.opening_trial_candidate)
+  );
+  const operationalStatus =
+    goRows.length > 0
+      ? "go_candidate_live"
+      : profitRows.length > 0
+        ? "profit_event_logged"
+        : riskRows.length > 0
+          ? "risk_event_logged"
+          : watchMoreRows.length > 0 || executionRows.some((row) => row.execution_recommendation_state === "watch_only")
+            ? "watching"
+            : "idle";
+  const userAttentionFlag =
+    operationalStatus === "go_candidate_live"
+      ? "actionable"
+      : operationalStatus === "profit_event_logged" || operationalStatus === "risk_event_logged"
+        ? "resolved"
+        : operationalStatus === "watching"
+          ? "watch"
+          : "none";
+  const importantNow =
+    goRows.length > 0
+      ? goRows.slice(0, 3).map((row) => ({
+          type: "active_go_candidate",
+          ts: row.ts,
+          headline: `${row.symbol} most nyitható`,
+          details: `${row.exchange} · taker ${(row.taker_net_edge_bps ?? 0).toFixed(2)} bps · viability ${row.execution_viability_score ?? 0}`
+        }))
+      : watchMoreRows.length > 0
+        ? watchMoreRows.slice(0, 3).map((row) => ({
+            type: "watch_more",
+            ts: row.ts,
+            headline: `${row.symbol} figyelendő`,
+            details: row.opening_trial_reason
+          }))
+        : profitRows.length > 0
+          ? profitRows.slice(0, 3).map((row) => ({
+              type: "profit_event",
+              ts: row.ts,
+              headline: `${row.symbol} profit event`,
+              details: `${row.paper_trade_pnl_bps.toFixed(2)} bps paper proxy`
+            }))
+          : [{
+              type: "idle",
+              ts: latestTickTs ?? new Date().toISOString(),
+              headline: "Nincs aktuális akció",
+              details: riskRows.length > 0 ? "Volt risk event, de nincs nyitható setup." : "Most nincs execution-ready, nyitható xarb setup."
+            }];
+  const activeNow = [
+    ...goRows.map((row) => ({
+      kind: "go_candidate",
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      state: row.execution_recommendation_state,
+      summary: `${row.opening_trial_reason} Taker ${(row.taker_net_edge_bps ?? 0).toFixed(2)} bps.`
+    })),
+    ...watchMoreRows.slice(0, 2).map((row) => ({
+      kind: "watch_more",
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      state: row.execution_recommendation_state,
+      summary: row.opening_trial_reason
+    }))
+  ].slice(0, 5);
+  const operationalEvents = [
+    ...goRows.map((row) => ({
+      event_type: "opening_trial_go_created",
+      ts: row.ts,
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      severity: "action" as const,
+      headline: `${row.symbol} go candidate`,
+      details: row.opening_trial_reason
+    })),
+    ...watchMoreRows.map((row) => ({
+      event_type: "execution_ready_signal_detected",
+      ts: row.ts,
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      severity: "watch" as const,
+      headline: `${row.symbol} figyelendő`,
+      details: row.opening_trial_reason
+    })),
+    ...profitRows.map((row) => ({
+      event_type: "paper_trade_profit_taken",
+      ts: row.ts,
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      severity: "profit" as const,
+      headline: `${row.symbol} paper profit`,
+      details: `${row.paper_trade_pnl_bps.toFixed(2)} bps paper proxy.`
+    })),
+    ...riskRows.map((row) => ({
+      event_type: "risk_event_logged",
+      ts: row.ts,
+      symbol: row.symbol,
+      strategy: "xarb_spot",
+      exchange: row.exchange,
+      severity: "risk" as const,
+      headline: `${row.symbol} risk / no-go`,
+      details: row.opening_trial_failed_checks.join(", ") || "Entry gate nem teljesült."
+    }))
+  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  const operationalSummary = {
+    had_go_candidate_today: goRows.length > 0,
+    go_candidate_count_24h: goRows.length,
+    active_go_candidate_now: goRows.length > 0,
+    paper_trade_started_24h: executionRows.filter((row) => row.paper_trade_started).length,
+    paper_trade_profitable_24h: profitRows.length,
+    paper_trade_stopped_24h: executionRows.filter((row) => row.paper_trade_closed && !row.paper_trade_positive).length,
+    best_paper_outcome_bps: executionRows.reduce((best, row) => Math.max(best, row.paper_trade_pnl_bps), 0),
+    worst_paper_outcome_bps: executionRows.reduce((worst, row) => Math.min(worst, row.paper_trade_pnl_bps), 0)
   };
 
   return (
@@ -368,6 +530,15 @@ export default async function DashboardPage() {
           <p className="mt-2 text-xl font-semibold">{hasOpportunity ? "Van jel" : "Nincs jel"}</p>
         </div>
       </section>
+
+      <OperationalStatusPanel
+        status={operationalStatus}
+        attention={userAttentionFlag}
+        importantNow={importantNow}
+        activeNow={activeNow}
+        events={operationalEvents}
+        summary={operationalSummary}
+      />
 
       <section className="card mb-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
