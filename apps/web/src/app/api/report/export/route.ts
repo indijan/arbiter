@@ -733,6 +733,37 @@ async function buildPacket(args: {
     pushCheck("paper_trade_ready", item.paper_trade_ready);
     pushCheck("no_exclusion_reasons", exclusionReasons.length === 0);
 
+    const hardPersistencePass = item.persistence_ticks >= 3 && item.lifetime_minutes >= 30;
+    const earlySignalPass =
+      item.strategy === "xarb_spot" &&
+      item.decision_capable_execution_signal &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      !item.execution_fragile &&
+      item.maker_net_edge_bps >= 2 &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      !item.paper_trade_ready &&
+      (item.persistence_ticks < 3 || item.lifetime_minutes < 30);
+    const persistenceOnlyFailures = failedChecks.filter((check) =>
+      ["min_persistence_ticks", "min_lifetime_minutes", "paper_trade_ready"].includes(check)
+    );
+    const blockedByPersistenceOnly =
+      item.strategy === "xarb_spot" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      !item.execution_fragile &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      persistenceOnlyFailures.length > 0 &&
+      failedChecks.every((check) =>
+        ["min_persistence_ticks", "min_lifetime_minutes", "paper_trade_ready"].includes(check)
+      );
+    const edgeStrongButImmature =
+      item.strategy === "xarb_spot" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      item.maker_net_edge_bps >= 2 &&
+      !item.execution_fragile &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      !hardPersistencePass;
+
     const openingTrialCandidate = failedChecks.length === 0;
     const watchMoreEligible =
       item.strategy === "xarb_spot" &&
@@ -742,18 +773,26 @@ async function buildPacket(args: {
       !item.execution_fragile &&
       (item.execution_viability_score ?? 0) >= 80 &&
       exclusionReasons.length === 0 &&
-      (!item.paper_trade_ready || item.persistence_ticks < 3 || item.lifetime_minutes < 30);
+      (!item.paper_trade_ready || !hardPersistencePass || blockedByPersistenceOnly || earlySignalPass);
+    const preGoWatch = !openingTrialCandidate && (blockedByPersistenceOnly || earlySignalPass);
 
-    const openingTrialDecision = openingTrialCandidate ? "go" : watchMoreEligible ? "watch_more" : "no_go";
+    const openingTrialDecision = openingTrialCandidate ? "go" : (watchMoreEligible || preGoWatch) ? "watch_more" : "no_go";
     const openingTrialReason = openingTrialCandidate
       ? "xarb_spot execution-ready setup passed all controlled opening gates"
-      : openingTrialDecision === "watch_more"
-        ? "setup is close to entry-ready but needs more persistence and/or lifetime"
+      : preGoWatch
+        ? "strong execution signal, but persistence confirmation is still missing"
+        : openingTrialDecision === "watch_more"
+          ? "setup is close to entry-ready but needs more persistence and/or lifetime"
         : item.primary_failure_reason ?? failedChecks[0] ?? "opening_gate_not_met";
     const entryReadinessTimestamp = openingTrialCandidate ? item.ts : null;
 
     return {
       ...item,
+      hard_persistence_pass: hardPersistencePass,
+      early_signal_pass: earlySignalPass,
+      pre_go_watch: preGoWatch,
+      blocked_by_persistence_only: blockedByPersistenceOnly,
+      edge_strong_but_immature: edgeStrongButImmature,
       opening_trial_candidate: openingTrialCandidate,
       opening_trial_reason: openingTrialReason,
       opening_trial_passed_checks: passedChecks,
@@ -845,6 +884,22 @@ async function buildPacket(args: {
   const watchOnlyFragileXarb = evaluatedFinal.filter(
     (item) => item.strategy === "xarb_spot" && item.execution_recommendation_state === "watch_only"
   );
+  const persistenceBlockedCandidates = evaluatedFinal
+    .filter((item) => item.strategy === "xarb_spot" && item.blocked_by_persistence_only)
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5);
+  const earlyAttentionCandidates = evaluatedFinal
+    .filter((item) => item.strategy === "xarb_spot" && (item.pre_go_watch || item.edge_strong_but_immature))
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      attention_reason:
+        item.pre_go_watch
+          ? "Pozitív taker nettós setup figyelendő, persistence hiányzik"
+          : "Erős edge, de még éretlen execution signal",
+      next_confirmation: item.persistence_ticks < 3 ? "következő tick megerősítés kell" : "további életidő kell"
+    }));
   const goCandidatesNow = evaluatedFinal
     .filter((item) => item.opening_trial_decision === "go")
     .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
@@ -867,7 +922,7 @@ async function buildPacket(args: {
       entry_window_open: false,
       minutes_since_go: null,
       current_signal_state: item.execution_recommendation_state,
-      risk_if_enter_now: "persistence/lifetime még nem elég stabil"
+      risk_if_enter_now: item.blocked_by_persistence_only ? "setup jó, de persistence megerősítés még hiányzik" : "persistence/lifetime még nem elég stabil"
     }));
   const noGoCandidatesNow = evaluatedFinal
     .filter((item) => item.strategy === "xarb_spot" && item.opening_trial_decision === "no_go")
@@ -945,6 +1000,14 @@ async function buildPacket(args: {
       exchange: item.exchange,
       state: item.current_signal_state,
       summary: item.why_now
+    })),
+    ...earlyAttentionCandidates.slice(0, 2).map((item) => ({
+      kind: "pre_go_watch",
+      symbol: item.symbol,
+      strategy: item.strategy,
+      exchange: item.exchange,
+      state: item.execution_recommendation_state,
+      summary: item.attention_reason
     }))
   ].slice(0, 5);
   const happenedRecently = eventFeed.slice(0, 10);
@@ -975,12 +1038,19 @@ async function buildPacket(args: {
         headline: `${item.symbol} most nyitható`,
         details: `${item.exchange} · viability ${item.execution_viability_score ?? 0} · taker ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps`
       }))
+    : earlyAttentionCandidates.length > 0
+      ? earlyAttentionCandidates.slice(0, 3).map((item) => ({
+          type: "early_attention",
+          ts: item.ts,
+          headline: "Korai execution signal érkezett, még nem nyitható",
+          details: `${item.symbol} · ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps taker · ${item.attention_reason}`
+        }))
     : watchMoreCandidatesNow.length > 0
       ? watchMoreCandidatesNow.slice(0, 3).map((item) => ({
           type: "watch_more",
           ts: item.ts,
-          headline: `${item.symbol} közel van a nyitáshoz`,
-          details: item.why_now
+          headline: "Pozitív taker nettós setup figyelendő, persistence hiányzik",
+          details: `${item.symbol} · ${item.why_now}`
         }))
       : profitEvents.length > 0
         ? profitEvents.slice(0, 3).map((item) => ({
@@ -1022,6 +1092,7 @@ async function buildPacket(args: {
     `ebből ${actionSummary.paper_trade_started_24h} paper-trade-ready volt`,
     goCandidatesNow.length > 0 ? "maradt aktív go a latest snapshotban" : "nem maradt aktív go a latest snapshotban",
     `volt ${conditionalExecutionXarb.length} conditional execution setup`,
+    `volt ${earlyAttentionCandidates.length} korai execution signal, amit még a persistence tartott vissza`,
     xrpOrSolRegime ? `market regime oldalon ${xrpOrSolRegime} dominancia látszott` : "market regime oldalon nem volt erős dominancia"
   ];
   const executionReadyRankings = {
@@ -1056,8 +1127,10 @@ async function buildPacket(args: {
         : [{
             entry_window_open: false,
             why_now:
-              watchMoreCandidatesNow.length > 0
-                ? "csak conditional vagy watch-more setup van"
+              earlyAttentionCandidates.length > 0
+                ? "van korai execution signal, de persistence megerősítés kell"
+                : watchMoreCandidatesNow.length > 0
+                  ? "csak conditional vagy watch-more setup van"
                 : evaluatedFinal.some((item) => item.strategy === "relative_strength")
                   ? "csak market-signal van"
                   : "nincs execution-ready setup",
@@ -1089,6 +1162,8 @@ async function buildPacket(args: {
     execution_ready_rankings: executionReadyRankings,
     watch_more_candidates_now: watchMoreCandidatesNow,
     no_go_candidates_now: noGoCandidatesNow,
+    early_attention_candidates: earlyAttentionCandidates,
+    persistence_blocked_candidates: persistenceBlockedCandidates,
     near_top_opportunities: nearTopOpps,
     filtered_but_notable_opportunities: nearTopOpps,
     near_misses: nearMisses,
@@ -1145,6 +1220,17 @@ async function buildPacket(args: {
       opening_trial_candidate_count: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
       execution_ready_xarb_count: executionReadyXarb.length,
       paper_trade_ready_count: executionReadyXarb.filter((item) => item.paper_trade_ready).length,
+      blocked_by_persistence_only_count: evaluatedFinal.filter((item) => item.blocked_by_persistence_only).length,
+      early_attention_candidate_count: earlyAttentionCandidates.length,
+      positive_taker_but_short_lived_count: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          (item.taker_net_edge_bps ?? 0) > 0 &&
+          (item.persistence_ticks < 3 || item.lifetime_minutes < 30)
+      ).length,
+      watch_more_due_to_persistence_count: evaluatedFinal.filter(
+        (item) => item.opening_trial_decision === "watch_more" && item.blocked_by_persistence_only
+      ).length,
       rejected_due_to_low_persistence: evaluatedFinal.filter(
         (item) =>
           item.strategy === "xarb_spot" &&
