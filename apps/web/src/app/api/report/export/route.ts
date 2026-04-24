@@ -203,6 +203,10 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function isXarbStrategy(strategy: string) {
+  return strategy === "xarb_spot" || strategy === "cross_exchange_spot";
+}
+
 type ExecutionAuditRow = {
   id: number;
   ts: string;
@@ -1011,6 +1015,9 @@ async function buildPacket(args: {
     }))
   ].slice(0, 5);
   const happenedRecently = eventFeed.slice(0, 10);
+  const totalStrategyCount = (opportunities ?? []).length;
+  const marketSignalCount = (opportunities ?? []).filter((row) => row.type === "relative_strength").length;
+  const executionSignalCount = (opportunities ?? []).filter((row) => isXarbStrategy(row.type)).length;
   const operationalStatus =
     profitEvents.length > 0
       ? "profit_event_logged"
@@ -1070,7 +1077,10 @@ async function buildPacket(args: {
               type: "idle",
               ts: new Date().toISOString(),
               headline: "Nincs aktuális akció",
-              details: noGoCandidatesNow[0]?.why_now ?? "Most nincs execution-ready, nyitható setup."
+              details:
+                executionSignalCount === 0
+                  ? "Nincs execution-ready setup, nincs xarb go candidate, a jelen run market-signal dominated és nincs paper action."
+                  : noGoCandidatesNow[0]?.why_now ?? "Most nincs execution-ready, nyitható setup."
             }];
   const actionSummary = {
     had_go_candidate_today: evaluatedFinal.some((item) => item.opening_trial_candidate),
@@ -1081,6 +1091,106 @@ async function buildPacket(args: {
     paper_trade_stopped_24h: evaluatedFinal.filter((item) => item.paper_trade_closed && !item.paper_trade_positive).length,
     best_paper_outcome_bps: evaluatedFinal.reduce((best, item) => Math.max(best, item.paper_trade_pnl_bps), 0),
     worst_paper_outcome_bps: evaluatedFinal.reduce((worst, item) => Math.min(worst, item.paper_trade_pnl_bps), 0)
+  };
+  const rawXarbRows = evaluatedFinal.filter((item) => isXarbStrategy(item.strategy));
+  const xarbAfterCosts = rawXarbRows.filter((item) => item.maker_net_edge_bps > 0);
+  const xarbAfterPersistence = xarbAfterCosts.filter((item) => item.hard_persistence_pass || item.early_signal_pass);
+  const xarbAfterExecutionViability = xarbAfterPersistence.filter(
+    (item) => (item.execution_viability_score ?? 0) >= 80 && (item.taker_net_edge_bps ?? 0) > 0 && !item.execution_fragile
+  );
+  const xarbAfterOpeningGate = xarbAfterExecutionViability.filter(
+    (item) => item.opening_trial_decision === "go" || item.opening_trial_decision === "watch_more"
+  );
+  const xarbPromotedToGo = xarbAfterOpeningGate.filter((item) => item.opening_trial_candidate);
+  const xarbCandidatesMissingFromRun = Math.max(0, rawXarbRows.length - evaluatedFinal.filter((item) => isXarbStrategy(item.strategy)).length);
+  const xarbIngestCount = (opportunities ?? []).filter((row) => isXarbStrategy(row.type)).length;
+  const xarbEvaluatedCount = rawXarbRows.length;
+  const xarbReportedCount =
+    executionReadyXarb.length +
+    conditionalExecutionXarb.length +
+    watchOnlyFragileXarb.length +
+    earlyAttentionCandidates.length +
+    persistenceBlockedCandidates.length;
+  const xarbStrategyActive = true;
+  const executionAbsenceReason =
+    xarbIngestCount === 0
+      ? "xarb_not_triggered"
+      : xarbEvaluatedCount === 0
+        ? "xarb_data_missing"
+        : xarbAfterCosts.length === 0
+          ? "no_valid_market_opportunity"
+          : xarbAfterOpeningGate.length === 0
+            ? "xarb_filtered_out"
+            : xarbPromotedToGo.length === 0
+              ? "xarb_filtered_out"
+              : "no_valid_market_opportunity";
+  const xarbCoverageSummary = Object.values(
+    rawXarbRows.reduce((acc, item) => {
+      const key = item.exchange;
+      const current = acc[key] ?? {
+        exchange_pair: key,
+        raw_candidates: 0,
+        passed_cost_filter: 0,
+        passed_persistence_filter: 0,
+        passed_execution_viability: 0,
+        produced_reportable_signal: 0
+      };
+      current.raw_candidates += 1;
+      if (item.maker_net_edge_bps > 0) current.passed_cost_filter += 1;
+      if (item.hard_persistence_pass || item.early_signal_pass) current.passed_persistence_filter += 1;
+      if ((item.execution_viability_score ?? 0) >= 80 && (item.taker_net_edge_bps ?? 0) > 0 && !item.execution_fragile) {
+        current.passed_execution_viability += 1;
+      }
+      if (item.opening_trial_decision === "go" || item.opening_trial_decision === "watch_more" || item.pre_go_watch) {
+        current.produced_reportable_signal += 1;
+      }
+      acc[key] = current;
+      return acc;
+    }, {} as Record<
+      string,
+      {
+        exchange_pair: string;
+        raw_candidates: number;
+        passed_cost_filter: number;
+        passed_persistence_filter: number;
+        passed_execution_viability: number;
+        produced_reportable_signal: number;
+      }
+    >)
+  ).sort((a, b) => b.raw_candidates - a.raw_candidates);
+  const xarbRejectedRawSignals = rawXarbRows
+    .filter((item) => !item.opening_trial_candidate)
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5)
+    .map((item) => ({
+      ts: item.ts,
+      symbol: item.symbol,
+      strategy: item.strategy,
+      exchange: item.exchange,
+      maker_net_edge_bps: item.maker_net_edge_bps,
+      taker_net_edge_bps: item.taker_net_edge_bps,
+      reject_reason:
+        item.opening_trial_failed_checks.includes("positive_taker_edge")
+          ? "negative_taker"
+          : item.opening_trial_failed_checks.includes("min_execution_viability")
+            ? "low_execution_viability"
+            : item.opening_trial_failed_checks.includes("min_persistence_ticks") ||
+                item.opening_trial_failed_checks.includes("min_lifetime_minutes")
+              ? "insufficient_persistence"
+              : item.maker_net_edge_bps <= 0
+                ? "insufficient_edge"
+                : "no_cross_exchange_dislocation"
+    }));
+  const strategyMixHealth = {
+    market_signal_share: totalStrategyCount > 0 ? Number((marketSignalCount / totalStrategyCount).toFixed(4)) : 0,
+    execution_signal_share: totalStrategyCount > 0 ? Number((executionSignalCount / totalStrategyCount).toFixed(4)) : 0,
+    expected_execution_signal_share: 0.1,
+    strategy_mix_warning:
+      executionSignalCount === 0
+        ? "execution_share_zero"
+        : executionSignalCount / Math.max(1, totalStrategyCount) < 0.1
+          ? "execution_share_low"
+          : "balanced"
   };
   const xrpOrSolRegime = evaluatedFinal
     .filter((item) => item.strategy === "relative_strength")
@@ -1093,8 +1203,25 @@ async function buildPacket(args: {
     goCandidatesNow.length > 0 ? "maradt aktív go a latest snapshotban" : "nem maradt aktív go a latest snapshotban",
     `volt ${conditionalExecutionXarb.length} conditional execution setup`,
     `volt ${earlyAttentionCandidates.length} korai execution signal, amit még a persistence tartott vissza`,
+    executionSignalCount === 0 ? "az execution ág nem adott reportolható xarb inputot" : `az execution ág ${executionSignalCount} nyers xarb opportunity-t látott`,
     xrpOrSolRegime ? `market regime oldalon ${xrpOrSolRegime} dominancia látszott` : "market regime oldalon nem volt erős dominancia"
   ];
+  const eventFeedWithAbsence =
+    type !== "latest" && actionSummary.go_candidate_count_24h === 0
+      ? [
+          {
+            event_type: "execution_signal_absent",
+            ts: latestTick?.ts ?? new Date().toISOString(),
+            strategy: "xarb_spot",
+            symbol: "-",
+            exchange: "-",
+            severity: "info" as const,
+            headline: "24h alatt nem volt xarb action",
+            details: `execution_absence_reason=${executionAbsenceReason}`
+          },
+          ...eventFeed
+        ]
+      : eventFeed;
   const executionReadyRankings = {
     by_taker_positive_margin: executionReadyXarb
       .slice()
@@ -1140,7 +1267,7 @@ async function buildPacket(args: {
           }],
     active_now: activeNow,
     happened_recently: happenedRecently,
-    event_feed: eventFeed.slice(0, type === "latest" ? 20 : 60),
+    event_feed: eventFeedWithAbsence.slice(0, type === "latest" ? 20 : 60),
     run_meta: {
       run_id: latestTick?.id ?? null,
       time_window: type,
@@ -1215,6 +1342,23 @@ async function buildPacket(args: {
       best_execution_ready_symbol: bestExecutionReady?.symbol ?? null,
       best_execution_ready_exchange_pair: bestExecutionReady?.exchange ?? null
     },
+    execution_pipeline_diagnostics: {
+      raw_xarb_candidates_seen: rawXarbRows.length,
+      xarb_candidates_after_costs: xarbAfterCosts.length,
+      xarb_candidates_after_persistence_filter: xarbAfterPersistence.length,
+      xarb_candidates_after_execution_viability_filter: xarbAfterExecutionViability.length,
+      xarb_candidates_after_opening_gate: xarbAfterOpeningGate.length,
+      xarb_candidates_promoted_to_go: xarbPromotedToGo.length,
+      xarb_candidates_missing_from_run: xarbCandidatesMissingFromRun,
+      xarb_strategy_active: xarbStrategyActive,
+      xarb_ingest_count: xarbIngestCount,
+      xarb_evaluated_count: xarbEvaluatedCount,
+      xarb_reported_count: xarbReportedCount
+    },
+    execution_absence_reason: executionAbsenceReason,
+    xarb_coverage_summary: xarbCoverageSummary,
+    xarb_rejected_raw_signals: xarbRejectedRawSignals,
+    strategy_mix_health: strategyMixHealth,
     action_summary: actionSummary,
     opening_trial_summary: {
       opening_trial_candidate_count: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
