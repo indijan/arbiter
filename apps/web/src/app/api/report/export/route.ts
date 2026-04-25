@@ -718,6 +718,8 @@ async function buildPacket(args: {
     ];
     const passedChecks: string[] = [];
     const failedChecks: string[] = [];
+    const requiredPersistenceTicks = 3;
+    const requiredLifetimeMinutes = 30;
     const pushCheck = (name: string, condition: boolean) => {
       if (condition) {
         passedChecks.push(name);
@@ -731,13 +733,13 @@ async function buildPacket(args: {
     pushCheck("execution_ready_state", item.execution_recommendation_state === "execution_ready");
     pushCheck("positive_taker_edge", (item.taker_net_edge_bps ?? 0) > 0);
     pushCheck("not_execution_fragile", !item.execution_fragile);
-    pushCheck("min_persistence_ticks", item.persistence_ticks >= 3);
-    pushCheck("min_lifetime_minutes", item.lifetime_minutes >= 30);
+    pushCheck("min_persistence_ticks", item.persistence_ticks >= requiredPersistenceTicks);
+    pushCheck("min_lifetime_minutes", item.lifetime_minutes >= requiredLifetimeMinutes);
     pushCheck("min_execution_viability", (item.execution_viability_score ?? 0) >= 80);
     pushCheck("paper_trade_ready", item.paper_trade_ready);
     pushCheck("no_exclusion_reasons", exclusionReasons.length === 0);
 
-    const hardPersistencePass = item.persistence_ticks >= 3 && item.lifetime_minutes >= 30;
+    const hardPersistencePass = item.persistence_ticks >= requiredPersistenceTicks && item.lifetime_minutes >= requiredLifetimeMinutes;
     const earlySignalPass =
       item.strategy === "xarb_spot" &&
       item.decision_capable_execution_signal &&
@@ -787,16 +789,42 @@ async function buildPacket(args: {
         ? "strong execution signal, but persistence confirmation is still missing"
         : openingTrialDecision === "watch_more"
           ? "setup is close to entry-ready but needs more persistence and/or lifetime"
-        : item.primary_failure_reason ?? failedChecks[0] ?? "opening_gate_not_met";
+      : item.primary_failure_reason ?? failedChecks[0] ?? "opening_gate_not_met";
     const entryReadinessTimestamp = openingTrialCandidate ? item.ts : null;
+    const healthyEarlyExecutionSignal =
+      item.strategy === "xarb_spot" &&
+      !openingTrialCandidate &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      !item.execution_fragile &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      item.lifetime_minutes >= 20;
+    const distanceToGoChecks = openingTrialCandidate ? [] : failedChecks;
+    const persistenceGap = Math.max(0, requiredPersistenceTicks - item.persistence_ticks);
+    const lifetimeGap = Math.max(0, requiredLifetimeMinutes - item.lifetime_minutes);
+    const distanceToGoSummary =
+      openingTrialCandidate
+        ? "go gate passed"
+        : distanceToGoChecks.length === 0
+          ? "no missing checks detected"
+          : `${distanceToGoChecks.length} check missing: ${distanceToGoChecks.join(", ")}`;
 
     return {
       ...item,
       hard_persistence_pass: hardPersistencePass,
       early_signal_pass: earlySignalPass,
-      pre_go_watch: preGoWatch,
+      pre_go_watch: preGoWatch || healthyEarlyExecutionSignal,
       blocked_by_persistence_only: blockedByPersistenceOnly,
       edge_strong_but_immature: edgeStrongButImmature,
+      healthy_early_execution_signal: healthyEarlyExecutionSignal,
+      required_persistence_ticks: requiredPersistenceTicks,
+      current_persistence_ticks: item.persistence_ticks,
+      persistence_gap: persistenceGap,
+      required_lifetime_minutes: requiredLifetimeMinutes,
+      current_lifetime_minutes: item.lifetime_minutes,
+      lifetime_gap: Number(lifetimeGap.toFixed(1)),
+      distance_to_go_checks: distanceToGoChecks,
+      distance_to_go_summary: distanceToGoSummary,
       opening_trial_candidate: openingTrialCandidate,
       opening_trial_reason: openingTrialReason,
       opening_trial_passed_checks: passedChecks,
@@ -890,6 +918,32 @@ async function buildPacket(args: {
   );
   const persistenceBlockedCandidates = evaluatedFinal
     .filter((item) => item.strategy === "xarb_spot" && item.blocked_by_persistence_only)
+    .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
+    .slice(0, 5);
+  const healthyEarlyExecutionCandidates = evaluatedFinal
+    .filter((item) => item.strategy === "xarb_spot" && item.healthy_early_execution_signal)
+    .sort(
+      (a, b) =>
+        (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0) ||
+        a.distance_to_go_checks.length - b.distance_to_go_checks.length
+    )
+    .slice(0, 5)
+    .map((item) => ({
+      ...item,
+      attention_reason: `${item.symbol} kozelit a nyithato allapothoz, persistence megerosites szukseges`,
+      next_confirmation:
+        item.persistence_gap > 0
+          ? `${item.persistence_gap} tovabbi tick kell`
+          : item.lifetime_gap > 0
+            ? `${item.lifetime_gap.toFixed(1)} perc tovabbi lifetime kell`
+            : item.distance_to_go_summary
+    }));
+  const fragileExecutionCandidates = evaluatedFinal
+    .filter(
+      (item) =>
+        item.strategy === "xarb_spot" &&
+        (item.execution_fragile || (item.taker_net_edge_bps ?? 0) <= 0 || item.execution_recommendation_state === "conditional_execution")
+    )
     .sort((a, b) => (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0))
     .slice(0, 5);
   const earlyAttentionCandidates = evaluatedFinal
@@ -1005,13 +1059,24 @@ async function buildPacket(args: {
       state: item.current_signal_state,
       summary: item.why_now
     })),
-    ...earlyAttentionCandidates.slice(0, 2).map((item) => ({
+    ...healthyEarlyExecutionCandidates.slice(0, 2).map((item) => ({
       kind: "pre_go_watch",
       symbol: item.symbol,
       strategy: item.strategy,
       exchange: item.exchange,
       state: item.execution_recommendation_state,
       summary: item.attention_reason
+    })),
+    ...earlyAttentionCandidates
+      .filter((item) => !item.healthy_early_execution_signal)
+      .slice(0, 1)
+      .map((item) => ({
+        kind: "early_attention",
+        symbol: item.symbol,
+        strategy: item.strategy,
+        exchange: item.exchange,
+        state: item.execution_recommendation_state,
+        summary: item.attention_reason
     }))
   ].slice(0, 5);
   const happenedRecently = eventFeed.slice(0, 10);
@@ -1045,6 +1110,13 @@ async function buildPacket(args: {
         headline: `${item.symbol} most nyitható`,
         details: `${item.exchange} · viability ${item.execution_viability_score ?? 0} · taker ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps`
       }))
+    : healthyEarlyExecutionCandidates.length > 0
+      ? healthyEarlyExecutionCandidates.slice(0, 3).map((item) => ({
+          type: "healthy_early_execution",
+          ts: item.ts,
+          headline: "Korai, egeszseges execution signal figyelendo",
+          details: `${item.symbol} · ${item.exchange} · ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps taker · ${item.distance_to_go_summary}`
+        }))
     : earlyAttentionCandidates.length > 0
       ? earlyAttentionCandidates.slice(0, 3).map((item) => ({
           type: "early_attention",
@@ -1202,6 +1274,7 @@ async function buildPacket(args: {
     `ebből ${actionSummary.paper_trade_started_24h} paper-trade-ready volt`,
     goCandidatesNow.length > 0 ? "maradt aktív go a latest snapshotban" : "nem maradt aktív go a latest snapshotban",
     `volt ${conditionalExecutionXarb.length} conditional execution setup`,
+    `volt ${healthyEarlyExecutionCandidates.length} egészséges korai execution signal`,
     `volt ${earlyAttentionCandidates.length} korai execution signal, amit még a persistence tartott vissza`,
     executionSignalCount === 0 ? "az execution ág nem adott reportolható xarb inputot" : `az execution ág ${executionSignalCount} nyers xarb opportunity-t látott`,
     xrpOrSolRegime ? `market regime oldalon ${xrpOrSolRegime} dominancia látszott` : "market regime oldalon nem volt erős dominancia"
@@ -1289,7 +1362,10 @@ async function buildPacket(args: {
     execution_ready_rankings: executionReadyRankings,
     watch_more_candidates_now: watchMoreCandidatesNow,
     no_go_candidates_now: noGoCandidatesNow,
+    pre_go_watch_now: healthyEarlyExecutionCandidates,
     early_attention_candidates: earlyAttentionCandidates,
+    healthy_early_execution_candidates: healthyEarlyExecutionCandidates,
+    fragile_execution_candidates: fragileExecutionCandidates,
     persistence_blocked_candidates: persistenceBlockedCandidates,
     near_top_opportunities: nearTopOpps,
     filtered_but_notable_opportunities: nearTopOpps,
@@ -1364,6 +1440,15 @@ async function buildPacket(args: {
       opening_trial_candidate_count: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
       execution_ready_xarb_count: executionReadyXarb.length,
       paper_trade_ready_count: executionReadyXarb.filter((item) => item.paper_trade_ready).length,
+      healthy_early_execution_count: evaluatedFinal.filter((item) => item.healthy_early_execution_signal).length,
+      fragile_execution_count: evaluatedFinal.filter(
+        (item) =>
+          item.strategy === "xarb_spot" &&
+          (item.execution_fragile || (item.taker_net_edge_bps ?? 0) <= 0 || item.execution_recommendation_state === "conditional_execution")
+      ).length,
+      near_go_but_not_ready_count: evaluatedFinal.filter(
+        (item) => item.strategy === "xarb_spot" && item.pre_go_watch && !item.opening_trial_candidate
+      ).length,
       blocked_by_persistence_only_count: evaluatedFinal.filter((item) => item.blocked_by_persistence_only).length,
       early_attention_candidate_count: earlyAttentionCandidates.length,
       positive_taker_but_short_lived_count: evaluatedFinal.filter(
