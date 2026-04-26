@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import ReportExportButtons from "@/components/ReportExportButtons";
 import AdvancedViewTable from "@/components/AdvancedViewTable";
-import StrategyLearningPanel from "@/components/StrategyLearningPanel";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
 import OperationalStatusPanel from "@/components/OperationalStatusPanel";
+import DecisionViewPanel from "@/components/DecisionViewPanel";
 import { evaluateOpportunity } from "@/lib/decision/evaluator";
 
 type OpportunityRow = {
@@ -30,12 +30,6 @@ type SnapshotPoint = {
   symbol: string;
   spot_bid: number | string | null;
   spot_ask: number | string | null;
-};
-
-type PositionRow = {
-  symbol: string;
-  entry_ts: string | null;
-  exit_ts: string | null;
 };
 
 function canonicalSymbol(raw: string) {
@@ -145,7 +139,7 @@ export default async function DashboardPage() {
 
   const snapshotsSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: latestTick }, { data: opportunities }, { data: positions }] = await Promise.all([
+  const [{ data: latestTick }, { data: opportunities }] = await Promise.all([
     supabase
       .from("system_ticks")
       .select("ts, ingest_errors, detect_summary")
@@ -156,11 +150,6 @@ export default async function DashboardPage() {
       .from("opportunities")
       .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
       .order("ts", { ascending: false })
-      .limit(80),
-    supabase
-      .from("positions")
-      .select("symbol, entry_ts, exit_ts")
-      .order("entry_ts", { ascending: false })
       .limit(80)
   ]);
 
@@ -209,41 +198,6 @@ export default async function DashboardPage() {
       return { ts: point.ts, symbol: point.symbol, mid };
     })
     .filter((x) => x.mid > 0);
-
-  const learningOpportunitySeries = typedOpportunities.slice(0, 40).map((opp) => {
-    const key = `${opp.type}:${opp.exchange}:${opp.symbol}`;
-    const seen = persistence.get(key);
-    const lifetime = seen ? (new Date(seen.last).getTime() - new Date(seen.first).getTime()) / 60000 : 0;
-    const evaluation = evaluateOpportunity({
-      strategy: opp.type,
-      exchange: opp.exchange,
-      symbol: opp.symbol,
-      net_edge_bps: asNumber(opp.net_edge_bps),
-      metadata: opp.details ?? {},
-      persistence_ticks: seen?.count ?? 1,
-      first_seen_ts: seen?.first ?? opp.ts,
-      last_seen_ts: seen?.last ?? opp.ts,
-      lifetime_minutes: lifetime,
-      consumed_risk_score: 0
-    });
-    return {
-      ts: opp.ts,
-      symbol: opp.symbol,
-      strategy: opp.type,
-      decision: evaluation.decision,
-      score: evaluation.score,
-      reason: evaluation.reason,
-      net_edge_bps: evaluation.maker_net_edge_bps,
-      break_even_hours: asNumber(opp.details?.break_even_hours, 0),
-      risk_score: 100 - evaluation.score
-    };
-  });
-
-  const learningTradeSeries = ((positions ?? []) as PositionRow[]).map((p) => ({
-    symbol: p.symbol,
-    entry_ts: p.entry_ts,
-    exit_ts: p.exit_ts
-  }));
 
   const liveAdvancedRows = typedOpportunities.slice(0, 20).map((opp) => {
     const key = `${opp.type}:${opp.exchange}:${opp.symbol}`;
@@ -304,16 +258,25 @@ export default async function DashboardPage() {
         stability >= 60;
       const exclusionReasons = evaluation.auto_trade_exclusion_reasons;
       const openingTrialFailedChecks: string[] = [];
+      const requiredPersistenceTicks = 3;
+      const requiredLifetimeMinutes = 30;
       if (!evaluation.decision_capable_execution_signal) openingTrialFailedChecks.push("decision_capable_execution_signal");
       if (evaluation.execution_recommendation_state !== "execution_ready") openingTrialFailedChecks.push("execution_ready_state");
       if (taker <= 0) openingTrialFailedChecks.push("positive_taker_edge");
       if (evaluation.execution_fragile) openingTrialFailedChecks.push("not_execution_fragile");
-      if (evaluation.persistence_ticks < 3) openingTrialFailedChecks.push("min_persistence_ticks");
-      if (evaluation.lifetime_minutes < 30) openingTrialFailedChecks.push("min_lifetime_minutes");
+      if (evaluation.persistence_ticks < requiredPersistenceTicks) openingTrialFailedChecks.push("min_persistence_ticks");
+      if (evaluation.lifetime_minutes < requiredLifetimeMinutes) openingTrialFailedChecks.push("min_lifetime_minutes");
       if ((evaluation.execution_viability_score ?? 0) < 80) openingTrialFailedChecks.push("min_execution_viability");
       if (!paperTradeReady) openingTrialFailedChecks.push("paper_trade_ready");
       if (exclusionReasons.length > 0) openingTrialFailedChecks.push("no_exclusion_reasons");
       const openingTrialCandidate = openingTrialFailedChecks.length === 0;
+      const healthyEarlyExecutionSignal =
+        !openingTrialCandidate &&
+        evaluation.execution_recommendation_state === "execution_ready" &&
+        taker > 0 &&
+        !evaluation.execution_fragile &&
+        (evaluation.execution_viability_score ?? 0) >= 80 &&
+        evaluation.lifetime_minutes >= 20;
       const watchMore =
         evaluation.decision_capable_execution_signal &&
         evaluation.execution_recommendation_state === "execution_ready" &&
@@ -350,6 +313,19 @@ export default async function DashboardPage() {
             ? "Közel van, de még stabilitás/idő kell."
             : openingTrialFailedChecks[0] ?? "Nincs nyitható setup.",
         opening_trial_failed_checks: openingTrialFailedChecks,
+        healthy_early_execution_signal: healthyEarlyExecutionSignal,
+        distance_to_go_checks: openingTrialCandidate ? [] : openingTrialFailedChecks,
+        distance_to_go_summary: openingTrialCandidate
+          ? "go gate passed"
+          : `${openingTrialFailedChecks.length} feltétel hiányzik: ${openingTrialFailedChecks.join(", ")}`,
+        required_persistence_ticks: requiredPersistenceTicks,
+        current_persistence_ticks: evaluation.persistence_ticks,
+        persistence_gap: Math.max(0, requiredPersistenceTicks - evaluation.persistence_ticks),
+        required_lifetime_minutes: requiredLifetimeMinutes,
+        current_lifetime_minutes: evaluation.lifetime_minutes,
+        lifetime_gap: Number(Math.max(0, requiredLifetimeMinutes - evaluation.lifetime_minutes).toFixed(1)),
+        execution_fragile: evaluation.execution_fragile,
+        decision_capable_execution_signal: evaluation.decision_capable_execution_signal,
         entry_readiness_timestamp: openingTrialCandidate ? opp.ts : null,
         paper_trade_started: openingTrialCandidate,
         paper_trade_closed: openingTrialCandidate,
@@ -580,14 +556,14 @@ export default async function DashboardPage() {
       </section>
 
       <section className="card mb-6">
-        <h2 className="text-xl font-semibold">Learning View</h2>
+        <h2 className="text-xl font-semibold">Decision View</h2>
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
-          Árfolyam görbe + stratégia döntési pontok. A symbol fixen választható, így az időablak ugyanarra a piacra vonatkozik.
+          Opportunity-alapú entry barométer. A fő fókusz az, hogy hol tart a belépési döntés, és mi hiányzik még a nyitáshoz.
         </p>
-        <StrategyLearningPanel
+        <DecisionViewPanel
+          opportunities={executionRows}
           snapshots={learningSnapshotSeries}
-          opportunities={learningOpportunitySeries}
-          trades={learningTradeSeries}
+          marketSignalCount={typedOpportunities.filter((opp) => opp.type === "relative_strength").length}
         />
       </section>
 
