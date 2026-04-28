@@ -1159,9 +1159,9 @@ async function buildPacket(args: {
           : "none";
   const importantNow = goCandidatesNow.length > 0
     ? goCandidatesNow.slice(0, 3).map((item) => ({
-        type: "active_go_candidate",
+        type: type === "latest" ? "active_go_candidate" : "period_go_candidate",
         ts: item.ts,
-        headline: `${item.symbol} most nyitható`,
+        headline: type === "latest" ? `${item.symbol} most nyitható` : `${item.symbol} go candidate volt a vizsgált ablakban`,
         details: `${item.exchange} · viability ${item.execution_viability_score ?? 0} · taker ${(item.taker_net_edge_bps ?? 0).toFixed(2)} bps`
       }))
     : healthyEarlyExecutionCandidates.length > 0
@@ -1211,7 +1211,7 @@ async function buildPacket(args: {
   const actionSummary = {
     had_go_candidate_today: evaluatedFinal.some((item) => item.opening_trial_candidate),
     go_candidate_count_24h: evaluatedFinal.filter((item) => item.opening_trial_candidate).length,
-    active_go_candidate_now: goCandidatesNow.length > 0,
+    active_go_candidate_now: type === "latest" && goCandidatesNow.length > 0,
     paper_trade_started_24h: evaluatedFinal.filter((item) => item.paper_trade_started).length,
     paper_trade_profitable_24h: evaluatedFinal.filter((item) => item.paper_trade_positive).length,
     paper_trade_stopped_24h: evaluatedFinal.filter((item) => item.paper_trade_closed && !item.paper_trade_positive).length,
@@ -1326,7 +1326,13 @@ async function buildPacket(args: {
   const whatHappenedToday = [
     `volt ${actionSummary.go_candidate_count_24h} go execution setup`,
     `ebből ${actionSummary.paper_trade_started_24h} paper-trade-ready volt`,
-    goCandidatesNow.length > 0 ? "maradt aktív go a latest snapshotban" : "nem maradt aktív go a latest snapshotban",
+    type === "latest"
+      ? goCandidatesNow.length > 0
+        ? "van aktív go a latest snapshotban"
+        : "nincs aktív go a latest snapshotban"
+      : goCandidatesNow.length > 0
+        ? "volt go a vizsgált ablakban, az aktuális állapotot a latest blokk mutatja"
+        : "nem volt go a vizsgált ablakban",
     `volt ${conditionalExecutionXarb.length} conditional execution setup`,
     `volt ${healthyEarlyExecutionCandidates.length} egészséges korai execution signal`,
     `volt ${evaluatedFinal.filter((item) => item.blocked_by_persistence_only).length} korai execution signal, amit még a persistence tartott vissza`,
