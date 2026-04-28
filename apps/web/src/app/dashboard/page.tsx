@@ -32,6 +32,11 @@ type SnapshotPoint = {
   spot_ask: number | string | null;
 };
 
+const OPENING_REQUIRED_PERSISTENCE_TICKS = 3;
+const OPENING_REQUIRED_LIFETIME_MINUTES = 30;
+const PAPER_REQUIRED_LIFETIME_MINUTES = 60;
+const PAPER_REQUIRED_EDGE_STABILITY = 60;
+
 function canonicalSymbol(raw: string) {
   return raw.replace(/USDT$/i, "USD");
 }
@@ -252,14 +257,14 @@ export default async function DashboardPage() {
         evaluation.decision_capable_execution_signal &&
         evaluation.execution_recommendation_state === "execution_ready" &&
         taker > 0 &&
-        evaluation.persistence_ticks >= 3 &&
-        evaluation.lifetime_minutes >= 60 &&
+        evaluation.persistence_ticks >= OPENING_REQUIRED_PERSISTENCE_TICKS &&
+        evaluation.lifetime_minutes >= PAPER_REQUIRED_LIFETIME_MINUTES &&
         !evaluation.execution_fragile &&
-        stability >= 60;
+        stability >= PAPER_REQUIRED_EDGE_STABILITY;
       const exclusionReasons = evaluation.auto_trade_exclusion_reasons;
       const openingTrialFailedChecks: string[] = [];
-      const requiredPersistenceTicks = 3;
-      const requiredLifetimeMinutes = 30;
+      const requiredPersistenceTicks = OPENING_REQUIRED_PERSISTENCE_TICKS;
+      const requiredLifetimeMinutes = OPENING_REQUIRED_LIFETIME_MINUTES;
       if (!evaluation.decision_capable_execution_signal) openingTrialFailedChecks.push("decision_capable_execution_signal");
       if (evaluation.execution_recommendation_state !== "execution_ready") openingTrialFailedChecks.push("execution_ready_state");
       if (taker <= 0) openingTrialFailedChecks.push("positive_taker_edge");
@@ -267,9 +272,16 @@ export default async function DashboardPage() {
       if (evaluation.persistence_ticks < requiredPersistenceTicks) openingTrialFailedChecks.push("min_persistence_ticks");
       if (evaluation.lifetime_minutes < requiredLifetimeMinutes) openingTrialFailedChecks.push("min_lifetime_minutes");
       if ((evaluation.execution_viability_score ?? 0) < 80) openingTrialFailedChecks.push("min_execution_viability");
-      if (!paperTradeReady) openingTrialFailedChecks.push("paper_trade_ready");
+      if (evaluation.lifetime_minutes < PAPER_REQUIRED_LIFETIME_MINUTES) openingTrialFailedChecks.push("min_paper_lifetime_minutes");
+      if (stability < PAPER_REQUIRED_EDGE_STABILITY) openingTrialFailedChecks.push("min_edge_stability");
       if (exclusionReasons.length > 0) openingTrialFailedChecks.push("no_exclusion_reasons");
       const openingTrialCandidate = openingTrialFailedChecks.length === 0;
+      const blockedByStabilityOnly = openingTrialFailedChecks.length === 1 && openingTrialFailedChecks[0] === "min_edge_stability";
+      const blockedByPersistenceOnly =
+        openingTrialFailedChecks.length > 0 &&
+        openingTrialFailedChecks.every((check) =>
+          ["min_persistence_ticks", "min_lifetime_minutes", "min_paper_lifetime_minutes"].includes(check)
+        );
       const healthyEarlyExecutionSignal =
         !openingTrialCandidate &&
         evaluation.execution_recommendation_state === "execution_ready" &&
@@ -283,7 +295,7 @@ export default async function DashboardPage() {
         taker > 0 &&
         !evaluation.execution_fragile &&
         (evaluation.execution_viability_score ?? 0) >= 80 &&
-        (evaluation.persistence_ticks < 3 || evaluation.lifetime_minutes < 30 || !paperTradeReady);
+        (blockedByPersistenceOnly || blockedByStabilityOnly);
       const paperTradePnl = Number((paperPeak - Math.max(0, taker)).toFixed(2));
 
       return {
@@ -309,8 +321,10 @@ export default async function DashboardPage() {
         opening_trial_decision: openingTrialCandidate ? "go" : watchMore ? "watch_more" : "no_go",
         opening_trial_reason: openingTrialCandidate
           ? "A kontrollált nyitási gate teljesült."
+          : blockedByStabilityOnly
+            ? "Execution-ready, de az edge stability még paper küszöb alatt van."
           : watchMore
-            ? "Közel van, de még stabilitás/idő kell."
+            ? "Közel van, de még megerősítés kell."
             : openingTrialFailedChecks[0] ?? "Nincs nyitható setup.",
         opening_trial_failed_checks: openingTrialFailedChecks,
         healthy_early_execution_signal: healthyEarlyExecutionSignal,
@@ -324,6 +338,8 @@ export default async function DashboardPage() {
         required_lifetime_minutes: requiredLifetimeMinutes,
         current_lifetime_minutes: evaluation.lifetime_minutes,
         lifetime_gap: Number(Math.max(0, requiredLifetimeMinutes - evaluation.lifetime_minutes).toFixed(1)),
+        blocked_by_persistence_only: blockedByPersistenceOnly,
+        blocked_by_stability_only: blockedByStabilityOnly,
         execution_fragile: evaluation.execution_fragile,
         decision_capable_execution_signal: evaluation.decision_capable_execution_signal,
         entry_readiness_timestamp: openingTrialCandidate ? opp.ts : null,

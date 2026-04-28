@@ -77,7 +77,8 @@ function checkLabel(check: string) {
     min_persistence_ticks: "persistence tick",
     min_lifetime_minutes: "lifetime",
     min_execution_viability: "execution viability",
-    paper_trade_ready: "paper-ready",
+    min_paper_lifetime_minutes: "paper lifetime",
+    min_edge_stability: "edge stability",
     no_exclusion_reasons: "nincs kizáró ok"
   };
   return labels[check] ?? check;
