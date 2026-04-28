@@ -12,6 +12,27 @@ function startFromType(type: ExportType) {
   return null;
 }
 
+function opportunityLimitForType(type: PacketWindow) {
+  if (type === "latest") return 40;
+  if (type === "24h") return 1500;
+  if (type === "7d") return 5000;
+  return 1500;
+}
+
+function decisionLimitForType(type: PacketWindow) {
+  if (type === "latest") return 30;
+  if (type === "24h") return 1000;
+  if (type === "7d") return 3000;
+  return 1000;
+}
+
+function paperResultLimitForType(type: PacketWindow) {
+  if (type === "latest") return 20;
+  if (type === "24h") return 300;
+  if (type === "7d") return 1000;
+  return 300;
+}
+
 function normalizeNumber(v: unknown) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -575,12 +596,15 @@ async function buildPacket(args: {
 }) {
   const { supabase, userId, type, strategyKey = null } = args;
   const since = startFromType(type);
+  const opportunityLimit = opportunityLimitForType(type);
+  const decisionLimit = decisionLimitForType(type);
+  const paperResultLimit = paperResultLimitForType(type);
 
   let opportunitiesQuery = supabase
     .from("opportunities")
     .select("id, ts, exchange, symbol, type, net_edge_bps, details")
     .order("ts", { ascending: false })
-    .limit(type === "latest" ? 40 : 120);
+    .limit(opportunityLimit);
 
   if (since) opportunitiesQuery = opportunitiesQuery.gte("ts", since);
   if (type === "strategy" && strategyKey) opportunitiesQuery = opportunitiesQuery.eq("type", strategyKey);
@@ -598,13 +622,13 @@ async function buildPacket(args: {
         .from("opportunity_decisions")
         .select("ts, variant, score, chosen, reject_reason")
         .order("ts", { ascending: false })
-        .limit(type === "latest" ? 30 : 240),
+        .limit(decisionLimit),
       supabase
         .from("positions")
         .select("id, symbol, status, entry_ts, exit_ts, realized_pnl_usd")
         .eq("user_id", userId)
         .order("entry_ts", { ascending: false })
-        .limit(type === "latest" ? 20 : 200)
+        .limit(paperResultLimit)
     ]);
 
   const allDecisions = (decisions ?? []) as Array<{
@@ -1346,7 +1370,12 @@ async function buildPacket(args: {
       time_window: type,
       exchanges: [...new Set((opportunities ?? []).map((x) => x.exchange))],
       strategies: [...new Set((opportunities ?? []).map((x) => x.type))],
-      tick_interval_minutes: 10
+      tick_interval_minutes: 10,
+      opportunity_query_limit: opportunityLimit,
+      opportunity_rows_returned: (opportunities ?? []).length,
+      opportunity_limit_hit: (opportunities ?? []).length >= opportunityLimit,
+      decision_query_limit: decisionLimit,
+      decision_rows_returned: allDecisions.length
     },
     system_health: {
       ingest_inserted: (opportunities ?? []).length,
