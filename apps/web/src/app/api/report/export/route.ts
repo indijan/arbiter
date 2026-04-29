@@ -1084,7 +1084,7 @@ async function buildPacket(args: {
         details: event.details
       })),
     ...evaluatedFinal
-      .filter((item) => item.paper_trade_closed && !item.paper_trade_positive)
+      .filter((item) => item.paper_trade_closed && item.paper_trade_pnl_bps < 0)
       .map((item) => ({
         event_type: "paper_trade_negative_outcome",
         symbol: item.symbol,
@@ -1095,6 +1095,10 @@ async function buildPacket(args: {
       }))
   ]
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .filter((event, index, events) => {
+      const key = `${event.event_type}:${event.symbol}:${event.exchange}:${event.ts}:${event.details}`;
+      return events.findIndex((candidate) => `${candidate.event_type}:${candidate.symbol}:${candidate.exchange}:${candidate.ts}:${candidate.details}` === key) === index;
+    })
     .slice(0, 25);
   const activeNow = [
     ...goCandidatesNow.map((item) => ({
@@ -1239,7 +1243,9 @@ async function buildPacket(args: {
     persistenceBlockedCandidates.length;
   const xarbStrategyActive = true;
   const executionAbsenceReason =
-    xarbIngestCount === 0
+    xarbPromotedToGo.length > 0
+      ? "execution_opportunity_present"
+      : xarbIngestCount === 0
       ? "xarb_not_triggered"
       : xarbEvaluatedCount === 0
         ? "xarb_data_missing"

@@ -37,6 +37,18 @@ type Summary = {
   paper_trade_stopped_24h: number;
   best_paper_outcome_bps: number;
   worst_paper_outcome_bps: number;
+  total_paper_pnl_bps: number;
+  avg_paper_outcome_bps: number;
+  paper_trade_loss_24h: number;
+  paper_trade_flat_24h: number;
+};
+
+type PnlPoint = {
+  ts: string;
+  symbol: string;
+  exchange: string;
+  pnl_bps: number;
+  cumulative_bps: number;
 };
 
 function statusCopy(status: OperationalStatus) {
@@ -97,13 +109,20 @@ function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
 }
 
+function pnlColor(value: number) {
+  if (value > 0) return "#84cc16";
+  if (value < 0) return "#ef4444";
+  return "var(--text)";
+}
+
 export default function OperationalStatusPanel({
   status,
   attention,
   importantNow,
   activeNow,
   events,
-  summary
+  summary,
+  pnlSeries
 }: {
   status: OperationalStatus;
   attention: AttentionFlag;
@@ -111,8 +130,12 @@ export default function OperationalStatusPanel({
   activeNow: ActiveItem[];
   events: EventItem[];
   summary: Summary;
+  pnlSeries: PnlPoint[];
 }) {
   const statusMeta = statusCopy(status);
+  const minSaldo = Math.min(0, ...pnlSeries.map((point) => point.cumulative_bps));
+  const maxSaldo = Math.max(0, ...pnlSeries.map((point) => point.cumulative_bps));
+  const saldoRange = Math.max(1, maxSaldo - minSaldo);
 
   return (
     <section
@@ -144,7 +167,7 @@ export default function OperationalStatusPanel({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-6">
           <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "var(--line)" }}>
             <p style={{ color: "var(--muted)" }}>Go 24h</p>
             <strong>{summary.go_candidate_count_24h}</strong>
@@ -155,13 +178,77 @@ export default function OperationalStatusPanel({
           </div>
           <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "var(--line)" }}>
             <p style={{ color: "var(--muted)" }}>Profit</p>
-            <strong>{summary.paper_trade_profitable_24h}</strong>
+            <strong>{summary.paper_trade_profitable_24h}/{summary.paper_trade_loss_24h}/{summary.paper_trade_flat_24h}</strong>
+          </div>
+          <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "var(--line)" }}>
+            <p style={{ color: "var(--muted)" }}>Paper PnL 24h</p>
+            <strong style={{ color: summary.total_paper_pnl_bps > 0 ? "#84cc16" : summary.total_paper_pnl_bps < 0 ? "#ef4444" : "var(--text)" }}>
+              {summary.total_paper_pnl_bps.toFixed(2)} bps
+            </strong>
+          </div>
+          <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "var(--line)" }}>
+            <p style={{ color: "var(--muted)" }}>Átlag</p>
+            <strong>{summary.avg_paper_outcome_bps.toFixed(2)} bps</strong>
           </div>
           <div className="rounded-2xl border px-3 py-2" style={{ borderColor: "var(--line)" }}>
             <p style={{ color: "var(--muted)" }}>Best/Worst</p>
             <strong>{summary.best_paper_outcome_bps.toFixed(2)} / {summary.worst_paper_outcome_bps.toFixed(2)}</strong>
           </div>
         </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border p-4" style={{ borderColor: "var(--line)", background: "color-mix(in oklab, var(--bg-alt) 35%, transparent)" }}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Gördített paper saldo 24h</h3>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+              Minden 24H go jel proxy kimenete időrendben összeadva. Ez mutatja, mit termelt volna saldóban.
+            </p>
+          </div>
+          <strong className="text-2xl" style={{ color: pnlColor(summary.total_paper_pnl_bps) }}>
+            {summary.total_paper_pnl_bps.toFixed(2)} bps
+          </strong>
+        </div>
+
+        {pnlSeries.length > 0 ? (
+          <>
+            <div className="mt-4 flex h-28 items-end gap-1 rounded-xl border px-3 py-3" style={{ borderColor: "var(--line)" }}>
+              {pnlSeries.map((point, index) => {
+                const height = 12 + ((point.cumulative_bps - minSaldo) / saldoRange) * 76;
+                return (
+                  <div
+                    key={`${point.ts}:${point.symbol}:${point.exchange}:${index}`}
+                    className="min-w-[8px] flex-1 rounded-t-md"
+                    title={`${formatTime(point.ts)} ${point.symbol} ${point.pnl_bps.toFixed(2)} bps, saldo ${point.cumulative_bps.toFixed(2)} bps`}
+                    style={{
+                      height,
+                      background: point.cumulative_bps >= 0 ? "linear-gradient(180deg, #bef264, #16a34a)" : "linear-gradient(180deg, #fca5a5, #dc2626)",
+                      opacity: 0.9
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {pnlSeries.slice(-6).reverse().map((point, index) => (
+                <div key={`${point.ts}:${point.symbol}:${point.exchange}:row:${index}`} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--line)" }}>
+                  <span>
+                    <strong>{point.symbol}</strong> · {point.exchange} · {formatTime(point.ts)}
+                  </span>
+                  <span>
+                    <span style={{ color: pnlColor(point.pnl_bps) }}>{point.pnl_bps.toFixed(2)} bps</span>
+                    <span style={{ color: "var(--muted)" }}> · saldo </span>
+                    <strong style={{ color: pnlColor(point.cumulative_bps) }}>{point.cumulative_bps.toFixed(2)}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
+            Még nincs 24H paper/opening trial, ezért nincs gördített saldo.
+          </p>
+        )}
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">

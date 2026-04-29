@@ -143,6 +143,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const snapshotsSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const opportunitiesSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const [{ data: latestTick }, { data: opportunities }] = await Promise.all([
     supabase
@@ -154,8 +155,9 @@ export default async function DashboardPage() {
     supabase
       .from("opportunities")
       .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
+      .gte("ts", opportunitiesSince)
       .order("ts", { ascending: false })
-      .limit(80)
+      .limit(1500)
   ]);
 
   const typedOpportunities = (opportunities ?? []) as OpportunityRow[];
@@ -356,8 +358,11 @@ export default async function DashboardPage() {
       const rank = { execution_ready: 3, conditional_execution: 2, watch_only: 1, not_viable: 0, market_signal_only: 0 };
       return (rank[b.execution_recommendation_state as keyof typeof rank] ?? 0) - (rank[a.execution_recommendation_state as keyof typeof rank] ?? 0)
         || (b.execution_viability_score ?? 0) - (a.execution_viability_score ?? 0);
-    })
-    .slice(0, 12);
+    });
+  const latestTickMs = latestTickTs ? new Date(latestTickTs).getTime() : Date.now();
+  const activeWindowMs = 20 * 60 * 1000;
+  const isCurrentRow = (row: { ts: string }) => latestTickMs - new Date(row.ts).getTime() <= activeWindowMs;
+  const visibleExecutionRows = executionRows.slice(0, 12);
   const executionSummary = {
     execution_ready_count: executionRows.filter((row) => row.execution_recommendation_state === "execution_ready").length,
     paper_trade_ready_count: executionRows.filter((row) => row.paper_trade_ready).length,
@@ -366,8 +371,28 @@ export default async function DashboardPage() {
     avg_positive_taker_bps: average(executionRows.filter((row) => (row.taker_net_edge_bps ?? 0) > 0).map((row) => row.taker_net_edge_bps ?? 0))
   };
   const goRows = executionRows.filter((row) => row.opening_trial_decision === "go");
+  const activeGoRows = goRows.filter(isCurrentRow);
   const watchMoreRows = executionRows.filter((row) => row.opening_trial_decision === "watch_more");
+  const activeWatchMoreRows = watchMoreRows.filter(isCurrentRow);
   const profitRows = executionRows.filter((row) => row.paper_trade_positive);
+  const paperStartedRows = executionRows.filter((row) => row.paper_trade_started);
+  const lossRows = paperStartedRows.filter((row) => row.paper_trade_pnl_bps < 0);
+  const flatRows = paperStartedRows.filter((row) => row.paper_trade_pnl_bps === 0);
+  const totalPaperPnl = paperStartedRows.reduce((sum, row) => sum + row.paper_trade_pnl_bps, 0);
+  let cumulativePaperPnl = 0;
+  const pnlSeries = paperStartedRows
+    .slice()
+    .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+    .map((row) => {
+      cumulativePaperPnl += row.paper_trade_pnl_bps;
+      return {
+        ts: row.ts,
+        symbol: row.symbol,
+        exchange: row.exchange,
+        pnl_bps: Number(row.paper_trade_pnl_bps.toFixed(2)),
+        cumulative_bps: Number(cumulativePaperPnl.toFixed(2))
+      };
+    });
   const riskRows = executionRows.filter(
     (row) =>
       row.opening_trial_failed_checks.includes("positive_taker_edge") ||
@@ -375,13 +400,13 @@ export default async function DashboardPage() {
       (row.paper_trade_closed && !row.paper_trade_positive && row.opening_trial_candidate)
   );
   const operationalStatus =
-    goRows.length > 0
+    activeGoRows.length > 0
       ? "go_candidate_live"
       : profitRows.length > 0
         ? "profit_event_logged"
         : riskRows.length > 0
           ? "risk_event_logged"
-          : watchMoreRows.length > 0 || executionRows.some((row) => row.execution_recommendation_state === "watch_only")
+          : activeWatchMoreRows.length > 0 || executionRows.some((row) => row.execution_recommendation_state === "watch_only" && isCurrentRow(row))
             ? "watching"
             : "idle";
   const userAttentionFlag =
@@ -393,15 +418,15 @@ export default async function DashboardPage() {
           ? "watch"
           : "none";
   const importantNow =
-    goRows.length > 0
-      ? goRows.slice(0, 3).map((row) => ({
+    activeGoRows.length > 0
+      ? activeGoRows.slice(0, 3).map((row) => ({
           type: "active_go_candidate",
           ts: row.ts,
           headline: `${row.symbol} most nyitható`,
           details: `${row.exchange} · taker ${(row.taker_net_edge_bps ?? 0).toFixed(2)} bps · viability ${row.execution_viability_score ?? 0}`
         }))
-      : watchMoreRows.length > 0
-        ? watchMoreRows.slice(0, 3).map((row) => ({
+      : activeWatchMoreRows.length > 0
+        ? activeWatchMoreRows.slice(0, 3).map((row) => ({
             type: "watch_more",
             ts: row.ts,
             headline: `${row.symbol} figyelendő`,
@@ -421,7 +446,7 @@ export default async function DashboardPage() {
               details: riskRows.length > 0 ? "Volt risk event, de nincs nyitható setup." : "Most nincs execution-ready, nyitható xarb setup."
             }];
   const activeNow = [
-    ...goRows.map((row) => ({
+    ...activeGoRows.map((row) => ({
       kind: "go_candidate",
       symbol: row.symbol,
       strategy: "xarb_spot",
@@ -429,7 +454,7 @@ export default async function DashboardPage() {
       state: row.execution_recommendation_state,
       summary: `${row.opening_trial_reason} Taker ${(row.taker_net_edge_bps ?? 0).toFixed(2)} bps.`
     })),
-    ...watchMoreRows.slice(0, 2).map((row) => ({
+    ...activeWatchMoreRows.slice(0, 2).map((row) => ({
       kind: "watch_more",
       symbol: row.symbol,
       strategy: "xarb_spot",
@@ -483,12 +508,16 @@ export default async function DashboardPage() {
   const operationalSummary = {
     had_go_candidate_today: goRows.length > 0,
     go_candidate_count_24h: goRows.length,
-    active_go_candidate_now: goRows.length > 0,
-    paper_trade_started_24h: executionRows.filter((row) => row.paper_trade_started).length,
+    active_go_candidate_now: activeGoRows.length > 0,
+    paper_trade_started_24h: paperStartedRows.length,
     paper_trade_profitable_24h: profitRows.length,
-    paper_trade_stopped_24h: executionRows.filter((row) => row.paper_trade_closed && !row.paper_trade_positive).length,
+    paper_trade_stopped_24h: lossRows.length,
     best_paper_outcome_bps: executionRows.reduce((best, row) => Math.max(best, row.paper_trade_pnl_bps), 0),
-    worst_paper_outcome_bps: executionRows.reduce((worst, row) => Math.min(worst, row.paper_trade_pnl_bps), 0)
+    worst_paper_outcome_bps: executionRows.reduce((worst, row) => Math.min(worst, row.paper_trade_pnl_bps), 0),
+    total_paper_pnl_bps: Number(totalPaperPnl.toFixed(2)),
+    avg_paper_outcome_bps: paperStartedRows.length > 0 ? Number((totalPaperPnl / paperStartedRows.length).toFixed(2)) : 0,
+    paper_trade_loss_24h: lossRows.length,
+    paper_trade_flat_24h: flatRows.length
   };
 
   return (
@@ -530,6 +559,7 @@ export default async function DashboardPage() {
         activeNow={activeNow}
         events={operationalEvents}
         summary={operationalSummary}
+        pnlSeries={pnlSeries}
       />
 
       <section className="card mb-6">
@@ -568,7 +598,7 @@ export default async function DashboardPage() {
         <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
           Az aktuális xarb setupok execution-validációs nézete: mire nyitott volna a rendszer, mennyire volt stabil az edge, és paper tesztre alkalmas lett volna-e.
         </p>
-        <ExecutionReadinessPanel rows={executionRows} summary={executionSummary} />
+        <ExecutionReadinessPanel rows={visibleExecutionRows} summary={executionSummary} />
       </section>
 
       <section className="card mb-6">
@@ -577,7 +607,7 @@ export default async function DashboardPage() {
           Opportunity-alapú entry barométer. A fő fókusz az, hogy hol tart a belépési döntés, és mi hiányzik még a nyitáshoz.
         </p>
         <DecisionViewPanel
-          opportunities={executionRows}
+          opportunities={visibleExecutionRows}
           snapshots={learningSnapshotSeries}
           marketSignalCount={typedOpportunities.filter((opp) => opp.type === "relative_strength").length}
         />
