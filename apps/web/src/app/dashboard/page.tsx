@@ -6,6 +6,7 @@ import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
 import OperationalStatusPanel from "@/components/OperationalStatusPanel";
 import DecisionViewPanel from "@/components/DecisionViewPanel";
+import StrategyLabPanel from "@/components/StrategyLabPanel";
 import { evaluateOpportunity } from "@/lib/decision/evaluator";
 
 type OpportunityRow = {
@@ -123,6 +124,76 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function effectiveNetEdge(row: { taker_net_edge_bps: number | null; maker_net_edge_bps: number }) {
+  return row.taker_net_edge_bps ?? row.maker_net_edge_bps;
+}
+
+function executionTimelineKey(row: { exchange: string; symbol: string }) {
+  return `${row.exchange}:${row.symbol}`;
+}
+
+function buildPaperAudit<T extends {
+  ts: string;
+  exchange: string;
+  symbol: string;
+  maker_net_edge_bps: number;
+  taker_net_edge_bps: number | null;
+  opening_trial_candidate: boolean;
+}>(rows: T[]) {
+  const grouped = rows.reduce((acc, row) => {
+    const key = executionTimelineKey(row);
+    const current = acc.get(key) ?? [];
+    current.push(row);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, T[]>());
+
+  const audits = new Map<string, {
+    peak: number;
+    worst: number;
+    pnl: number;
+    exitReason: string;
+  }>();
+
+  for (const [key, timeline] of grouped.entries()) {
+    const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const entry = ordered.find((row) => row.opening_trial_candidate);
+    if (!entry) {
+      audits.set(key, { peak: 0, worst: 0, pnl: 0, exitReason: "no_entry" });
+      continue;
+    }
+
+    const entryTs = new Date(entry.ts).getTime();
+    const postEntry = ordered.filter((row) => new Date(row.ts).getTime() >= entryTs);
+    const nets = postEntry.map(effectiveNetEdge);
+    const peak = postEntry.length > 0 ? Math.max(...nets) : 0;
+    const worst = postEntry.length > 0 ? Math.min(...nets) : 0;
+    const invalidated = postEntry.find((row) => effectiveNetEdge(row) <= 0);
+    const exit = invalidated ?? postEntry.at(-1) ?? entry;
+    audits.set(key, {
+      peak: Number(peak.toFixed(4)),
+      worst: Number(worst.toFixed(4)),
+      pnl: Number((effectiveNetEdge(exit) - effectiveNetEdge(entry)).toFixed(4)),
+      exitReason: invalidated ? "signal_invalidated" : postEntry.length > 1 ? "window_end" : "single_snapshot"
+    })
+  }
+
+  return audits;
+}
+
+function summarizePaperRows(rows: Array<{ paper_trade_pnl_bps: number }>) {
+  const total = rows.reduce((sum, row) => sum + row.paper_trade_pnl_bps, 0);
+  return {
+    trials: rows.length,
+    wins: rows.filter((row) => row.paper_trade_pnl_bps > 0).length,
+    losses: rows.filter((row) => row.paper_trade_pnl_bps < 0).length,
+    flat: rows.filter((row) => row.paper_trade_pnl_bps === 0).length,
+    total_pnl_bps: Number(total.toFixed(2)),
+    avg_pnl_bps: rows.length > 0 ? Number((total / rows.length).toFixed(2)) : 0,
+    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.paper_trade_pnl_bps > 0).length / rows.length).toFixed(4)) : 0
+  };
+}
+
 export default async function DashboardPage() {
   const supabase = createServerSupabase();
   if (!supabase) {
@@ -231,7 +302,7 @@ export default async function DashboardPage() {
       reason: evaluation.auto_trade_exclusion_reasons.join(", ") || evaluation.reason
     };
   });
-  const executionRows = typedOpportunities
+  const executionRowsBase = typedOpportunities
     .filter((opp) => opp.type === "xarb_spot")
     .map((opp) => {
       const key = `${opp.type}:${opp.exchange}:${opp.symbol}`;
@@ -253,8 +324,6 @@ export default async function DashboardPage() {
       const taker = evaluation.taker_net_edge_bps ?? maker;
       const gap = maker - taker;
       const stability = Math.max(0, Math.min(100, 100 - Math.max(0, gap) * 12));
-      const paperPeak = Math.max(maker, taker);
-      const paperWorst = Math.min(maker, taker);
       const paperTradeReady =
         evaluation.decision_capable_execution_signal &&
         evaluation.execution_recommendation_state === "execution_ready" &&
@@ -298,8 +367,6 @@ export default async function DashboardPage() {
         !evaluation.execution_fragile &&
         (evaluation.execution_viability_score ?? 0) >= 80 &&
         (blockedByPersistenceOnly || blockedByStabilityOnly);
-      const paperTradePnl = Number((paperPeak - Math.max(0, taker)).toFixed(2));
-
       return {
         id: opp.id,
         ts: opp.ts,
@@ -315,9 +382,9 @@ export default async function DashboardPage() {
         paper_trade_ready: paperTradeReady,
         execution_grade: stability >= 75 ? "A" : stability >= 55 ? "B" : "C",
         net_edge_stability_score: Number(stability.toFixed(1)),
-        paper_peak_bps_after_signal: Number(paperPeak.toFixed(2)),
-        paper_worst_bps_after_signal: Number(paperWorst.toFixed(2)),
-        paper_exit_reason: taker > 0 ? "carry_until_signal_decay" : "taker_flip_negative",
+        paper_peak_bps_after_signal: 0,
+        paper_worst_bps_after_signal: 0,
+        paper_exit_reason: "no_entry",
         time_to_first_decision_capable_minutes: evaluation.decision_capable_execution_signal ? 0 : null,
         opening_trial_candidate: openingTrialCandidate,
         opening_trial_decision: openingTrialCandidate ? "go" : watchMore ? "watch_more" : "no_go",
@@ -347,11 +414,29 @@ export default async function DashboardPage() {
         entry_readiness_timestamp: openingTrialCandidate ? opp.ts : null,
         paper_trade_started: openingTrialCandidate,
         paper_trade_closed: openingTrialCandidate,
-        paper_trade_outcome: !openingTrialCandidate ? "not_started" : paperTradePnl > 0 ? "profit" : paperTradePnl < 0 ? "loss" : "flat",
-        paper_trade_positive: openingTrialCandidate && paperTradePnl > 0,
-        paper_trade_pnl_bps: openingTrialCandidate ? paperTradePnl : 0,
-        paper_trade_max_favorable_bps: paperPeak,
-        paper_trade_max_adverse_bps: paperWorst
+        paper_trade_outcome: "not_started",
+        paper_trade_positive: false,
+        paper_trade_pnl_bps: 0,
+        paper_trade_max_favorable_bps: 0,
+        paper_trade_max_adverse_bps: 0
+      };
+    });
+  const paperAudits = buildPaperAudit(executionRowsBase);
+  const executionRows = executionRowsBase
+    .map((row) => {
+      const audit = paperAudits.get(executionTimelineKey(row)) ?? { peak: 0, worst: 0, pnl: 0, exitReason: "no_entry" };
+      const paperTradeStarted = row.opening_trial_candidate;
+      const paperPnl = paperTradeStarted ? audit.pnl : 0;
+      return {
+        ...row,
+        paper_peak_bps_after_signal: audit.peak,
+        paper_worst_bps_after_signal: audit.worst,
+        paper_exit_reason: audit.exitReason,
+        paper_trade_outcome: !paperTradeStarted ? "not_started" : paperPnl > 0 ? "profit" : paperPnl < 0 ? "loss" : "flat",
+        paper_trade_positive: paperTradeStarted && paperPnl > 0,
+        paper_trade_pnl_bps: paperPnl,
+        paper_trade_max_favorable_bps: audit.peak,
+        paper_trade_max_adverse_bps: audit.worst
       };
     })
     .sort((a, b) => {
@@ -519,6 +604,24 @@ export default async function DashboardPage() {
     paper_trade_loss_24h: lossRows.length,
     paper_trade_flat_24h: flatRows.length
   };
+  const summarizeBy = (field: "symbol" | "exchange") =>
+    Object.values(
+      paperStartedRows.reduce((acc, row) => {
+        const key = row[field];
+        const current = acc[key] ?? { key, rows: [] as typeof paperStartedRows };
+        current.rows.push(row);
+        acc[key] = current;
+        return acc;
+      }, {} as Record<string, { key: string; rows: typeof paperStartedRows }>)
+    )
+      .map((group) => ({ key: group.key, ...summarizePaperRows(group.rows) }))
+      .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps)
+      .slice(0, 8);
+  const strategyLabSummary = {
+    baseline: summarizePaperRows(paperStartedRows),
+    bySymbol: summarizeBy("symbol"),
+    byExchange: summarizeBy("exchange")
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -561,6 +664,8 @@ export default async function DashboardPage() {
         summary={operationalSummary}
         pnlSeries={pnlSeries}
       />
+
+      <StrategyLabPanel summary={strategyLabSummary} />
 
       <section className="card mb-6">
         <div className="flex flex-wrap items-center justify-between gap-2">

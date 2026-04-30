@@ -593,6 +593,158 @@ function buildEventFeed(
   return events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 }
 
+function bucketEdge(value: number | null) {
+  const n = value ?? 0;
+  if (n >= 10) return "edge_10_plus";
+  if (n >= 5) return "edge_5_10";
+  if (n >= 2) return "edge_2_5";
+  if (n > 0) return "edge_0_2";
+  return "edge_non_positive";
+}
+
+function bucketStability(value: number | null) {
+  const n = value ?? 0;
+  if (n >= 75) return "stability_75_plus";
+  if (n >= 60) return "stability_60_75";
+  if (n >= 45) return "stability_45_60";
+  if (n >= 30) return "stability_30_45";
+  return "stability_under_30";
+}
+
+function bucketPersistence(value: number) {
+  if (value >= 10) return "persistence_10_plus";
+  if (value >= 5) return "persistence_5_9";
+  if (value >= 3) return "persistence_3_4";
+  return "persistence_under_3";
+}
+
+function summarizeTrials(rows: Array<{ pnl_bps: number }>) {
+  const total = rows.reduce((sum, row) => sum + row.pnl_bps, 0);
+  return {
+    trials: rows.length,
+    wins: rows.filter((row) => row.pnl_bps > 0).length,
+    losses: rows.filter((row) => row.pnl_bps < 0).length,
+    flat: rows.filter((row) => row.pnl_bps === 0).length,
+    total_pnl_bps: Number(total.toFixed(4)),
+    avg_pnl_bps: rows.length > 0 ? Number((total / rows.length).toFixed(4)) : 0,
+    best_pnl_bps: rows.length > 0 ? Number(Math.max(...rows.map((row) => row.pnl_bps)).toFixed(4)) : 0,
+    worst_pnl_bps: rows.length > 0 ? Number(Math.min(...rows.map((row) => row.pnl_bps)).toFixed(4)) : 0,
+    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.pnl_bps > 0).length / rows.length).toFixed(4)) : 0
+  };
+}
+
+function buildStrategyLab(
+  rows: Array<{
+    ts: string;
+    strategy: string;
+    exchange: string;
+    symbol: string;
+    maker_net_edge_bps: number;
+    taker_net_edge_bps: number | null;
+    opening_trial_candidate: boolean;
+    execution_recommendation_state: string;
+    execution_viability_score: number | null;
+    net_edge_stability_score?: number | null;
+    persistence_ticks: number;
+    lifetime_minutes: number;
+  }>
+) {
+  const grouped = rows.reduce((acc, item) => {
+    const key = executionTimelineKey(item);
+    const current = acc.get(key) ?? [];
+    current.push(item);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, typeof rows>());
+  const trials: Array<{
+    model: string;
+    symbol: string;
+    exchange: string;
+    ts: string;
+    pnl_bps: number;
+    exit_reason: string;
+    taker_edge_bucket: string;
+    stability_bucket: string;
+    persistence_bucket: string;
+    execution_viability_score: number | null;
+  }> = [];
+
+  const addTrial = (model: string, entry: typeof rows[number], exit: typeof rows[number], exitReason: string) => {
+    trials.push({
+      model,
+      symbol: entry.symbol,
+      exchange: entry.exchange,
+      ts: entry.ts,
+      pnl_bps: Number((effectiveNetEdge(exit) - effectiveNetEdge(entry)).toFixed(4)),
+      exit_reason: exitReason,
+      taker_edge_bucket: bucketEdge(entry.taker_net_edge_bps),
+      stability_bucket: bucketStability(entry.net_edge_stability_score ?? null),
+      persistence_bucket: bucketPersistence(entry.persistence_ticks),
+      execution_viability_score: entry.execution_viability_score
+    });
+  };
+
+  for (const timeline of grouped.values()) {
+    const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const entries = ordered.filter((item) => item.opening_trial_candidate);
+    for (const entry of entries) {
+      const entryTs = new Date(entry.ts).getTime();
+      const postEntry = ordered.filter((item) => new Date(item.ts).getTime() >= entryTs);
+      const invalidated = postEntry.find((item) => effectiveNetEdge(item) <= 0);
+      addTrial("exit_on_invalidated", entry, invalidated ?? postEntry.at(-1) ?? entry, invalidated ? "signal_invalidated" : "window_end");
+
+      for (const minutes of [10, 30, 60, 120]) {
+        const horizonTs = entryTs + minutes * 60 * 1000;
+        const exit = postEntry.filter((item) => new Date(item.ts).getTime() <= horizonTs).at(-1) ?? entry;
+        addTrial(`exit_after_${minutes}m`, entry, exit, `fixed_${minutes}m`);
+      }
+
+      for (const threshold of [3, 5]) {
+        const tp = postEntry.find((item) => effectiveNetEdge(item) - effectiveNetEdge(entry) >= threshold);
+        const sl = postEntry.find((item) => effectiveNetEdge(item) - effectiveNetEdge(entry) <= -threshold);
+        const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
+        const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
+        const exit = tpTs <= slTs ? tp : sl;
+        addTrial(`tp${threshold}_sl${threshold}`, entry, exit ?? postEntry.at(-1) ?? entry, exit === tp ? "take_profit" : exit === sl ? "stop_loss" : "window_end");
+      }
+    }
+  }
+
+  const summarizeBy = (field: "model" | "symbol" | "exchange" | "taker_edge_bucket" | "stability_bucket" | "persistence_bucket") =>
+    Object.values(
+      trials.reduce((acc, trial) => {
+        const key = String(trial[field]);
+        const current = acc[key] ?? { key, rows: [] as typeof trials };
+        current.rows.push(trial);
+        acc[key] = current;
+        return acc;
+      }, {} as Record<string, { key: string; rows: typeof trials }>)
+    )
+      .map((group) => ({ [field]: group.key, ...summarizeTrials(group.rows) }))
+      .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+
+  const baseline = trials.filter((trial) => trial.model === "exit_on_invalidated");
+  return {
+    trial_count: trials.length,
+    baseline_model: "exit_on_invalidated",
+    baseline_summary: summarizeTrials(baseline),
+    by_exit_model: summarizeBy("model"),
+    by_symbol: summarizeBy("symbol").slice(0, 12),
+    by_exchange_pair: summarizeBy("exchange").slice(0, 12),
+    by_taker_edge_bucket: summarizeBy("taker_edge_bucket"),
+    by_stability_bucket: summarizeBy("stability_bucket"),
+    by_persistence_bucket: summarizeBy("persistence_bucket"),
+    best_slices: summarizeBy("exchange").filter((row) => row.trials >= 2 && row.total_pnl_bps > 0).slice(0, 5),
+    worst_slices: summarizeBy("exchange").filter((row) => row.trials >= 2).sort((a, b) => a.total_pnl_bps - b.total_pnl_bps).slice(0, 5),
+    recommendation:
+      baseline.length === 0
+        ? "No paper/opening trials yet. Keep collecting data."
+        : summarizeTrials(baseline).total_pnl_bps < 0
+          ? "Current paper gate is losing on baseline exit. Do not relax thresholds; inspect losing exchange-pair and exit-model slices."
+          : "Baseline paper gate is positive. Validate persistence across the next report before tightening or scaling."
+  };
+}
+
 async function buildPacket(args: {
   supabase: NonNullable<ReturnType<typeof createServerSupabase>>;
   userId: string;
@@ -903,6 +1055,7 @@ async function buildPacket(args: {
       paper_trade_max_adverse_bps: item.post_entry_worst_bps
     };
   });
+  const strategyLab = buildStrategyLab(evaluatedFinal);
 
   const topMarketOpps = dedupeByRegime(
     evaluatedFinal
@@ -1573,6 +1726,7 @@ async function buildPacket(args: {
     },
     relative_strength_summary: summarizeRelativeStrength(evaluatedFinal),
     strategy_filter_diagnostics: summarizeStrategyDiagnostics(evaluatedFinal),
+    strategy_lab: strategyLab,
     profit_events: profitEvents,
     risk_events: riskEvents,
     what_happened_today: whatHappenedToday,
