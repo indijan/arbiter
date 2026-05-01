@@ -19,6 +19,15 @@ type StrategyLabSummary = {
     avg_pnl_bps: number;
     win_rate: number;
   };
+  exploratory: {
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    win_rate: number;
+  };
   bySymbol: LabSlice[];
   byExchange: LabSlice[];
 };
@@ -55,6 +64,7 @@ function SliceTable({ title, rows }: { title: string; rows: LabSlice[] }) {
 
 export default function StrategyLabPanel({ summary }: { summary: StrategyLabSummary }) {
   const baseline = summary.baseline;
+  const exploratory = summary.exploratory;
   return (
     <section className="card mb-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -68,6 +78,11 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
           <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Baseline saldo</p>
           <strong className="text-2xl" style={{ color: tone(baseline.total_pnl_bps) }}>{baseline.total_pnl_bps.toFixed(2)} bps</strong>
           <p className="text-sm" style={{ color: "var(--muted)" }}>{baseline.trials} trial · W/L/F {baseline.wins}/{baseline.losses}/{baseline.flat}</p>
+        </div>
+        <div className="rounded-2xl border px-4 py-3 text-right" style={{ borderColor: "var(--line)" }}>
+          <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Probe saldo</p>
+          <strong className="text-2xl" style={{ color: tone(exploratory.total_pnl_bps) }}>{exploratory.total_pnl_bps.toFixed(2)} bps</strong>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>{exploratory.trials} probe · W/L/F {exploratory.wins}/{exploratory.losses}/{exploratory.flat}</p>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

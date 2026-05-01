@@ -181,16 +181,16 @@ function buildPaperAudit<T extends {
   return audits;
 }
 
-function summarizePaperRows(rows: Array<{ paper_trade_pnl_bps: number }>) {
-  const total = rows.reduce((sum, row) => sum + row.paper_trade_pnl_bps, 0);
+function summarizePaperRows(rows: Array<{ pnl_bps: number }>) {
+  const total = rows.reduce((sum, row) => sum + row.pnl_bps, 0);
   return {
     trials: rows.length,
-    wins: rows.filter((row) => row.paper_trade_pnl_bps > 0).length,
-    losses: rows.filter((row) => row.paper_trade_pnl_bps < 0).length,
-    flat: rows.filter((row) => row.paper_trade_pnl_bps === 0).length,
+    wins: rows.filter((row) => row.pnl_bps > 0).length,
+    losses: rows.filter((row) => row.pnl_bps < 0).length,
+    flat: rows.filter((row) => row.pnl_bps === 0).length,
     total_pnl_bps: Number(total.toFixed(2)),
     avg_pnl_bps: rows.length > 0 ? Number((total / rows.length).toFixed(2)) : 0,
-    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.paper_trade_pnl_bps > 0).length / rows.length).toFixed(4)) : 0
+    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.pnl_bps > 0).length / rows.length).toFixed(4)) : 0
   };
 }
 
@@ -604,21 +604,33 @@ export default async function DashboardPage() {
     paper_trade_loss_24h: lossRows.length,
     paper_trade_flat_24h: flatRows.length
   };
+  const baselineLabRows = paperStartedRows.map((row) => ({ ...row, pnl_bps: row.paper_trade_pnl_bps }));
+  const exploratoryLabRows = executionRows
+    .filter(
+      (row) =>
+        !row.opening_trial_candidate &&
+        row.execution_recommendation_state === "execution_ready" &&
+        (row.taker_net_edge_bps ?? 0) > 0 &&
+        (row.execution_viability_score ?? 0) >= 80
+    )
+    .map((row) => ({ ...row, pnl_bps: row.paper_trade_pnl_bps }));
+  const labRows = [...baselineLabRows, ...exploratoryLabRows];
   const summarizeBy = (field: "symbol" | "exchange") =>
     Object.values(
-      paperStartedRows.reduce((acc, row) => {
+      labRows.reduce((acc, row) => {
         const key = row[field];
-        const current = acc[key] ?? { key, rows: [] as typeof paperStartedRows };
+        const current = acc[key] ?? { key, rows: [] as typeof labRows };
         current.rows.push(row);
         acc[key] = current;
         return acc;
-      }, {} as Record<string, { key: string; rows: typeof paperStartedRows }>)
+      }, {} as Record<string, { key: string; rows: typeof labRows }>)
     )
       .map((group) => ({ key: group.key, ...summarizePaperRows(group.rows) }))
       .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps)
       .slice(0, 8);
   const strategyLabSummary = {
-    baseline: summarizePaperRows(paperStartedRows),
+    baseline: summarizePaperRows(baselineLabRows),
+    exploratory: summarizePaperRows(exploratoryLabRows),
     bySymbol: summarizeBy("symbol"),
     byExchange: summarizeBy("exchange")
   };
