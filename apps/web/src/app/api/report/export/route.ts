@@ -658,6 +658,7 @@ function buildStrategyLab(
   }, new Map<string, typeof rows>());
   const trials: Array<{
     model: string;
+    policy: string;
     symbol: string;
     exchange: string;
     ts: string;
@@ -669,9 +670,10 @@ function buildStrategyLab(
     execution_viability_score: number | null;
   }> = [];
 
-  const addTrial = (model: string, entry: typeof rows[number], exit: typeof rows[number], exitReason: string) => {
+  const addTrial = (model: string, policy: string, entry: typeof rows[number], exit: typeof rows[number], exitReason: string) => {
     trials.push({
       model,
+      policy,
       symbol: entry.symbol,
       exchange: entry.exchange,
       ts: entry.ts,
@@ -686,17 +688,26 @@ function buildStrategyLab(
 
   for (const timeline of grouped.values()) {
     const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-    const entries = ordered.filter((item) => item.opening_trial_candidate);
+    const entries = ordered.filter(
+      (item) =>
+        item.opening_trial_candidate ||
+        (
+          item.execution_recommendation_state === "execution_ready" &&
+          (item.taker_net_edge_bps ?? 0) > 0 &&
+          (item.execution_viability_score ?? 0) >= 80
+        )
+    );
     for (const entry of entries) {
+      const policy = entry.opening_trial_candidate ? "opening_gate" : "execution_ready_probe";
       const entryTs = new Date(entry.ts).getTime();
       const postEntry = ordered.filter((item) => new Date(item.ts).getTime() >= entryTs);
       const invalidated = postEntry.find((item) => effectiveNetEdge(item) <= 0);
-      addTrial("exit_on_invalidated", entry, invalidated ?? postEntry.at(-1) ?? entry, invalidated ? "signal_invalidated" : "window_end");
+      addTrial("exit_on_invalidated", policy, entry, invalidated ?? postEntry.at(-1) ?? entry, invalidated ? "signal_invalidated" : "window_end");
 
       for (const minutes of [10, 30, 60, 120]) {
         const horizonTs = entryTs + minutes * 60 * 1000;
         const exit = postEntry.filter((item) => new Date(item.ts).getTime() <= horizonTs).at(-1) ?? entry;
-        addTrial(`exit_after_${minutes}m`, entry, exit, `fixed_${minutes}m`);
+        addTrial(`exit_after_${minutes}m`, policy, entry, exit, `fixed_${minutes}m`);
       }
 
       for (const threshold of [3, 5]) {
@@ -705,12 +716,12 @@ function buildStrategyLab(
         const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
         const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
         const exit = tpTs <= slTs ? tp : sl;
-        addTrial(`tp${threshold}_sl${threshold}`, entry, exit ?? postEntry.at(-1) ?? entry, exit === tp ? "take_profit" : exit === sl ? "stop_loss" : "window_end");
+        addTrial(`tp${threshold}_sl${threshold}`, policy, entry, exit ?? postEntry.at(-1) ?? entry, exit === tp ? "take_profit" : exit === sl ? "stop_loss" : "window_end");
       }
     }
   }
 
-  const summarizeBy = (field: "model" | "symbol" | "exchange" | "taker_edge_bucket" | "stability_bucket" | "persistence_bucket") =>
+  const summarizeBy = (field: "model" | "policy" | "symbol" | "exchange" | "taker_edge_bucket" | "stability_bucket" | "persistence_bucket") =>
     Object.values(
       trials.reduce((acc, trial) => {
         const key = String(trial[field]);
@@ -723,11 +734,14 @@ function buildStrategyLab(
       .map((group) => ({ [field]: group.key, ...summarizeTrials(group.rows) }))
       .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
 
-  const baseline = trials.filter((trial) => trial.model === "exit_on_invalidated");
+  const baseline = trials.filter((trial) => trial.policy === "opening_gate" && trial.model === "exit_on_invalidated");
+  const exploratory = trials.filter((trial) => trial.policy === "execution_ready_probe" && trial.model === "exit_on_invalidated");
   return {
     trial_count: trials.length,
     baseline_model: "exit_on_invalidated",
     baseline_summary: summarizeTrials(baseline),
+    exploratory_probe_summary: summarizeTrials(exploratory),
+    by_policy: summarizeBy("policy"),
     by_exit_model: summarizeBy("model"),
     by_symbol: summarizeBy("symbol").slice(0, 12),
     by_exchange_pair: summarizeBy("exchange").slice(0, 12),
@@ -737,8 +751,10 @@ function buildStrategyLab(
     best_slices: summarizeBy("exchange").filter((row) => row.trials >= 2 && row.total_pnl_bps > 0).slice(0, 5),
     worst_slices: summarizeBy("exchange").filter((row) => row.trials >= 2).sort((a, b) => a.total_pnl_bps - b.total_pnl_bps).slice(0, 5),
     recommendation:
-      baseline.length === 0
-        ? "No paper/opening trials yet. Keep collecting data."
+      baseline.length === 0 && exploratory.length === 0
+        ? "No opening or execution-ready probe trials yet. Keep collecting data."
+        : baseline.length === 0
+          ? "No strict opening-gate trials, but execution-ready probes exist. Use exploratory slices only; do not treat them as approved entries."
         : summarizeTrials(baseline).total_pnl_bps < 0
           ? "Current paper gate is losing on baseline exit. Do not relax thresholds; inspect losing exchange-pair and exit-model slices."
           : "Baseline paper gate is positive. Validate persistence across the next report before tightening or scaling."
