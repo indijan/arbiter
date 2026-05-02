@@ -17,6 +17,9 @@ type ExecutionRow = {
   paper_worst_bps_after_signal: number;
   paper_exit_reason: string;
   time_to_first_decision_capable_minutes: number | null;
+  targeted_paper_probe_candidate?: boolean;
+  paper_probe_quarantined?: boolean;
+  paper_probe_quarantine_reasons?: string[];
 };
 
 function HelpTip({ label }: { label: string }) {
@@ -62,7 +65,8 @@ function explainLabel(key: string) {
     stability: "Mennyire volt stabil az edge a megfigyelt időszakban. Minél magasabb, annál jobb.",
     peak_worst: "A jel után látott legjobb és legrosszabb bps kimenet egyszerű paper proxy szerint.",
     persist: "Hány tickig és mennyi ideig maradt fenn a setup.",
-    audit: "Mennyi idő alatt vált decision-capable-pé, és mi lett volna az egyszerű paper exit logika."
+    audit: "Mennyi idő alatt vált decision-capable-pé, és mi lett volna az egyszerű paper exit logika.",
+    probe: "Célzott high_stability_70 paper-probe. Ez nem live nyitás, csak a potenciálisan nyereséges slice gördülő validációja."
   };
   return copy[key] ?? "";
 }
@@ -80,6 +84,18 @@ function humanState(state: string) {
   if (state === "watch_only") return "Csak figyelendő";
   if (state === "not_viable") return "Nem életképes";
   return state;
+}
+
+function probeLabel(row: ExecutionRow) {
+  if (row.targeted_paper_probe_candidate) return "Probe";
+  if (row.paper_probe_quarantined) return "Karantén";
+  return "-";
+}
+
+function probeStyle(row: ExecutionRow) {
+  if (row.targeted_paper_probe_candidate) return { background: "#365314", color: "#d9f99d" };
+  if (row.paper_probe_quarantined) return { background: "#7f1d1d", color: "#fecaca" };
+  return { background: "#334155", color: "#cbd5e1" };
 }
 
 export default function ExecutionReadinessPanel({
@@ -163,6 +179,12 @@ export default function ExecutionReadinessPanel({
                   <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Paper</p>
                   <p className="mt-1 text-sm font-medium">{row.paper_trade_ready ? "Paperre kész" : "Még nem"}</p>
                 </div>
+                <div className="col-span-2">
+                  <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Probe</p>
+                  <span className="mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold" style={probeStyle(row)}>
+                    {probeLabel(row)}
+                  </span>
+                </div>
               </article>
             ))
           ) : (
@@ -181,6 +203,7 @@ export default function ExecutionReadinessPanel({
               <th className="w-[18%] px-3 py-3 text-left">Pair <HelpTip label={explainLabel("pair")} /></th>
               <th className="w-[16%] px-3 py-3 text-left">State <HelpTip label={explainLabel("state")} /></th>
               <th className="w-[10%] px-3 py-3 text-left">Paper <HelpTip label={explainLabel("paper")} /></th>
+              <th className="w-[10%] px-3 py-3 text-left">Probe <HelpTip label={explainLabel("probe")} /></th>
               <th className="w-[9%] px-3 py-3 text-left">Maker <HelpTip label={explainLabel("maker")} /></th>
               <th className="w-[9%] px-3 py-3 text-left">Taker <HelpTip label={explainLabel("taker")} /></th>
               <th className="w-[10%] px-3 py-3 text-left">Stability <HelpTip label={explainLabel("stability")} /></th>
@@ -204,6 +227,11 @@ export default function ExecutionReadinessPanel({
                     </span>
                   </td>
                   <td className="px-3 py-3">{row.paper_trade_ready ? "Paperre kész" : "Még nem"}</td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" style={probeStyle(row)}>
+                      {probeLabel(row)}
+                    </span>
+                  </td>
                   <td className="px-3 py-3">{row.maker_net_edge_bps.toFixed(2)} bps</td>
                   <td className="px-3 py-3">{(row.taker_net_edge_bps ?? 0).toFixed(2)} bps</td>
                   <td className="px-3 py-3">{row.net_edge_stability_score.toFixed(1)} / {row.execution_grade}</td>

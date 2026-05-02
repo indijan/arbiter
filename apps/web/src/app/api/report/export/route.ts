@@ -633,6 +633,19 @@ function summarizeTrials(rows: Array<{ pnl_bps: number }>) {
   };
 }
 
+function isQuarantinedPaperSlice(item: {
+  symbol: string;
+  exchange: string;
+  net_edge_stability_score?: number | null;
+}) {
+  const stability = item.net_edge_stability_score ?? 0;
+  return (
+    stability < 45 ||
+    (item.exchange === "bybit_coinbase" && item.symbol === "BTCUSD") ||
+    (item.exchange === "bybit_kraken" && item.symbol === "BNBUSD")
+  );
+}
+
 function buildStrategyLab(
   rows: Array<{
     ts: string;
@@ -647,6 +660,7 @@ function buildStrategyLab(
     net_edge_stability_score?: number | null;
     persistence_ticks: number;
     lifetime_minutes: number;
+    execution_fragile?: boolean;
   }>
 ) {
   const grouped = rows.reduce((acc, item) => {
@@ -686,19 +700,78 @@ function buildStrategyLab(
     });
   };
 
+  const policyDefinitions: Array<{
+    name: string;
+    description: string;
+    matches: (item: typeof rows[number]) => boolean;
+  }> = [
+    {
+      name: "strict_current",
+      description: "Current controlled opening gate.",
+      matches: (item) => item.opening_trial_candidate
+    },
+    {
+      name: "execution_ready_probe",
+      description: "Execution-ready, positive taker, high viability. Measurement only.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) > 0 &&
+        (item.execution_viability_score ?? 0) >= 80
+    },
+    {
+      name: "high_stability_70",
+      description: "Execution-ready probe with stability >= 70.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) > 0 &&
+        (item.execution_viability_score ?? 0) >= 80 &&
+        (item.net_edge_stability_score ?? 0) >= 70
+    },
+    {
+      name: "high_taker_5bps",
+      description: "Execution-ready probe with taker net edge >= 5 bps.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) >= 5 &&
+        (item.execution_viability_score ?? 0) >= 80
+    },
+    {
+      name: "high_edge_and_stability",
+      description: "Execution-ready probe with taker >= 5 bps and stability >= 60.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) >= 5 &&
+        (item.net_edge_stability_score ?? 0) >= 60 &&
+        (item.execution_viability_score ?? 0) >= 80
+    },
+    {
+      name: "stability_60_plus_probe",
+      description: "Execution-ready probe with stability >= 60, regardless of current paper gate.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) > 0 &&
+        (item.net_edge_stability_score ?? 0) >= 60 &&
+        (item.execution_viability_score ?? 0) >= 80
+    },
+    {
+      name: "exclude_trx_kraken_probe",
+      description: "Execution-ready probe excluding the currently bad TRXUSD kraken_okx slice.",
+      matches: (item) =>
+        item.execution_recommendation_state === "execution_ready" &&
+        (item.taker_net_edge_bps ?? 0) > 0 &&
+        (item.execution_viability_score ?? 0) >= 80 &&
+        !(item.symbol === "TRXUSD" && item.exchange === "kraken_okx")
+    }
+  ];
+
   for (const timeline of grouped.values()) {
     const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-    const entries = ordered.filter(
-      (item) =>
-        item.opening_trial_candidate ||
-        (
-          item.execution_recommendation_state === "execution_ready" &&
-          (item.taker_net_edge_bps ?? 0) > 0 &&
-          (item.execution_viability_score ?? 0) >= 80
-        )
+    const entries = ordered.flatMap((item) =>
+      policyDefinitions
+        .filter((policy) => policy.matches(item))
+        .map((policy) => ({ entry: item, policy: policy.name }))
     );
-    for (const entry of entries) {
-      const policy = entry.opening_trial_candidate ? "opening_gate" : "execution_ready_probe";
+    for (const { entry, policy } of entries) {
       const entryTs = new Date(entry.ts).getTime();
       const postEntry = ordered.filter((item) => new Date(item.ts).getTime() >= entryTs);
       const invalidated = postEntry.find((item) => effectiveNetEdge(item) <= 0);
@@ -733,15 +806,53 @@ function buildStrategyLab(
     )
       .map((group) => ({ [field]: group.key, ...summarizeTrials(group.rows) }))
       .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+  const summarizeByPair = (left: "policy" | "model" | "symbol" | "exchange", right: "model" | "symbol" | "exchange") =>
+    Object.values(
+      trials.reduce((acc, trial) => {
+        const key = `${trial[left]}|${trial[right]}`;
+        const current = acc[key] ?? { left: String(trial[left]), right: String(trial[right]), rows: [] as typeof trials };
+        current.rows.push(trial);
+        acc[key] = current;
+        return acc;
+      }, {} as Record<string, { left: string; right: string; rows: typeof trials }>)
+    )
+      .map((group) => ({ [left]: group.left, [right]: group.right, ...summarizeTrials(group.rows) }))
+      .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
 
-  const baseline = trials.filter((trial) => trial.policy === "opening_gate" && trial.model === "exit_on_invalidated");
+  const baseline = trials.filter((trial) => trial.policy === "strict_current" && trial.model === "exit_on_invalidated");
   const exploratory = trials.filter((trial) => trial.policy === "execution_ready_probe" && trial.model === "exit_on_invalidated");
+  const policyModels = summarizeByPair("policy", "model");
+  const promotionCandidates = policyModels
+    .filter((row) => row.trials >= 3 && row.total_pnl_bps > 0 && row.win_rate >= 0.34)
+    .slice(0, 8);
+  const highStabilityPaperProbe = (policyModels as Array<{
+    policy: string;
+    model: string;
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    best_pnl_bps: number;
+    worst_pnl_bps: number;
+    win_rate: number;
+  }>)
+    .filter((row) => row.policy === "high_stability_70" && ["tp3_sl3", "tp5_sl5"].includes(String(row.model)))
+    .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+  const quarantinedSlices = [
+    ...summarizeBy("exchange").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "exchange_pair", ...row })),
+    ...summarizeBy("symbol").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "symbol", ...row })),
+    ...summarizeBy("stability_bucket").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "stability_bucket", ...row }))
+  ].sort((a, b) => a.total_pnl_bps - b.total_pnl_bps).slice(0, 10);
   return {
     trial_count: trials.length,
     baseline_model: "exit_on_invalidated",
     baseline_summary: summarizeTrials(baseline),
     exploratory_probe_summary: summarizeTrials(exploratory),
+    tested_policies: policyDefinitions.map((policy) => ({ policy: policy.name, description: policy.description })),
     by_policy: summarizeBy("policy"),
+    by_policy_exit_model: policyModels.slice(0, 20),
     by_exit_model: summarizeBy("model"),
     by_symbol: summarizeBy("symbol").slice(0, 12),
     by_exchange_pair: summarizeBy("exchange").slice(0, 12),
@@ -750,9 +861,38 @@ function buildStrategyLab(
     by_persistence_bucket: summarizeBy("persistence_bucket"),
     best_slices: summarizeBy("exchange").filter((row) => row.trials >= 2 && row.total_pnl_bps > 0).slice(0, 5),
     worst_slices: summarizeBy("exchange").filter((row) => row.trials >= 2).sort((a, b) => a.total_pnl_bps - b.total_pnl_bps).slice(0, 5),
+    promotion_candidates: promotionCandidates,
+    targeted_paper_probe: {
+      policy: "high_stability_70",
+      exit_models: ["tp3_sl3", "tp5_sl5"],
+      minimum_stability_score: 70,
+      mode: "paper_only",
+      promotion_rule: "Keep only if rolling 30D stays positive with at least 20 trials and no symbol/pair concentration above 40%.",
+      candidates: highStabilityPaperProbe,
+      active: highStabilityPaperProbe.some((row) => row.trials >= 3 && row.total_pnl_bps > 0)
+    },
+    quarantined_slices: quarantinedSlices,
+    quarantine_rules: [
+      {
+        rule: "stability_below_45",
+        reason: "Historical strategy-search audit showed materially negative PnL for low-stability xarb buckets."
+      },
+      {
+        rule: "btc_eth_sol_link_symbol_watchlist",
+        reason: "These symbols were negative in the rolling DB audit, but this is a warning only. A high-stability positive slice can still enter paper-probe."
+      },
+      {
+        rule: "known_negative_pair_symbol_slices",
+        reason: "Specific losing pair-symbol slices are blocked from targeted paper-probe until they requalify."
+      }
+    ],
+    best_policy_candidate: promotionCandidates[0] ?? null,
+    do_not_trade_candidates: quarantinedSlices.slice(0, 5),
     recommendation:
       baseline.length === 0 && exploratory.length === 0
         ? "No opening or execution-ready probe trials yet. Keep collecting data."
+        : promotionCandidates.length > 0
+          ? "A positive policy/model candidate exists. Keep it in paper-search until it survives more samples."
         : baseline.length === 0
           ? "No strict opening-gate trials, but execution-ready probes exist. Use exploratory slices only; do not treat them as approved entries."
         : summarizeTrials(baseline).total_pnl_bps < 0
@@ -1059,8 +1199,27 @@ async function buildPacket(args: {
     const paperTradeStarted = item.opening_trial_candidate;
     const paperTradeClosed = paperTradeStarted && item.paper_trade_exit_ts !== null;
     const paperTradePnl = item.entry_to_exit_outcome_bps;
+    const targetedPaperProbeCandidate =
+      item.strategy === "xarb_spot" &&
+      item.execution_recommendation_state === "execution_ready" &&
+      (item.taker_net_edge_bps ?? 0) > 0 &&
+      !item.execution_fragile &&
+      (item.execution_viability_score ?? 0) >= 80 &&
+      (item.net_edge_stability_score ?? 0) >= 70 &&
+      !isQuarantinedPaperSlice(item);
+    const quarantineReasons = [
+      (item.net_edge_stability_score ?? 0) < 45 ? "stability_below_45" : null,
+      ["BTCUSD", "ETHUSD", "SOLUSD", "LINKUSD"].includes(item.symbol) ? "negative_symbol_slice_watchlist" : null,
+      item.exchange === "bybit_coinbase" && item.symbol === "BTCUSD" ? "negative_pair_symbol_slice" : null,
+      item.exchange === "bybit_kraken" && item.symbol === "BNBUSD" ? "negative_pair_symbol_slice" : null
+    ].filter((reason): reason is string => Boolean(reason));
     return {
       ...item,
+      targeted_paper_probe_candidate: targetedPaperProbeCandidate,
+      targeted_paper_probe_policy: targetedPaperProbeCandidate ? "high_stability_70_tp_sl" : null,
+      targeted_paper_probe_exit_models: targetedPaperProbeCandidate ? ["tp3_sl3", "tp5_sl5"] : [],
+      paper_probe_quarantined: quarantineReasons.length > 0,
+      paper_probe_quarantine_reasons: quarantineReasons,
       paper_trade_started: paperTradeStarted,
       paper_trade_closed: paperTradeClosed,
       paper_trade_outcome:

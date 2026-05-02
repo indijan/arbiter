@@ -194,6 +194,73 @@ function summarizePaperRows(rows: Array<{ pnl_bps: number }>) {
   };
 }
 
+function isQuarantinedPaperSlice(row: {
+  symbol: string;
+  exchange: string;
+  net_edge_stability_score: number;
+}) {
+  return (
+    row.net_edge_stability_score < 45 ||
+    (row.exchange === "bybit_coinbase" && row.symbol === "BTCUSD") ||
+    (row.exchange === "bybit_kraken" && row.symbol === "BNBUSD")
+  );
+}
+
+function buildTargetedProbeRows<T extends {
+  ts: string;
+  symbol: string;
+  exchange: string;
+  maker_net_edge_bps: number;
+  taker_net_edge_bps: number | null;
+  execution_recommendation_state: string;
+  execution_viability_score: number | null;
+  net_edge_stability_score: number;
+  execution_fragile: boolean;
+}>(rows: T[]) {
+  const grouped = rows.reduce((acc, row) => {
+    const key = executionTimelineKey(row);
+    const current = acc.get(key) ?? [];
+    current.push(row);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, T[]>());
+  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string }> = [];
+
+  for (const timeline of grouped.values()) {
+    const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const entries = ordered.filter(
+      (row) =>
+        row.execution_recommendation_state === "execution_ready" &&
+        (row.taker_net_edge_bps ?? 0) > 0 &&
+        !row.execution_fragile &&
+        (row.execution_viability_score ?? 0) >= 80 &&
+        row.net_edge_stability_score >= 70 &&
+        !isQuarantinedPaperSlice(row)
+    );
+
+    for (const entry of entries) {
+      const entryNet = effectiveNetEdge(entry);
+      const postEntry = ordered.filter((row) => new Date(row.ts).getTime() >= new Date(entry.ts).getTime());
+      for (const threshold of [3, 5]) {
+        const tp = postEntry.find((row) => effectiveNetEdge(row) - entryNet >= threshold);
+        const sl = postEntry.find((row) => effectiveNetEdge(row) - entryNet <= -threshold);
+        const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
+        const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
+        const exit = tpTs <= slTs ? tp : sl;
+        const finalExit = exit ?? postEntry.at(-1) ?? entry;
+        trials.push({
+          pnl_bps: Number((effectiveNetEdge(finalExit) - entryNet).toFixed(4)),
+          model: `tp${threshold}_sl${threshold}`,
+          symbol: entry.symbol,
+          exchange: entry.exchange
+        });
+      }
+    }
+  }
+
+  return trials;
+}
+
 export default async function DashboardPage() {
   const supabase = createServerSupabase();
   if (!supabase) {
@@ -360,6 +427,19 @@ export default async function DashboardPage() {
         !evaluation.execution_fragile &&
         (evaluation.execution_viability_score ?? 0) >= 80 &&
         evaluation.lifetime_minutes >= 20;
+      const probeQuarantineReasons = [
+        stability < 45 ? "stability_below_45" : null,
+        ["BTCUSD", "ETHUSD", "SOLUSD", "LINKUSD"].includes(opp.symbol) ? "negative_symbol_slice_watchlist" : null,
+        opp.exchange === "bybit_coinbase" && opp.symbol === "BTCUSD" ? "negative_pair_symbol_slice" : null,
+        opp.exchange === "bybit_kraken" && opp.symbol === "BNBUSD" ? "negative_pair_symbol_slice" : null
+      ].filter((reason): reason is string => Boolean(reason));
+      const targetedPaperProbeCandidate =
+        evaluation.execution_recommendation_state === "execution_ready" &&
+        taker > 0 &&
+        !evaluation.execution_fragile &&
+        (evaluation.execution_viability_score ?? 0) >= 80 &&
+        stability >= 70 &&
+        probeQuarantineReasons.length === 0;
       const watchMore =
         evaluation.decision_capable_execution_signal &&
         evaluation.execution_recommendation_state === "execution_ready" &&
@@ -386,6 +466,9 @@ export default async function DashboardPage() {
         paper_worst_bps_after_signal: 0,
         paper_exit_reason: "no_entry",
         time_to_first_decision_capable_minutes: evaluation.decision_capable_execution_signal ? 0 : null,
+        targeted_paper_probe_candidate: targetedPaperProbeCandidate,
+        paper_probe_quarantined: probeQuarantineReasons.length > 0,
+        paper_probe_quarantine_reasons: probeQuarantineReasons,
         opening_trial_candidate: openingTrialCandidate,
         opening_trial_decision: openingTrialCandidate ? "go" : watchMore ? "watch_more" : "no_go",
         opening_trial_reason: openingTrialCandidate
@@ -628,11 +711,24 @@ export default async function DashboardPage() {
       .map((group) => ({ key: group.key, ...summarizePaperRows(group.rows) }))
       .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps)
       .slice(0, 8);
+  const bySymbol = summarizeBy("symbol");
+  const byExchange = summarizeBy("exchange");
+  const allSlices = [...bySymbol, ...byExchange];
+  const targetedProbeRows = buildTargetedProbeRows(executionRows);
+  const targetedProbeSummary = summarizePaperRows(targetedProbeRows);
   const strategyLabSummary = {
     baseline: summarizePaperRows(baselineLabRows),
     exploratory: summarizePaperRows(exploratoryLabRows),
-    bySymbol: summarizeBy("symbol"),
-    byExchange: summarizeBy("exchange")
+    bySymbol,
+    byExchange,
+    promotionCandidates: allSlices.filter((row) => row.trials >= 3 && row.total_pnl_bps > 0).slice(0, 6),
+    quarantineCandidates: allSlices.filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).sort((a, b) => a.total_pnl_bps - b.total_pnl_bps).slice(0, 6),
+    targetedProbe: {
+      active: targetedProbeSummary.trials >= 3 && targetedProbeSummary.total_pnl_bps > 0,
+      policy: "high_stability_70",
+      exit_models: ["tp3_sl3", "tp5_sl5"],
+      ...targetedProbeSummary
+    }
   };
 
   return (

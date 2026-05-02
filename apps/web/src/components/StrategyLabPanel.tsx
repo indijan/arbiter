@@ -30,6 +30,20 @@ type StrategyLabSummary = {
   };
   bySymbol: LabSlice[];
   byExchange: LabSlice[];
+  promotionCandidates: LabSlice[];
+  quarantineCandidates: LabSlice[];
+  targetedProbe: {
+    active: boolean;
+    policy: string;
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    win_rate: number;
+    exit_models: string[];
+  };
 };
 
 function tone(value: number) {
@@ -65,6 +79,7 @@ function SliceTable({ title, rows }: { title: string; rows: LabSlice[] }) {
 export default function StrategyLabPanel({ summary }: { summary: StrategyLabSummary }) {
   const baseline = summary.baseline;
   const exploratory = summary.exploratory;
+  const probe = summary.targetedProbe;
   return (
     <section className="card mb-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -85,7 +100,44 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
           <p className="text-sm" style={{ color: "var(--muted)" }}>{exploratory.trials} probe · W/L/F {exploratory.wins}/{exploratory.losses}/{exploratory.flat}</p>
         </div>
       </div>
+      <div
+        className="mt-4 rounded-3xl border p-4"
+        style={{
+          borderColor: probe.active ? "color-mix(in oklab, #84cc16 55%, var(--line))" : "var(--line)",
+          background: probe.active
+            ? "linear-gradient(135deg, color-mix(in oklab, #84cc16 16%, transparent), color-mix(in oklab, var(--bg-alt) 40%, transparent))"
+            : "color-mix(in oklab, var(--bg-alt) 32%, transparent)"
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Targeted paper probe</p>
+            <h3 className="mt-1 text-lg font-semibold">high_stability_70 · TP/SL paper-only</h3>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+              Csak stabil, pozitív taker nettós xarb setup. Nem live entry, hanem célzott paper validáció.
+            </p>
+          </div>
+          <div className="text-right">
+            <strong className="text-2xl" style={{ color: tone(probe.total_pnl_bps) }}>{probe.total_pnl_bps.toFixed(2)} bps</strong>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              {probe.trials} trial · W/L/F {probe.wins}/{probe.losses}/{probe.flat} · win {(probe.win_rate * 100).toFixed(0)}%
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, var(--accent) 18%, transparent)", color: "var(--accent)" }}>
+            {probe.active ? "Aktív paper-probe jelölt" : "Még nincs elég erős 24h minta"}
+          </span>
+          {probe.exit_models.map((model) => (
+            <span key={model} className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, var(--bg-alt) 72%, transparent)", color: "var(--muted)" }}>
+              {model}
+            </span>
+          ))}
+        </div>
+      </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SliceTable title="Promotion jelöltek" rows={summary.promotionCandidates} />
+        <SliceTable title="Karantén jelöltek" rows={summary.quarantineCandidates} />
         <SliceTable title="Symbol bontás" rows={summary.bySymbol} />
         <SliceTable title="Exchange-pair bontás" rows={summary.byExchange} />
       </div>
