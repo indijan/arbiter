@@ -44,6 +44,18 @@ type StrategyLabSummary = {
     win_rate: number;
     exit_models: string[];
   };
+  meanReversionProbe: {
+    active: boolean;
+    policy: string;
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    win_rate: number;
+    exit_models: string[];
+  };
 };
 
 function tone(value: number) {
@@ -80,6 +92,7 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
   const baseline = summary.baseline;
   const exploratory = summary.exploratory;
   const probe = summary.targetedProbe;
+  const meanReversion = summary.meanReversionProbe;
   return (
     <section className="card mb-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -129,6 +142,41 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
             {probe.active ? "Aktív paper-probe jelölt" : "Még nincs elég erős 24h minta"}
           </span>
           {probe.exit_models.map((model) => (
+            <span key={model} className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, var(--bg-alt) 72%, transparent)", color: "var(--muted)" }}>
+              {model}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div
+        className="mt-4 rounded-3xl border p-4"
+        style={{
+          borderColor: meanReversion.active ? "color-mix(in oklab, #22c55e 60%, var(--line))" : "var(--line)",
+          background: meanReversion.active
+            ? "linear-gradient(135deg, color-mix(in oklab, #22c55e 18%, transparent), color-mix(in oklab, var(--bg-alt) 42%, transparent))"
+            : "color-mix(in oklab, var(--bg-alt) 32%, transparent)"
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>Mean Reversion Probe</p>
+            <h3 className="mt-1 text-lg font-semibold">high spread closing · paper-only</h3>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+              Más profitlogika: akkor nyer, ha a magas xarb spread záródik. Proxy PnL = entry edge - exit edge.
+            </p>
+          </div>
+          <div className="text-right">
+            <strong className="text-2xl" style={{ color: tone(meanReversion.total_pnl_bps) }}>{meanReversion.total_pnl_bps.toFixed(2)} bps</strong>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              {meanReversion.trials} trial · W/L/F {meanReversion.wins}/{meanReversion.losses}/{meanReversion.flat} · win {(meanReversion.win_rate * 100).toFixed(0)}%
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, #22c55e 18%, transparent)", color: "#86efac" }}>
+            {meanReversion.active ? "Aktív nyerő hipotézis" : "Még nincs elég friss megerősítés"}
+          </span>
+          {meanReversion.exit_models.map((model) => (
             <span key={model} className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, var(--bg-alt) 72%, transparent)", color: "var(--muted)" }}>
               {model}
             </span>

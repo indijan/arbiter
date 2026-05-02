@@ -699,6 +699,27 @@ function buildStrategyLab(
       execution_viability_score: entry.execution_viability_score
     });
   };
+  const addMeanReversionTrial = (
+    model: string,
+    policy: string,
+    entry: typeof rows[number],
+    exit: typeof rows[number],
+    exitReason: string
+  ) => {
+    trials.push({
+      model,
+      policy,
+      symbol: entry.symbol,
+      exchange: entry.exchange,
+      ts: entry.ts,
+      pnl_bps: Number((effectiveNetEdge(entry) - effectiveNetEdge(exit)).toFixed(4)),
+      exit_reason: exitReason,
+      taker_edge_bucket: bucketEdge(entry.taker_net_edge_bps),
+      stability_bucket: bucketStability(entry.net_edge_stability_score ?? null),
+      persistence_bucket: bucketPersistence(entry.persistence_ticks),
+      execution_viability_score: entry.execution_viability_score
+    });
+  };
 
   const policyDefinitions: Array<{
     name: string;
@@ -763,6 +784,30 @@ function buildStrategyLab(
         !(item.symbol === "TRXUSD" && item.exchange === "kraken_okx")
     }
   ];
+  const meanReversionPolicies: Array<{
+    name: string;
+    description: string;
+    matches: (item: typeof rows[number]) => boolean;
+  }> = [
+    {
+      name: "mr_high_spread_5bps",
+      description: "Mean-reversion probe: enter when positive taker spread is >= 5 bps, profit when spread closes.",
+      matches: (item) => (item.taker_net_edge_bps ?? 0) >= 5 && item.persistence_ticks >= 3
+    },
+    {
+      name: "mr_high_spread_8bps",
+      description: "Mean-reversion probe: stronger spread threshold >= 8 bps.",
+      matches: (item) => (item.taker_net_edge_bps ?? 0) >= 8 && item.persistence_ticks >= 3
+    },
+    {
+      name: "mr_exclude_bad_pairs_5bps",
+      description: "Mean-reversion probe excluding known negative pair-symbol slices.",
+      matches: (item) =>
+        (item.taker_net_edge_bps ?? 0) >= 5 &&
+        item.persistence_ticks >= 3 &&
+        !isQuarantinedPaperSlice(item)
+    }
+  ];
 
   for (const timeline of grouped.values()) {
     const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
@@ -790,6 +835,38 @@ function buildStrategyLab(
         const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
         const exit = tpTs <= slTs ? tp : sl;
         addTrial(`tp${threshold}_sl${threshold}`, policy, entry, exit ?? postEntry.at(-1) ?? entry, exit === tp ? "take_profit" : exit === sl ? "stop_loss" : "window_end");
+      }
+    }
+
+    const meanReversionEntries = ordered.flatMap((item) =>
+      meanReversionPolicies
+        .filter((policy) => policy.matches(item))
+        .map((policy) => ({ entry: item, policy: policy.name }))
+    );
+    for (const { entry, policy } of meanReversionEntries) {
+      const entryTs = new Date(entry.ts).getTime();
+      const entryEdge = effectiveNetEdge(entry);
+      const postEntry = ordered.filter((item) => new Date(item.ts).getTime() >= entryTs);
+
+      for (const minutes of [10, 30, 60, 120]) {
+        const horizonTs = entryTs + minutes * 60 * 1000;
+        const exit = postEntry.filter((item) => new Date(item.ts).getTime() <= horizonTs).at(-1) ?? entry;
+        addMeanReversionTrial(`mr_exit_after_${minutes}m`, policy, entry, exit, `fixed_${minutes}m`);
+      }
+
+      for (const [takeProfit, stopLoss] of [[3, 3], [5, 5], [8, 5]] as const) {
+        const tp = postEntry.find((item) => entryEdge - effectiveNetEdge(item) >= takeProfit);
+        const sl = postEntry.find((item) => entryEdge - effectiveNetEdge(item) <= -stopLoss);
+        const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
+        const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
+        const exit = tpTs <= slTs ? tp : sl;
+        addMeanReversionTrial(
+          `mr_tp${takeProfit}_sl${stopLoss}`,
+          policy,
+          entry,
+          exit ?? postEntry.at(-1) ?? entry,
+          exit === tp ? "spread_closed_take_profit" : exit === sl ? "spread_expanded_stop_loss" : "window_end"
+        );
       }
     }
   }
@@ -840,6 +917,21 @@ function buildStrategyLab(
   }>)
     .filter((row) => row.policy === "high_stability_70" && ["tp3_sl3", "tp5_sl5"].includes(String(row.model)))
     .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+  const meanReversionProbe = (policyModels as Array<{
+    policy: string;
+    model: string;
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    best_pnl_bps: number;
+    worst_pnl_bps: number;
+    win_rate: number;
+  }>)
+    .filter((row) => row.policy.startsWith("mr_"))
+    .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
   const quarantinedSlices = [
     ...summarizeBy("exchange").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "exchange_pair", ...row })),
     ...summarizeBy("symbol").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "symbol", ...row })),
@@ -870,6 +962,14 @@ function buildStrategyLab(
       promotion_rule: "Keep only if rolling 30D stays positive with at least 20 trials and no symbol/pair concentration above 40%.",
       candidates: highStabilityPaperProbe,
       active: highStabilityPaperProbe.some((row) => row.trials >= 3 && row.total_pnl_bps > 0)
+    },
+    mean_reversion_probe: {
+      thesis: "High xarb spread tends to close. PnL proxy is entry_edge - exit_edge.",
+      mode: "paper_only",
+      preferred_policy: "mr_high_spread_5bps",
+      preferred_exit_model: "mr_tp8_sl5",
+      candidates: meanReversionProbe.slice(0, 10),
+      active: meanReversionProbe.some((row) => row.trials >= 10 && row.total_pnl_bps > 0 && row.win_rate >= 0.6)
     },
     quarantined_slices: quarantinedSlices,
     quarantine_rules: [

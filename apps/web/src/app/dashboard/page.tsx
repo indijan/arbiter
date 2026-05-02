@@ -261,6 +261,49 @@ function buildTargetedProbeRows<T extends {
   return trials;
 }
 
+function buildMeanReversionProbeRows<T extends {
+  ts: string;
+  symbol: string;
+  exchange: string;
+  taker_net_edge_bps: number | null;
+  maker_net_edge_bps: number;
+  persistence_ticks: number;
+}>(rows: T[]) {
+  const grouped = rows.reduce((acc, row) => {
+    const key = executionTimelineKey(row);
+    const current = acc.get(key) ?? [];
+    current.push(row);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, T[]>());
+  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string }> = [];
+
+  for (const timeline of grouped.values()) {
+    const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    const entries = ordered.filter((row) => (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks >= 3);
+    for (const entry of entries) {
+      const entryNet = effectiveNetEdge(entry);
+      const postEntry = ordered.filter((row) => new Date(row.ts).getTime() >= new Date(entry.ts).getTime());
+      for (const [takeProfit, stopLoss] of [[3, 3], [5, 5], [8, 5]] as const) {
+        const tp = postEntry.find((row) => entryNet - effectiveNetEdge(row) >= takeProfit);
+        const sl = postEntry.find((row) => entryNet - effectiveNetEdge(row) <= -stopLoss);
+        const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
+        const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
+        const exit = tpTs <= slTs ? tp : sl;
+        const finalExit = exit ?? postEntry.at(-1) ?? entry;
+        trials.push({
+          pnl_bps: Number((entryNet - effectiveNetEdge(finalExit)).toFixed(4)),
+          model: `mr_tp${takeProfit}_sl${stopLoss}`,
+          symbol: entry.symbol,
+          exchange: entry.exchange
+        });
+      }
+    }
+  }
+
+  return trials;
+}
+
 export default async function DashboardPage() {
   const supabase = createServerSupabase();
   if (!supabase) {
@@ -716,6 +759,8 @@ export default async function DashboardPage() {
   const allSlices = [...bySymbol, ...byExchange];
   const targetedProbeRows = buildTargetedProbeRows(executionRows);
   const targetedProbeSummary = summarizePaperRows(targetedProbeRows);
+  const meanReversionRows = buildMeanReversionProbeRows(executionRows);
+  const meanReversionSummary = summarizePaperRows(meanReversionRows);
   const strategyLabSummary = {
     baseline: summarizePaperRows(baselineLabRows),
     exploratory: summarizePaperRows(exploratoryLabRows),
@@ -728,6 +773,12 @@ export default async function DashboardPage() {
       policy: "high_stability_70",
       exit_models: ["tp3_sl3", "tp5_sl5"],
       ...targetedProbeSummary
+    },
+    meanReversionProbe: {
+      active: meanReversionSummary.trials >= 10 && meanReversionSummary.total_pnl_bps > 0 && meanReversionSummary.win_rate >= 0.6,
+      policy: "mr_high_spread_5bps",
+      exit_models: ["mr_tp3_sl3", "mr_tp5_sl5", "mr_tp8_sl5"],
+      ...meanReversionSummary
     }
   };
 
