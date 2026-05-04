@@ -59,12 +59,14 @@ export default function MeanReversionCommandPanel({
   summary7d,
   summary30d,
   latestCandidate,
+  recentNearMiss,
   series
 }: {
   summary24h: MeanReversionSummary;
   summary7d: MeanReversionSummary;
   summary30d: MeanReversionSummary;
   latestCandidate: MeanReversionCandidate | null;
+  recentNearMiss: MeanReversionCandidate | null;
   series: MeanReversionPoint[];
 }) {
   const minSaldo = Math.min(0, ...series.map((point) => point.cumulative_bps));
@@ -98,6 +100,13 @@ export default function MeanReversionCommandPanel({
               <strong className="text-xl">{latestCandidate.symbol}</strong>
               <p className="text-sm" style={{ color: "var(--muted)" }}>{latestCandidate.exchange}</p>
               <p className="text-sm">edge {latestCandidate.taker_edge_bps.toFixed(2)} bps · {latestCandidate.persistence_ticks} tick</p>
+            </>
+          ) : recentNearMiss ? (
+            <>
+              <strong className="text-xl">{recentNearMiss.symbol} near miss</strong>
+              <p className="text-sm" style={{ color: "var(--muted)" }}>{recentNearMiss.exchange}</p>
+              <p className="text-sm">edge {recentNearMiss.taker_edge_bps.toFixed(2)} bps · {recentNearMiss.persistence_ticks}/3 tick</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Volt 5+ bps jel, de nem élt elég tickig.</p>
             </>
           ) : (
             <>

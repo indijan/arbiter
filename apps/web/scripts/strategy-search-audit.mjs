@@ -76,8 +76,13 @@ function runSearch(rows, label) {
   const models = ['exit_on_invalidated', 'exit_after_10m', 'exit_after_30m', 'exit_after_60m', 'exit_after_120m', 'tp3_sl3', 'tp5_sl5'];
   const meanReversionModels = ['mr_exit_after_10m', 'mr_exit_after_30m', 'mr_exit_after_60m', 'mr_exit_after_120m', 'mr_tp3_sl3', 'mr_tp5_sl5', 'mr_tp8_sl5'];
   const trials = [];
+  const diagnostics = { raw_xarb_rows: rows.length, raw_pairs: grouped.size, rows_with_taker_5bps: 0, pairs_with_3_ticks: 0, rows_passing_mr_5bps_and_3_ticks: 0, top_raw_spreads: [] };
   for (const [pairKey, timelineRaw] of grouped.entries()) {
     const timeline = timelineRaw.sort((a, b) => t(a) - t(b)); const st = stability(timeline); const persistence = timeline.length; const lifetimeMin = (t(timeline.at(-1)) - t(timeline[0])) / 60000;
+    if (persistence >= 3) diagnostics.pairs_with_3_ticks += 1;
+    diagnostics.rows_with_taker_5bps += timeline.filter((r) => taker(r) >= 5).length;
+    diagnostics.rows_passing_mr_5bps_and_3_ticks += timeline.filter((r) => taker(r) >= 5 && persistence >= 3).length;
+    diagnostics.top_raw_spreads.push(...timeline.map((r) => ({ ts: r.ts, pair: pairKey, symbol: r.symbol, exchange: r.exchange, taker_bps: round(taker(r)), maker_bps: round(maker(r)), persistence, stability: st })));
     const policies = [
       { policy: 'execution_ready_probe', ok: (r) => taker(r) > 0 && maker(r) > 0 && persistence >= 3 },
       { policy: 'high_stability_70', ok: (r) => taker(r) > 0 && st >= 70 && persistence >= 3 },
@@ -101,9 +106,10 @@ function runSearch(rows, label) {
   const promotion = byPolicyModel.filter((r) => r.trials >= 5 && r.total_pnl_bps > 0 && r.win_rate >= 0.25).sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
   const meanReversionPromotion = byPolicyModel.filter((r) => r.policy.startsWith('mr_') && r.trials >= 5 && r.total_pnl_bps > 0 && r.win_rate >= 0.35).sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
   const quarantine = [...groupBy(trials, 'pair').filter((r) => r.trials >= 5 && r.total_pnl_bps < 0).map((r) => ({ type: 'pair', ...r })), ...groupBy(trials, 'symbol').filter((r) => r.trials >= 5 && r.total_pnl_bps < 0).map((r) => ({ type: 'symbol', ...r })), ...groupBy(trials, 'stability_bucket').filter((r) => r.trials >= 5 && r.total_pnl_bps < 0).map((r) => ({ type: 'stability_bucket', ...r }))].sort((a, b) => a.total_pnl_bps - b.total_pnl_bps);
-  return { window: label, source_rows: rows.length, pairs: grouped.size, trial_count: trials.length, summary: summarize(trials), by_policy: groupBy(trials, 'policy'), by_policy_model: byPolicyModel.sort((a, b) => b.total_pnl_bps - a.total_pnl_bps).slice(0, 30), by_symbol: groupBy(trials, 'symbol').slice(0, 20), by_pair: groupBy(trials, 'pair').slice(0, 20), by_stability_bucket: groupBy(trials, 'stability_bucket'), promotion_candidates: promotion.slice(0, 10), mean_reversion_promotion_candidates: meanReversionPromotion.slice(0, 10), mean_reversion_summary: summarize(trials.filter((r) => r.policy.startsWith('mr_'))), quarantine_candidates: quarantine.slice(0, 15) };
+  diagnostics.top_raw_spreads = diagnostics.top_raw_spreads.sort((a, b) => b.taker_bps - a.taker_bps).slice(0, 10);
+  return { window: label, source_rows: rows.length, pairs: grouped.size, trial_count: trials.length, diagnostics, summary: summarize(trials), by_policy: groupBy(trials, 'policy'), by_policy_model: byPolicyModel.sort((a, b) => b.total_pnl_bps - a.total_pnl_bps).slice(0, 30), by_symbol: groupBy(trials, 'symbol').slice(0, 20), by_pair: groupBy(trials, 'pair').slice(0, 20), by_stability_bucket: groupBy(trials, 'stability_bucket'), promotion_candidates: promotion.slice(0, 10), mean_reversion_promotion_candidates: meanReversionPromotion.slice(0, 10), mean_reversion_summary: summarize(trials.filter((r) => r.policy.startsWith('mr_'))), quarantine_candidates: quarantine.slice(0, 15) };
 }
-const results = {}; for (const days of [7, 30]) { const rows = await fetchRows(days); results[`${days}d`] = runSearch(rows, `${days}d`); }
+const results = {}; for (const days of [1, 7, 30]) { const rows = await fetchRows(days); results[`${days === 1 ? '24h' : `${days}d`}`] = runSearch(rows, `${days === 1 ? '24h' : `${days}d`}`); }
 fs.mkdirSync(path.dirname(outPath), { recursive: true }); fs.writeFileSync(outPath, JSON.stringify({ generated_at: new Date().toISOString(), results }, null, 2));
-for (const [window, r] of Object.entries(results)) { console.log(`\n=== ${window} ===`); console.log('source rows:', r.source_rows, 'pairs:', r.pairs, 'trials:', r.trial_count); console.log('summary:', r.summary); console.log('top policy/model:', r.by_policy_model.slice(0, 8)); console.log('promotion:', r.promotion_candidates.slice(0, 5)); console.log('quarantine:', r.quarantine_candidates.slice(0, 8)); }
+for (const [window, r] of Object.entries(results)) { console.log(`\n=== ${window} ===`); console.log('source rows:', r.source_rows, 'pairs:', r.pairs, 'trials:', r.trial_count); console.log('diagnostics:', r.diagnostics); console.log('summary:', r.summary); console.log('top policy/model:', r.by_policy_model.slice(0, 8)); console.log('promotion:', r.promotion_candidates.slice(0, 5)); console.log('quarantine:', r.quarantine_candidates.slice(0, 8)); }
 console.log(`\nSaved ${outPath}`);

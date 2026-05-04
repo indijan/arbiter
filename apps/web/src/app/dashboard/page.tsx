@@ -841,6 +841,9 @@ export default async function DashboardPage() {
   const latestMeanReversionCandidate = executionRows
     .filter((row) => isCurrentRow(row) && (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks >= 3)
     .sort((a, b) => (b.taker_net_edge_bps ?? b.maker_net_edge_bps) - (a.taker_net_edge_bps ?? a.maker_net_edge_bps))[0] ?? null;
+  const recentMeanReversionNearMiss = executionRows
+    .filter((row) => (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks < 3)
+    .sort((a, b) => (b.taker_net_edge_bps ?? b.maker_net_edge_bps) - (a.taker_net_edge_bps ?? a.maker_net_edge_bps))[0] ?? null;
   const strategyLabSummary = {
     baseline: summarizePaperRows(baselineLabRows),
     exploratory: summarizePaperRows(exploratoryLabRows),
@@ -914,6 +917,14 @@ export default async function DashboardPage() {
           persistence_ticks: latestMeanReversionCandidate.persistence_ticks,
           lifetime_minutes: latestMeanReversionCandidate.lifetime_minutes,
           ts: latestMeanReversionCandidate.ts
+        } : null}
+        recentNearMiss={recentMeanReversionNearMiss ? {
+          symbol: recentMeanReversionNearMiss.symbol,
+          exchange: recentMeanReversionNearMiss.exchange,
+          taker_edge_bps: recentMeanReversionNearMiss.taker_net_edge_bps ?? recentMeanReversionNearMiss.maker_net_edge_bps,
+          persistence_ticks: recentMeanReversionNearMiss.persistence_ticks,
+          lifetime_minutes: recentMeanReversionNearMiss.lifetime_minutes,
+          ts: recentMeanReversionNearMiss.ts
         } : null}
         series={meanReversionSeries30d}
       />
