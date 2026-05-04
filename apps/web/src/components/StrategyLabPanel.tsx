@@ -138,7 +138,7 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-          <span className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, var(--accent) 18%, transparent)", color: "var(--accent)" }}>
+          <span className="rounded-full px-3 py-1" style={{ background: probe.active ? "#ecfccb" : "color-mix(in oklab, var(--accent) 18%, transparent)", color: probe.active ? "#365314" : "var(--accent)", border: probe.active ? "1px solid #84cc16" : "1px solid transparent" }}>
             {probe.active ? "Aktív paper-probe jelölt" : "Még nincs elég erős 24h minta"}
           </span>
           {probe.exit_models.map((model) => (
@@ -173,7 +173,7 @@ export default function StrategyLabPanel({ summary }: { summary: StrategyLabSumm
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-          <span className="rounded-full px-3 py-1" style={{ background: "color-mix(in oklab, #22c55e 18%, transparent)", color: "#86efac" }}>
+          <span className="rounded-full px-3 py-1" style={{ background: meanReversion.active ? "#bbf7d0" : "color-mix(in oklab, #22c55e 18%, transparent)", color: meanReversion.active ? "#14532d" : "#86efac", border: meanReversion.active ? "1px solid #22c55e" : "1px solid transparent" }}>
             {meanReversion.active ? "Aktív nyerő hipotézis" : "Még nincs elég friss megerősítés"}
           </span>
           {meanReversion.exit_models.map((model) => (

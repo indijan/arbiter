@@ -44,9 +44,9 @@ function StatusPill({ active }: { active: boolean }) {
     <span
       className="inline-flex rounded-full px-4 py-2 text-sm font-bold"
       style={{
-        background: active ? "color-mix(in oklab, #22c55e 20%, transparent)" : "color-mix(in oklab, #f59e0b 18%, transparent)",
-        color: active ? "#86efac" : "#fbbf24",
-        border: `1px solid ${active ? "#22c55e77" : "#f59e0b77"}`
+        background: active ? "#bbf7d0" : "#fef3c7",
+        color: active ? "#14532d" : "#78350f",
+        border: `1px solid ${active ? "#22c55e" : "#f59e0b"}`
       }}
     >
       {active ? "MR hipotézis aktív" : "MR figyelés alatt"}
