@@ -4,6 +4,7 @@ import ReportExportButtons from "@/components/ReportExportButtons";
 import AdvancedViewTable from "@/components/AdvancedViewTable";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
+import MeanReversionCommandPanel from "@/components/MeanReversionCommandPanel";
 import OperationalStatusPanel from "@/components/OperationalStatusPanel";
 import DecisionViewPanel from "@/components/DecisionViewPanel";
 import StrategyLabPanel from "@/components/StrategyLabPanel";
@@ -183,6 +184,7 @@ function buildPaperAudit<T extends {
 
 function summarizePaperRows(rows: Array<{ pnl_bps: number }>) {
   const total = rows.reduce((sum, row) => sum + row.pnl_bps, 0);
+  const pnls = rows.map((row) => row.pnl_bps);
   return {
     trials: rows.length,
     wins: rows.filter((row) => row.pnl_bps > 0).length,
@@ -190,7 +192,9 @@ function summarizePaperRows(rows: Array<{ pnl_bps: number }>) {
     flat: rows.filter((row) => row.pnl_bps === 0).length,
     total_pnl_bps: Number(total.toFixed(2)),
     avg_pnl_bps: rows.length > 0 ? Number((total / rows.length).toFixed(2)) : 0,
-    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.pnl_bps > 0).length / rows.length).toFixed(4)) : 0
+    win_rate: rows.length > 0 ? Number((rows.filter((row) => row.pnl_bps > 0).length / rows.length).toFixed(4)) : 0,
+    best_pnl_bps: pnls.length > 0 ? Number(Math.max(...pnls).toFixed(2)) : 0,
+    worst_pnl_bps: pnls.length > 0 ? Number(Math.min(...pnls).toFixed(2)) : 0
   };
 }
 
@@ -224,7 +228,7 @@ function buildTargetedProbeRows<T extends {
     acc.set(key, current);
     return acc;
   }, new Map<string, T[]>());
-  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string }> = [];
+  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string; ts: string }> = [];
 
   for (const timeline of grouped.values()) {
     const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
@@ -252,7 +256,8 @@ function buildTargetedProbeRows<T extends {
           pnl_bps: Number((effectiveNetEdge(finalExit) - entryNet).toFixed(4)),
           model: `tp${threshold}_sl${threshold}`,
           symbol: entry.symbol,
-          exchange: entry.exchange
+          exchange: entry.exchange,
+          ts: entry.ts
         });
       }
     }
@@ -276,7 +281,7 @@ function buildMeanReversionProbeRows<T extends {
     acc.set(key, current);
     return acc;
   }, new Map<string, T[]>());
-  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string }> = [];
+  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string; ts: string }> = [];
 
   for (const timeline of grouped.values()) {
     const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
@@ -295,13 +300,65 @@ function buildMeanReversionProbeRows<T extends {
           pnl_bps: Number((entryNet - effectiveNetEdge(finalExit)).toFixed(4)),
           model: `mr_tp${takeProfit}_sl${stopLoss}`,
           symbol: entry.symbol,
-          exchange: entry.exchange
+          exchange: entry.exchange,
+          ts: entry.ts
         });
       }
     }
   }
 
   return trials;
+}
+
+function buildMeanReversionSeries(rows: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string; ts: string }>) {
+  let cumulative = 0;
+  return rows
+    .filter((row) => row.model === "mr_tp8_sl5")
+    .slice()
+    .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+    .map((row) => {
+      cumulative += row.pnl_bps;
+      return {
+        ts: row.ts,
+        symbol: row.symbol,
+        exchange: row.exchange,
+        model: row.model,
+        pnl_bps: Number(row.pnl_bps.toFixed(2)),
+        cumulative_bps: Number(cumulative.toFixed(2))
+      };
+    });
+}
+
+function buildXarbExecutionRows(opportunities: OpportunityRow[]) {
+  const persistence = buildOpportunityPersistence(opportunities);
+  return opportunities
+    .filter((opp) => opp.type === "xarb_spot")
+    .map((opp) => {
+      const key = `${opp.type}:${opp.exchange}:${opp.symbol}`;
+      const seen = persistence.get(key);
+      const lifetime = seen ? (new Date(seen.last).getTime() - new Date(seen.first).getTime()) / 60000 : 0;
+      const evaluation = evaluateOpportunity({
+        strategy: opp.type,
+        exchange: opp.exchange,
+        symbol: opp.symbol,
+        net_edge_bps: asNumber(opp.net_edge_bps),
+        metadata: opp.details ?? {},
+        persistence_ticks: seen?.count ?? 1,
+        first_seen_ts: seen?.first ?? opp.ts,
+        last_seen_ts: seen?.last ?? opp.ts,
+        lifetime_minutes: lifetime,
+        consumed_risk_score: 0
+      });
+      return {
+        ts: opp.ts,
+        symbol: opp.symbol,
+        exchange: opp.exchange,
+        maker_net_edge_bps: evaluation.maker_net_edge_bps,
+        taker_net_edge_bps: evaluation.taker_net_edge_bps,
+        persistence_ticks: evaluation.persistence_ticks,
+        lifetime_minutes: evaluation.lifetime_minutes
+      };
+    });
 }
 
 export default async function DashboardPage() {
@@ -325,8 +382,10 @@ export default async function DashboardPage() {
 
   const snapshotsSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const opportunitiesSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const opportunitiesSince7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const opportunitiesSince30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: latestTick }, { data: opportunities }] = await Promise.all([
+  const [{ data: latestTick }, { data: opportunities }, { data: xarbOpportunities30d }] = await Promise.all([
     supabase
       .from("system_ticks")
       .select("ts, ingest_errors, detect_summary")
@@ -338,10 +397,18 @@ export default async function DashboardPage() {
       .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
       .gte("ts", opportunitiesSince)
       .order("ts", { ascending: false })
-      .limit(1500)
+      .limit(1500),
+    supabase
+      .from("opportunities")
+      .select("id, ts, exchange, symbol, type, net_edge_bps, confidence, details")
+      .eq("type", "xarb_spot")
+      .gte("ts", opportunitiesSince30d)
+      .order("ts", { ascending: false })
+      .limit(5000)
   ]);
 
   const typedOpportunities = (opportunities ?? []) as OpportunityRow[];
+  const typedXarbOpportunities30d = (xarbOpportunities30d ?? []) as OpportunityRow[];
   const persistence = buildOpportunityPersistence(typedOpportunities);
   const learningSymbols = learningSymbolsFrom(typedOpportunities);
   const snapshotSymbols = snapshotSymbolVariants(learningSymbols);
@@ -760,7 +827,20 @@ export default async function DashboardPage() {
   const targetedProbeRows = buildTargetedProbeRows(executionRows);
   const targetedProbeSummary = summarizePaperRows(targetedProbeRows);
   const meanReversionRows = buildMeanReversionProbeRows(executionRows);
-  const meanReversionSummary = summarizePaperRows(meanReversionRows);
+  const meanReversionRows24hPreferred = meanReversionRows.filter((row) => row.model === "mr_tp8_sl5");
+  const xarbExecutionRows30d = buildXarbExecutionRows(typedXarbOpportunities30d);
+  const xarbExecutionRows7d = buildXarbExecutionRows(
+    typedXarbOpportunities30d.filter((opp) => new Date(opp.ts).getTime() >= new Date(opportunitiesSince7d).getTime())
+  );
+  const meanReversionRows7d = buildMeanReversionProbeRows(xarbExecutionRows7d).filter((row) => row.model === "mr_tp8_sl5");
+  const meanReversionRows30d = buildMeanReversionProbeRows(xarbExecutionRows30d).filter((row) => row.model === "mr_tp8_sl5");
+  const meanReversionSummary = summarizePaperRows(meanReversionRows24hPreferred);
+  const meanReversionSummary7d = summarizePaperRows(meanReversionRows7d);
+  const meanReversionSummary30d = summarizePaperRows(meanReversionRows30d);
+  const meanReversionSeries30d = buildMeanReversionSeries(meanReversionRows30d);
+  const latestMeanReversionCandidate = executionRows
+    .filter((row) => isCurrentRow(row) && (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks >= 3)
+    .sort((a, b) => (b.taker_net_edge_bps ?? b.maker_net_edge_bps) - (a.taker_net_edge_bps ?? a.maker_net_edge_bps))[0] ?? null;
   const strategyLabSummary = {
     baseline: summarizePaperRows(baselineLabRows),
     exploratory: summarizePaperRows(exploratoryLabRows),
@@ -775,10 +855,10 @@ export default async function DashboardPage() {
       ...targetedProbeSummary
     },
     meanReversionProbe: {
-      active: meanReversionSummary.trials >= 10 && meanReversionSummary.total_pnl_bps > 0 && meanReversionSummary.win_rate >= 0.6,
+      active: meanReversionSummary30d.trials >= 10 && meanReversionSummary30d.total_pnl_bps > 0 && meanReversionSummary30d.win_rate >= 0.6,
       policy: "mr_high_spread_5bps",
       exit_models: ["mr_tp3_sl3", "mr_tp5_sl5", "mr_tp8_sl5"],
-      ...meanReversionSummary
+      ...meanReversionSummary30d
     }
   };
 
@@ -813,6 +893,30 @@ export default async function DashboardPage() {
           <p className="mt-2 text-xl font-semibold">{hasOpportunity ? "Van jel" : "Nincs jel"}</p>
         </div>
       </section>
+
+      <MeanReversionCommandPanel
+        summary24h={{
+          active: meanReversionSummary.trials > 0 && meanReversionSummary.total_pnl_bps > 0,
+          ...meanReversionSummary
+        }}
+        summary7d={{
+          active: meanReversionSummary7d.trials >= 5 && meanReversionSummary7d.total_pnl_bps > 0,
+          ...meanReversionSummary7d
+        }}
+        summary30d={{
+          active: meanReversionSummary30d.trials >= 10 && meanReversionSummary30d.total_pnl_bps > 0 && meanReversionSummary30d.win_rate >= 0.6,
+          ...meanReversionSummary30d
+        }}
+        latestCandidate={latestMeanReversionCandidate ? {
+          symbol: latestMeanReversionCandidate.symbol,
+          exchange: latestMeanReversionCandidate.exchange,
+          taker_edge_bps: latestMeanReversionCandidate.taker_net_edge_bps ?? latestMeanReversionCandidate.maker_net_edge_bps,
+          persistence_ticks: latestMeanReversionCandidate.persistence_ticks,
+          lifetime_minutes: latestMeanReversionCandidate.lifetime_minutes,
+          ts: latestMeanReversionCandidate.ts
+        } : null}
+        series={meanReversionSeries30d}
+      />
 
       <OperationalStatusPanel
         status={operationalStatus}
