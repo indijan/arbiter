@@ -5,6 +5,7 @@ import AdvancedViewTable from "@/components/AdvancedViewTable";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
 import MeanReversionCommandPanel from "@/components/MeanReversionCommandPanel";
+import MeanReversionRegimePanel from "@/components/MeanReversionRegimePanel";
 import OperationalStatusPanel from "@/components/OperationalStatusPanel";
 import DecisionViewPanel from "@/components/DecisionViewPanel";
 import StrategyLabPanel from "@/components/StrategyLabPanel";
@@ -359,6 +360,61 @@ function buildXarbExecutionRows(opportunities: OpportunityRow[]) {
         lifetime_minutes: evaluation.lifetime_minutes
       };
     });
+}
+
+type XarbExecutionLite = ReturnType<typeof buildXarbExecutionRows>[number];
+
+function regimeStatus(maxTaker: number, candidateCount: number): "cold" | "warming" | "armed" | "active" {
+  if (maxTaker >= 5 && candidateCount > 0) return "active";
+  if (maxTaker >= 5) return "armed";
+  if (maxTaker >= 3) return "warming";
+  return "cold";
+}
+
+function buildMeanReversionRegime(rows: XarbExecutionLite[]) {
+  const buckets = rows.reduce((acc, row) => {
+    const date = new Date(row.ts);
+    date.setMinutes(0, 0, 0);
+    const key = date.toISOString();
+    const current = acc.get(key) ?? [];
+    current.push(row);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, XarbExecutionLite[]>());
+
+  const points = Array.from(buckets.entries())
+    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+    .map(([ts, bucketRows]) => {
+      const ranked = bucketRows
+        .slice()
+        .sort((a, b) => (b.taker_net_edge_bps ?? b.maker_net_edge_bps) - (a.taker_net_edge_bps ?? a.maker_net_edge_bps));
+      const best = ranked[0] ?? null;
+      const maxTaker = best ? (best.taker_net_edge_bps ?? best.maker_net_edge_bps) : 0;
+      const candidateCount = bucketRows.filter((row) => (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks >= 3).length;
+      return {
+        ts,
+        max_taker_bps: Number(maxTaker.toFixed(4)),
+        status: regimeStatus(maxTaker, candidateCount),
+        candidate_count: candidateCount,
+        best_symbol: best?.symbol ?? null,
+        best_exchange: best?.exchange ?? null
+      };
+    });
+  const current = points.at(-1);
+  const activePoints = points.filter((point) => point.status === "active");
+  const lastActive = activePoints.at(-1);
+  return {
+    summary: {
+      status: current?.status ?? "cold",
+      label: current?.status ?? "cold",
+      max_taker_bps: current?.max_taker_bps ?? 0,
+      candidate_count_30d: rows.filter((row) => (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= 5 && row.persistence_ticks >= 3).length,
+      armed_or_active_hours_30d: points.filter((point) => point.status === "armed" || point.status === "active").length,
+      last_active_ts: lastActive?.ts ?? null,
+      hours_since_last_active: lastActive ? Number(((Date.now() - new Date(lastActive.ts).getTime()) / 36e5).toFixed(1)) : null
+    },
+    points
+  };
 }
 
 export default async function DashboardPage() {
@@ -834,6 +890,7 @@ export default async function DashboardPage() {
   );
   const meanReversionRows7d = buildMeanReversionProbeRows(xarbExecutionRows7d).filter((row) => row.model === "mr_tp8_sl5");
   const meanReversionRows30d = buildMeanReversionProbeRows(xarbExecutionRows30d).filter((row) => row.model === "mr_tp8_sl5");
+  const meanReversionRegime = buildMeanReversionRegime(xarbExecutionRows30d);
   const meanReversionSummary = summarizePaperRows(meanReversionRows24hPreferred);
   const meanReversionSummary7d = summarizePaperRows(meanReversionRows7d);
   const meanReversionSummary30d = summarizePaperRows(meanReversionRows30d);
@@ -928,6 +985,8 @@ export default async function DashboardPage() {
         } : null}
         series={meanReversionSeries30d}
       />
+
+      <MeanReversionRegimePanel summary={meanReversionRegime.summary} points={meanReversionRegime.points} />
 
       <OperationalStatusPanel
         status={operationalStatus}
