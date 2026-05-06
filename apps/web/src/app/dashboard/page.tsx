@@ -4,6 +4,7 @@ import ReportExportButtons from "@/components/ReportExportButtons";
 import AdvancedViewTable from "@/components/AdvancedViewTable";
 import AutoRefreshClient from "@/components/AutoRefreshClient";
 import ExecutionReadinessPanel from "@/components/ExecutionReadinessPanel";
+import LowBpsMeanReversionPanel from "@/components/LowBpsMeanReversionPanel";
 import MeanReversionCommandPanel from "@/components/MeanReversionCommandPanel";
 import MeanReversionRegimePanel from "@/components/MeanReversionRegimePanel";
 import OperationalStatusPanel from "@/components/OperationalStatusPanel";
@@ -328,6 +329,80 @@ function buildMeanReversionSeries(rows: Array<{ pnl_bps: number; model: string; 
         cumulative_bps: Number(cumulative.toFixed(2))
       };
     });
+}
+
+function buildLowBpsMeanReversionProbeRows<T extends {
+  ts: string;
+  symbol: string;
+  exchange: string;
+  taker_net_edge_bps: number | null;
+  maker_net_edge_bps: number;
+  persistence_ticks: number;
+}>(rows: T[]) {
+  const grouped = rows.reduce((acc, row) => {
+    const key = executionTimelineKey(row);
+    const current = acc.get(key) ?? [];
+    current.push(row);
+    acc.set(key, current);
+    return acc;
+  }, new Map<string, T[]>());
+  const trials: Array<{ pnl_bps: number; model: string; symbol: string; exchange: string; ts: string; threshold_bps: number }> = [];
+
+  for (const timeline of grouped.values()) {
+    const ordered = timeline.slice().sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+    for (const threshold of [2, 3, 4]) {
+      const entries = ordered.filter((row) => (row.taker_net_edge_bps ?? row.maker_net_edge_bps) >= threshold && row.persistence_ticks >= 3);
+      for (const entry of entries) {
+        const entryNet = effectiveNetEdge(entry);
+        const postEntry = ordered.filter((row) => new Date(row.ts).getTime() >= new Date(entry.ts).getTime());
+        for (const [takeProfit, stopLoss] of [[2, 2], [3, 3], [5, 5]] as const) {
+          const tp = postEntry.find((row) => entryNet - effectiveNetEdge(row) >= takeProfit);
+          const sl = postEntry.find((row) => entryNet - effectiveNetEdge(row) <= -stopLoss);
+          const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
+          const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
+          const exit = tpTs <= slTs ? tp : sl;
+          const finalExit = exit ?? postEntry.at(-1) ?? entry;
+          trials.push({
+            pnl_bps: Number((entryNet - effectiveNetEdge(finalExit)).toFixed(4)),
+            model: `low_mr_${threshold}bps_tp${takeProfit}_sl${stopLoss}`,
+            symbol: entry.symbol,
+            exchange: entry.exchange,
+            ts: entry.ts,
+            threshold_bps: threshold
+          });
+        }
+      }
+    }
+  }
+
+  return trials;
+}
+
+function summarizeLowBpsRows(rows: ReturnType<typeof buildLowBpsMeanReversionProbeRows>) {
+  const byThreshold = [2, 3, 4].map((threshold) => {
+    const thresholdRows = rows.filter((row) => row.threshold_bps === threshold && row.model.includes("_tp3_sl3"));
+    return { threshold_bps: threshold, ...summarizePaperRows(thresholdRows) };
+  });
+  const byModel = Object.values(
+    rows.reduce((acc, row) => {
+      const current = acc[row.model] ?? { model: row.model, threshold_bps: row.threshold_bps, rows: [] as typeof rows };
+      current.rows.push(row);
+      acc[row.model] = current;
+      return acc;
+    }, {} as Record<string, { model: string; threshold_bps: number; rows: typeof rows }>)
+  )
+    .map((group) => ({ model: group.model, threshold_bps: group.threshold_bps, ...summarizePaperRows(group.rows) }))
+    .filter((row) => row.trials > 0)
+    .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+
+  return {
+    mode: "shadow_only" as const,
+    active: byThreshold.some((row) => row.trials >= 10 && row.total_pnl_bps > 0 && row.win_rate >= 0.55),
+    byThreshold,
+    bestModel: byModel[0] ?? null,
+    topModels: byModel.slice(0, 5),
+    warning: "Lower bps mean-reversion is measured only. It is not allowed to create opening_trial_candidate."
+  };
 }
 
 function buildXarbExecutionRows(opportunities: OpportunityRow[]) {
@@ -890,6 +965,8 @@ export default async function DashboardPage() {
   );
   const meanReversionRows7d = buildMeanReversionProbeRows(xarbExecutionRows7d).filter((row) => row.model === "mr_tp8_sl5");
   const meanReversionRows30d = buildMeanReversionProbeRows(xarbExecutionRows30d).filter((row) => row.model === "mr_tp8_sl5");
+  const lowBpsMeanReversionRows30d = buildLowBpsMeanReversionProbeRows(xarbExecutionRows30d);
+  const lowBpsMeanReversionSummary = summarizeLowBpsRows(lowBpsMeanReversionRows30d);
   const meanReversionRegime = buildMeanReversionRegime(xarbExecutionRows30d);
   const meanReversionSummary = summarizePaperRows(meanReversionRows24hPreferred);
   const meanReversionSummary7d = summarizePaperRows(meanReversionRows7d);
@@ -987,6 +1064,8 @@ export default async function DashboardPage() {
       />
 
       <MeanReversionRegimePanel summary={meanReversionRegime.summary} points={meanReversionRegime.points} />
+
+      <LowBpsMeanReversionPanel summary={lowBpsMeanReversionSummary} />
 
       <OperationalStatusPanel
         status={operationalStatus}

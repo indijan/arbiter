@@ -806,6 +806,21 @@ function buildStrategyLab(
         (item.taker_net_edge_bps ?? 0) >= 5 &&
         item.persistence_ticks >= 3 &&
         !isQuarantinedPaperSlice(item)
+    },
+    {
+      name: "low_mr_shadow_2bps",
+      description: "Shadow-only mean-reversion probe: 2 bps threshold. Never creates opening candidates.",
+      matches: (item) => (item.taker_net_edge_bps ?? 0) >= 2 && item.persistence_ticks >= 3
+    },
+    {
+      name: "low_mr_shadow_3bps",
+      description: "Shadow-only mean-reversion probe: 3 bps threshold. Never creates opening candidates.",
+      matches: (item) => (item.taker_net_edge_bps ?? 0) >= 3 && item.persistence_ticks >= 3
+    },
+    {
+      name: "low_mr_shadow_4bps",
+      description: "Shadow-only mean-reversion probe: 4 bps threshold. Never creates opening candidates.",
+      matches: (item) => (item.taker_net_edge_bps ?? 0) >= 4 && item.persistence_ticks >= 3
     }
   ];
 
@@ -854,14 +869,17 @@ function buildStrategyLab(
         addMeanReversionTrial(`mr_exit_after_${minutes}m`, policy, entry, exit, `fixed_${minutes}m`);
       }
 
-      for (const [takeProfit, stopLoss] of [[3, 3], [5, 5], [8, 5]] as const) {
+      const bracketModels = policy.startsWith("low_mr_shadow_")
+        ? ([[2, 2], [3, 3], [5, 5]] as const)
+        : ([[3, 3], [5, 5], [8, 5]] as const);
+      for (const [takeProfit, stopLoss] of bracketModels) {
         const tp = postEntry.find((item) => entryEdge - effectiveNetEdge(item) >= takeProfit);
         const sl = postEntry.find((item) => entryEdge - effectiveNetEdge(item) <= -stopLoss);
         const tpTs = tp ? new Date(tp.ts).getTime() : Number.POSITIVE_INFINITY;
         const slTs = sl ? new Date(sl.ts).getTime() : Number.POSITIVE_INFINITY;
         const exit = tpTs <= slTs ? tp : sl;
         addMeanReversionTrial(
-          `mr_tp${takeProfit}_sl${stopLoss}`,
+          policy.startsWith("low_mr_shadow_") ? `${policy}_tp${takeProfit}_sl${stopLoss}` : `mr_tp${takeProfit}_sl${stopLoss}`,
           policy,
           entry,
           exit ?? postEntry.at(-1) ?? entry,
@@ -932,6 +950,26 @@ function buildStrategyLab(
   }>)
     .filter((row) => row.policy.startsWith("mr_"))
     .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+  const lowBpsShadowProbe = (policyModels as Array<{
+    policy: string;
+    model: string;
+    trials: number;
+    wins: number;
+    losses: number;
+    flat: number;
+    total_pnl_bps: number;
+    avg_pnl_bps: number;
+    best_pnl_bps: number;
+    worst_pnl_bps: number;
+    win_rate: number;
+  }>)
+    .filter((row) => row.policy.startsWith("low_mr_shadow_"))
+    .sort((a, b) => b.total_pnl_bps - a.total_pnl_bps);
+  const lowBpsByThreshold = ["low_mr_shadow_2bps", "low_mr_shadow_3bps", "low_mr_shadow_4bps"].map((policy) => ({
+    policy,
+    threshold_bps: Number(policy.match(/_(\d+)bps$/)?.[1] ?? 0),
+    ...summarizeTrials(trials.filter((trial) => trial.policy === policy && String(trial.model).endsWith("_tp3_sl3")))
+  }));
   const quarantinedSlices = [
     ...summarizeBy("exchange").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "exchange_pair", ...row })),
     ...summarizeBy("symbol").filter((row) => row.trials >= 3 && row.total_pnl_bps < 0).map((row) => ({ slice_type: "symbol", ...row })),
@@ -970,6 +1008,17 @@ function buildStrategyLab(
       preferred_exit_model: "mr_tp8_sl5",
       candidates: meanReversionProbe.slice(0, 10),
       active: meanReversionProbe.some((row) => row.trials >= 10 && row.total_pnl_bps > 0 && row.win_rate >= 0.6)
+    },
+    low_bps_mean_reversion_shadow: {
+      thesis: "Lower xarb spreads may still mean-revert, but the edge is more sensitive to fees, latency and stale quotes.",
+      mode: "shadow_only",
+      entry_policy_impact: "none",
+      thresholds_bps: [2, 3, 4],
+      preferred_exit_model: "tp3_sl3",
+      by_threshold: lowBpsByThreshold,
+      candidates: lowBpsShadowProbe.slice(0, 10),
+      active: lowBpsByThreshold.some((row) => row.trials >= 10 && row.total_pnl_bps > 0 && row.win_rate >= 0.55),
+      warning: "This block is diagnostic only. It must not create opening_trial_candidate until validated over a longer rolling window."
     },
     quarantined_slices: quarantinedSlices,
     quarantine_rules: [
